@@ -3029,6 +3029,9 @@ importers:
       '@dsh-cc/coordinator':
         specifier: workspace:^
         version: link:../../subagent/coordinator
+      '@dsh-cc/decision-usage':
+        specifier: workspace:^
+        version: link:../../observability/decision-usage
       '@dsh-cc/handoff-store':
         specifier: workspace:^
         version: link:../../subagent/handoff-store
@@ -3172,6 +3175,12 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../../interaction/command-usage
+      '@dsh-cc/decision-usage':
+        specifier: workspace:^
+        version: link:../../observability/decision-usage
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -3197,6 +3206,12 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      '@dsh-cc/decision-usage':
+        specifier: workspace:^
+        version: link:../../observability/decision-usage
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
 
   packages/session/command-export:
     dependencies:

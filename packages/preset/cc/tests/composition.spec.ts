@@ -244,7 +244,7 @@ describe('agent.cordis.yml composition', () => {
     expect(ids.indexOf('tool-schedule')).toBe(ids.indexOf('tool-jobs') + 1)
   })
 
-  it('isolates exactly the nine cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
+  it('isolates exactly the ten cc-services services, hosting the commands and the ccModelRoutes consumers', () => {
     const group = doc.find((r) => r.id === 'cc-services')!
     expect(group.name).toBe('cordis:group')
     // Tripwire: the `tool-search` row must NOT live in any preset body. A
@@ -266,9 +266,28 @@ describe('agent.cordis.yml composition', () => {
       rules: true,
       contextCrusher: true,
       ccActorContractGate: true,
+      systemoneDecisions: true,
     })
     const configIds = (group.config as any[]).map((r) => r.id)
     const topIds = doc.map((r) => r.id)
+    // The decision-usage row (design
+    // docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md S1-02)
+    // publishes the `systemoneDecisions` service, so it sits INSIDE the group
+    // with its own isolate key (ccActorContractGate rule: an un-isolated
+    // preset-row provide trips the mount guard). It carries no config — every
+    // quota/capability bound is trusted-settings — and mounting enables no
+    // business, so it must never gain a row that turns a feature on. ORDER:
+    // a provider, so it must precede every consumer (memory / moa families in
+    // the later S1-03..S1-12 slices); it is placed right after cc-model-routes,
+    // whose alias map it resolves capability routes through.
+    expect(configIds).toContain('decision-usage')
+    expect(topIds).not.toContain('decision-usage')
+    const decisionUsage = (group.config as any[]).find((r) => r.id === 'decision-usage')!
+    expect(decisionUsage.name).toBe('@dsh-cc/decision-usage')
+    expect(decisionUsage.config).toBeUndefined()
+    expect(configIds.indexOf('decision-usage')).toBe(configIds.indexOf('cc-model-routes') + 1)
+    expect(configIds.indexOf('decision-usage')).toBeLessThan(configIds.indexOf('memory'))
+    expect(configIds.indexOf('decision-usage')).toBeLessThan(configIds.indexOf('moa'))
     // The handoff-store row (plan docs/plans/2026-09-10-subagent-handoff-store.md)
     // publishes no Service and sits inside the group, last among the tool rows
     // (after tool-web-fetch), with NO new isolate key (plain plugin, memory pattern).

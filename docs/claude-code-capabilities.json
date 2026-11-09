@@ -615,11 +615,32 @@
         {
           "type": "test",
           "path": "packages/ui/tui/tests/usage-panel.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: decision-usage"
+        },
+        {
+          "type": "source",
+          "path": "packages/observability/decision-usage/src/index.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/observability/decision-usage/tests/quota.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/observability/decision-usage/tests/ledger.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/observability/decision-usage/tests/service.spec.ts"
         }
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Ships a starter price table of official list prices for common DeepSeek/GLM/Kimi models (composition decides pricing; deployment billing may differ), and CC quota/limit surfaces are vendor-billing-bound — the TUI /usage panel footnotes quota as unavailable."
+        "summary": "Ships a starter price table of official list prices for common DeepSeek/GLM/Kimi models (composition decides pricing; deployment billing may differ), and CC quota/limit surfaces are vendor-billing-bound — the TUI /usage panel footnotes quota as unavailable. Decision-call slice (S1-02): the dsh-native SystemOne 〔src:ws:packages/observability/decision-usage/README.md#L5-L5;ws:packages/observability/decision-usage/README.md#L13-L19〕 decision runtime (`@dsh-cc/decision-usage`, mounted by the preset's `cc-services` group as the optional `systemoneDecisions` service under its own isolate realm) keeps a durable per-session decision ledger — reserve/dispatch/settle/outcome rows appended with fsync under a short transaction lock, a lock-guarded session quota whose freeze is computed and persisted inside that same transaction, and recovery accounting that keeps an unpaired reserve at its full amount — and /cost renders a separate `SystemOne decisions` section from it: confirmed decision spend is priced by actualModel/provider through the same table, unknown 〔src:ws:packages/observability/decision-usage/README.md#L21-L31;ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L183-L183〕 or unsettled usage reads as a reserved upper bound instead of joining the confirmed subtotal, and an unconfigured model reads as unpriced, never $0. No Claude Code analog (CC has no decision-call surface); mounting the service enables no business and triggers no request, and a missing service is equivalent to unavailable/unconfigured."
       }
     },
     "engine.credentials": {
