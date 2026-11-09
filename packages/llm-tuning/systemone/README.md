@@ -23,6 +23,20 @@ export const SYSTEMONE_429_RETRY_BUDGET_MS: number
 export const SYSTEMONE_429_RETRY_AFTER_CAP_MS: number
 export function parseRetryAfterMs(header: string | null | undefined, now: number): number | undefined
 
+// validation.ts — strict two-sided contract (S1-01, dependency-free)
+export type ValidationCode =
+  | 'invalid-request' | 'invalid-envelope' | 'invalid-model'
+  | 'question-set-mismatch' | 'answer-type-mismatch' | 'invalid-choice'
+  | 'invalid-probabilities' | 'invalid-score' | 'invalid-noul'
+  | 'invalid-confidence' | 'invalid-usage'
+export interface ValidatedResponse { model: string; answers: Record<string, SystemOneAnswer>; usage: SystemOneUsage }
+export function validateSystemOneRequest(opts: {
+  model: string; state: unknown; questions: Record<string, SystemOneQuestion>; timeoutMs: number
+}): { ok: true } | { ok: false; code: ValidationCode }
+export function validateSystemOneResponse(
+  questions: Record<string, SystemOneQuestion>, raw: unknown,
+): { ok: true; value: ValidatedResponse } | { ok: false; code: ValidationCode }
+
 // budget.ts — pure token-budget helpers (lower-bound heuristic)
 export function estimateSystemOneTokens(text: string): number
 export function capMiddleToTokenBudget(text: string, budgetTokens: number, marker: string, headRatio?: number): string
@@ -30,6 +44,27 @@ export const S1_ENVELOPE_TOKENS: number
 export const S1_MARGIN_TOKENS: number
 export const MIN_STATE_TOKENS: number
 ```
+
+## Contract validation
+
+`systemoneDecide` enforces a strict two-sided contract (design:
+docs/plans/2026-11-02-systemone-01-contract-validation.md). Requests are
+pre-checked before any network work — question IDs, option counts, criteria
+shapes, JSON-serializable state (cycles, BigInt, non-finite numbers and
+undefined/function/symbol values are rejected), model and timeout bounds —
+and a failed pre-check returns `malformed` with zero fetch calls. Responses
+must answer exactly the requested question set with type-matching answers:
+choice probabilities cover the criteria exactly, each finite in `[0,1]`,
+sum within `1e-4` of 1, and the chosen option not more than `1e-4` below
+the maximum; score answers carry the full `"0".."n-1"` distribution with
+`score` within `1e-4` of its expected value; usage reports both token
+counts as non-negative safe integers (a missing value is never coerced to
+zero). Any violation rejects the whole response — partial consumption is
+forbidden — with the fixed reason `systemone validation: <code>`. The
+server model is kept verbatim; the request alias is never backfilled. On
+top of the shared validator, the permission gauge's allow branch
+independently fails closed: a missing or out-of-range `P(allow)` yields
+`ask` (`gauge allow probability missing or invalid`) instead of `allow`.
 
 ## Usage
 
