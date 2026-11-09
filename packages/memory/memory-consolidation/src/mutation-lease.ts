@@ -17,10 +17,11 @@
  * - a cancelled waiter is removed from the queue, so a cancelled gate cannot
  *   leave a phantom owner behind that would stall the next writer.
  *
- * The slot table is module scope, not per `apply()` call: every mount inside
- * this process serialises against the same table, which is strictly stronger
- * than the per-instance ownership the design asks for and is never visible
- * across processes.
+ * Scope: the design asks for "at most one owner per dir inside a plugin
+ * instance", so {@link createMemoryMutationLease} builds one table per mount. A
+ * second preset tree in the same process therefore has its own slots instead of
+ * inheriting another tree's hung writer; the module-level default keeps the
+ * pre-existing consumer surface working unchanged.
  *
  * @module @dsh-cc/memory-consolidation/mutation-lease
  */
@@ -44,8 +45,25 @@ interface LeaseSlot {
   readonly waiters: LeaseWaiter[]
 }
 
-/** Every slot in this process, keyed by the resolved directory spelling. */
-const slots = new Map<string, LeaseSlot>()
+/**
+ * One slot table, keyed by the resolved directory spelling. Holding the table
+ * (not a module global) is what keeps the scoping "inside a plugin instance".
+ */
+export interface MemoryMutationLease {
+  /**
+   * Wait for the mutation lease of one canonical directory.
+   * @param dir - the canonical memory directory.
+   * @param signal - cancellation from Agent/plugin disposal or a scope change.
+   * @returns the idempotent release handle.
+   */
+  acquire(dir: string, signal: AbortSignal): Promise<() => void>
+  /**
+   * Take the mutation lease without waiting (the dream path).
+   * @param dir - the canonical memory directory.
+   * @returns the release handle, or `undefined` when the slot is busy.
+   */
+  tryAcquire(dir: string): (() => void) | undefined
+}
 
 /**
  * Canonicalise the key. Only the path spelling is normalised (`resolve` is
@@ -70,43 +88,101 @@ function abortReason(signal: AbortSignal): unknown {
 }
 
 /**
- * Build the idempotent release handle for one grant: the first call frees the
- * slot and hands it to the oldest live waiter, every later call is a no-op.
- * @param key - the slot key this release belongs to.
+ * Build one independent lease table.
+ * @returns the lease scoped to the caller (one per plugin instance).
  */
-function createRelease(key: string): () => void {
-  let released = false
-  return () => {
-    if (released) return
-    released = true
-    const slot = slots.get(key)
-    if (slot === undefined) return
-    slot.owner = false
-    drain(key, slot)
+export function createMemoryMutationLease(): MemoryMutationLease {
+  const slots = new Map<string, LeaseSlot>()
+
+  /**
+   * Build the idempotent release handle for one grant: the first call frees the
+   * slot and hands it to the oldest live waiter, every later call is a no-op.
+   * @param key - the slot key this release belongs to.
+   */
+  const createRelease = (key: string): (() => void) => {
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      const slot = slots.get(key)
+      if (slot === undefined) return
+      slot.owner = false
+      drain(key, slot)
+    }
+  }
+
+  /**
+   * Hand the freed slot to the oldest live waiter, or drop the slot when nobody
+   * is waiting. A waiter cancelled between its last dequeue check and this grant
+   * is skipped rather than granted.
+   * @param key - the slot key being drained.
+   * @param slot - the slot that was just released.
+   */
+  const drain = (key: string, slot: LeaseSlot): void => {
+    while (!slot.owner) {
+      const waiter = slot.waiters.shift()
+      if (waiter === undefined) {
+        slots.delete(key)
+        return
+      }
+      if (waiter.settled) continue
+      waiter.settled = true
+      waiter.signal.removeEventListener('abort', waiter.onAbort)
+      slot.owner = true
+      waiter.grant(createRelease(key))
+    }
+  }
+
+  return {
+    acquire(dir: string, signal: AbortSignal): Promise<() => void> {
+      const key = slotKey(dir)
+      if (signal.aborted) return Promise.reject(abortReason(signal))
+      const existing = slots.get(key)
+      if (existing === undefined) {
+        slots.set(key, { owner: true, waiters: [] })
+        return Promise.resolve(createRelease(key))
+      }
+      // A free slot with an empty queue is granted right here: building a promise
+      // the caller still has to await would gain nothing.
+      if (!existing.owner && existing.waiters.length === 0) {
+        existing.owner = true
+        return Promise.resolve(createRelease(key))
+      }
+      return new Promise<() => void>((resolveLease, rejectLease) => {
+        const waiter: LeaseWaiter = {
+          grant: resolveLease,
+          signal,
+          settled: false,
+          onAbort: () => {
+            if (waiter.settled) return
+            waiter.settled = true
+            const index = existing.waiters.indexOf(waiter)
+            if (index >= 0) existing.waiters.splice(index, 1)
+            rejectLease(abortReason(signal))
+          },
+        }
+        existing.waiters.push(waiter)
+        signal.addEventListener('abort', waiter.onAbort, { once: true })
+      })
+    },
+    tryAcquire(dir: string): (() => void) | undefined {
+      const key = slotKey(dir)
+      const existing = slots.get(key)
+      if (existing === undefined) {
+        slots.set(key, { owner: true, waiters: [] })
+        return createRelease(key)
+      }
+      // Never jump the queue: a queued waiter owns the next grant even in the
+      // window where the slot is momentarily unowned.
+      if (existing.owner || existing.waiters.length > 0) return undefined
+      existing.owner = true
+      return createRelease(key)
+    },
   }
 }
 
-/**
- * Hand the freed slot to the oldest live waiter, or drop the slot when nobody
- * is waiting. A waiter cancelled between its last dequeue check and this grant
- * is skipped rather than granted.
- * @param key - the slot key being drained.
- * @param slot - the slot that was just released.
- */
-function drain(key: string, slot: LeaseSlot): void {
-  while (!slot.owner) {
-    const waiter = slot.waiters.shift()
-    if (waiter === undefined) {
-      slots.delete(key)
-      return
-    }
-    if (waiter.settled) continue
-    waiter.settled = true
-    waiter.signal.removeEventListener('abort', waiter.onAbort)
-    slot.owner = true
-    waiter.grant(createRelease(key))
-  }
-}
+/** The process-wide default table (the pre-existing module-level surface). */
+const defaultLease = createMemoryMutationLease()
 
 /**
  * Wait for the mutation lease of one canonical directory.
@@ -122,35 +198,7 @@ function drain(key: string, slot: LeaseSlot): void {
  * @returns the release handle for the granted lease.
  */
 export function acquireMemoryMutationLease(dir: string, signal: AbortSignal): Promise<() => void> {
-  const key = slotKey(dir)
-  if (signal.aborted) return Promise.reject(abortReason(signal))
-  const existing = slots.get(key)
-  if (existing === undefined) {
-    slots.set(key, { owner: true, waiters: [] })
-    return Promise.resolve(createRelease(key))
-  }
-  // A free slot with an empty queue is granted right here: building a promise
-  // the caller still has to await would gain nothing.
-  if (!existing.owner && existing.waiters.length === 0) {
-    existing.owner = true
-    return Promise.resolve(createRelease(key))
-  }
-  return new Promise<() => void>((resolveLease, rejectLease) => {
-    const waiter: LeaseWaiter = {
-      grant: resolveLease,
-      signal,
-      settled: false,
-      onAbort: () => {
-        if (waiter.settled) return
-        waiter.settled = true
-        const index = existing.waiters.indexOf(waiter)
-        if (index >= 0) existing.waiters.splice(index, 1)
-        rejectLease(abortReason(signal))
-      },
-    }
-    existing.waiters.push(waiter)
-    signal.addEventListener('abort', waiter.onAbort, { once: true })
-  })
+  return defaultLease.acquire(dir, signal)
 }
 
 /**
@@ -164,15 +212,5 @@ export function acquireMemoryMutationLease(dir: string, signal: AbortSignal): Pr
  * @returns the release handle, or `undefined` when the slot is busy.
  */
 export function tryAcquireMemoryMutationLease(dir: string): (() => void) | undefined {
-  const key = slotKey(dir)
-  const existing = slots.get(key)
-  if (existing === undefined) {
-    slots.set(key, { owner: true, waiters: [] })
-    return createRelease(key)
-  }
-  // Never jump the queue: a queued waiter owns the next grant even in the
-  // window where the slot is momentarily unowned.
-  if (existing.owner || existing.waiters.length > 0) return undefined
-  existing.owner = true
-  return createRelease(key)
+  return defaultLease.tryAcquire(dir)
 }
