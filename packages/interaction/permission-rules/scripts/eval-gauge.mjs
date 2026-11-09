@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Gauge corpus evaluation against a live System One gateway.
-// run: node --experimental-strip-types scripts/eval-gauge.mjs [baseURL]
+// run: pnpm exec tsc -b ../../llm-tuning/systemone && node --experimental-strip-types scripts/eval-gauge.mjs [baseURL]
 // Prints a per-case table plus a threshold sweep and a machine-readable
 // EVAL_JSON summary used to pick DEFAULT_GAUGE_ALLOW_THRESHOLD.
 
@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { prepareSystemOneInput, gateVerdict, isTruncated, DEFAULT_GAUGE_CONTEXT_WINDOW } from '../src/gauge-adapter.ts'
-import { systemoneDecide } from '../src/systemone-client.ts'
+import { systemoneDecide } from '@dsh-cc/systemone'
 
 const baseURL = process.argv[2] ?? 'http://127.0.0.1:8080'
 const model = 'llmbox_systemone/laya'
