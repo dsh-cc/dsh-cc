@@ -2,7 +2,7 @@
 
 > Implementation: use `superpowers:subagent-driven-development` or `superpowers:executing-plans`, implementing and verifying item by item. This file defines design only; this PR does not modify product code.
 
-**Feature ID:** S1-03. **Priority:** P1. **Status:** proposed, not yet implemented.
+**Feature ID:** S1-03. **Priority:** P1. **Status:** implemented — PR #352 (open, pending merge).
 
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 
