@@ -52,11 +52,12 @@ jobs:
       # Pnpm store cache, keyed on the lockfiles with a prefix fallback so a
       # dependency change only downloads the new tarballs (setup-node's
       # `cache: pnpm` restores on the exact key only — see presubmit.yml
-      # deviation #2). This job is the writer for the key inside this
-      # workflow; the Lean job restores only. The key itself is shared with
-      # presubmit.yml (repo-scoped keys, same lockfiles), so the two workflows
-      # may log one benign "Unable to reserve cache" when both start a cold
-      # key at once.
+      # deviation #2). Restore-only in BOTH jobs here: presubmit.yml's
+      # `quality-gates` is the single writer repo-wide, because this workflow
+      # triggers nowhere presubmit does not and its store (dsh-cc deps only,
+      # no sibling-harness deps) is a strict subset — letting it write would
+      # hand presubmit a partially-populated entry and slow its install down
+      # (observed: 13s warm → 26s after a lean entry won the key in run 1).
       - name: Resolve the pnpm store directory
         id: pnpm-store
         run: |
@@ -64,7 +65,6 @@ jobs:
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
           echo "layout=$(basename "$dir")" >> "$GITHUB_OUTPUT"
       - name: Restore the pnpm store
-        id: cache-pnpm-store
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.pnpm-store.outputs.dir }}
@@ -74,12 +74,6 @@ jobs:
       - name: Install workspace dependencies (no harness build required)
         working-directory: dsh-cc
         run: pnpm install --frozen-lockfile
-      - name: Save the pnpm store
-        if: steps.cache-pnpm-store.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.dir }}
-          key: pnpm-store-${{ runner.os }}-${{ steps.pnpm-store.outputs.layout }}-${{ hashFiles('dsh-cc/pnpm-lock.yaml', 'deepseek-harness/pnpm-lock.yaml') }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -130,7 +124,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Restore-only: the TLA+ job is the single writer for this key.
+      # Restore-only like the TLA+ job — presubmit.yml's `quality-gates` owns
+      # the write (see the note in the TLA+ job).
       - name: Resolve the pnpm store directory
         id: pnpm-store
         run: |
