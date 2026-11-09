@@ -20,8 +20,10 @@ import * as zlib from 'node:zlib'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { delegationDepthOf } from '@deepseek-ai/dsh-subagent'
+import { agentCwd, isTopLevel } from './agent-scope.ts'
 import { defaultDshHome } from '@deepseek-ai/dsh-home-paths'
+import type { BoundDecisionRunner } from '@dsh-cc/systemone'
+import type { SystemOneDecisionsService } from '@dsh-cc/decision-usage'
 import { buildConsolidationPrompt, buildExtractionPrompt } from './prompts.ts'
 import { timeGatePasses, sessionGatePasses } from './gates.ts'
 import { gateWindow, scanSessions, type SessionScanResult } from './session-scan.ts'
@@ -29,6 +31,11 @@ import { readLastConsolidatedAt, releaseLock, rollbackLock, tryAcquireLock, LOCK
 import { startMemoryJob } from './memory-job.ts'
 import { recordDreamDiagnostic } from './diagnostics.ts'
 export { applyEntrypointFallback } from './memory-job.ts'
+import { createExtractionCoordinator, TAKEOVER_GRACE_MS } from './extraction-coordinator.ts'
+import { registerExtractionSettings, type ExtractionMode } from './extraction-settings.ts'
+import { readExistingIndex, readExtractionIndex } from './extraction-index.ts'
+import { surfaceCountOf } from './extraction-evidence.ts'
+import { createMemoryMutationLease, type MemoryMutationLease } from './mutation-lease.ts'
 import {
   memoryWritePolicy,
   readIndexStrict,
@@ -44,7 +51,7 @@ export type { ConsolidationGateInput } from './gates.ts'
 export { MEMORY_AGENT_TOOLS, MEMORY_TOOL_FILTER } from './tools.ts'
 export { DREAM_DIAGNOSTIC_FILE, recordDreamDiagnostic } from './diagnostics.ts'
 export type { DreamDiagnosticEntry, DreamDiagnosticPhase } from './diagnostics.ts'
-export { buildConsolidationPrompt, buildExtractionPrompt } from './prompts.ts'
+export { buildConsolidationPrompt, buildExtractionPrompt, buildWindowedExtractionPrompt } from './prompts.ts'
 // The write-back lives in @dsh-cc/memory (the memory directory owner);
 // re-exported here for consumers of the pre-move surface.
 export {
@@ -149,37 +156,119 @@ export function apply(ctx: Context, config: Config = {}): void {
     return result
   }
 
+  // S1-04 (design §"Modes and behavioural boundary"): the extraction decision
+  // gate lives behind the dynamic `cc-systemone-memory-extraction` snapshot.
+  // `off` — the shipped default — is the legacy listener's path and never reads
+  // a runner, creates watermark state or issues a decision request.
+  const readExtractionSettings = registerExtractionSettings(ctx)
+  // One lease table per plugin instance (design §"The repo write lease and its
+  // relation to dream"): extraction and dream of THIS tree serialise on it, and
+  // another tree in the same process keeps its own slots.
+  const lease = createMemoryMutationLease()
+  const coordinator = createExtractionCoordinator({
+    readSettings: readExtractionSettings,
+    lease,
+    memoryDirOf: (agent) => resolveWorkspaceMemoryDir(home, agentCwd(agent)),
+    readIndex: (dir) => readExtractionIndex(ctx, dir),
+    startJob: (request) => startMemoryJob(
+      ctx, request.agent, request.memoryDir, provider, 'extract-memories', request.prompt, request.baselineIndex,
+    ),
+    resolveRunner: (agent): BoundDecisionRunner | undefined => {
+      // Root-realm bridge only (design §"Preset wiring"): the isolated
+      // `ctx.systemoneDecisions` property throws when the cc-services
+      // provision is not visible from this realm, so a service is obtained
+      // per gate through the guarded `get` and never cached.
+      const decisions = ctx.get('ccSystemoneDecisions') as SystemOneDecisionsService | undefined
+      if (decisions === undefined) return undefined
+      try {
+        return decisions.forAgent(agent)
+      } catch {
+        return undefined
+      }
+    },
+    log: (event, fields) => { ctx.logger.debug({ event, ...fields }) },
+  })
+
   // Reset the flight state when this plugin fiber is disposed (hygiene / test
   // isolation). cordis `ctx.on` is typed strictly to `keyof Events`, so cleanup
   // is registered as a fiber effect rather than a 'dispose' listener.
   ctx.effect(() => () => {
     flight.clear()
     dreamInFlight = false
+    coordinator.dispose()
   }, 'memory-consolidation: reset flight state')
 
+  /**
+   * Dispatch-era token (design §"Degradation and lifecycle truth table"): the
+   * legacy lane and the coordinator lane must never dispatch for the same stop,
+   * so the lane owner is captured as an era and every deferred dispatch checks
+   * it is still the current one.
+   */
+  let era = 0
+  let eraMode: ExtractionMode | undefined
+  /** Non-undefined while the coordinator drains for an active/shadow → off flip. */
+  let handoff: Promise<void> | undefined
+  /** Whether the coordinator dispatched in this non-off era (a flip must drain it). */
+  let coordinatorUsed = false
+
+  /** The exact legacy extraction dispatch (mode `off`): single-flight + content gate. */
+  const legacyExtraction = (agent: Agent): void => {
+    const sessionId = agent.session.header.id
+    const entry = flight.get(sessionId)
+    // Single-flight: skip while an extraction is in flight or when no new
+    // events have arrived since the last spawn.
+    if (!entry?.extracting && agent.session.seq !== entry?.lastEvents) {
+      flight.set(sessionId, { extracting: true, lastEvents: agent.session.seq })
+      void runExtraction(ctx, agent, home, provider).finally(() => {
+        const cur = flight.get(sessionId)
+        if (cur) cur.extracting = false
+      })
+    }
+  }
+
+  // ONE handler, per the amended single-listener rule: it reads the live mode
+  // snapshot on every entry and branches. The dream lane is mode-independent —
+  // its timing, session, pressure, lock and retry conditions are untouched.
   ctx.on('agent/turn-stopping', ({ agent, signal }) => {
     // All predicates are synchronous and run before any await, so the flags
     // below are set before a second, interleaved turn-stopping could observe
     // them.
     if (signal.aborted) return
     if (!isTopLevel(agent)) return
-    const sessionId = agent.session.header.id
+    const mode = readExtractionSettings().mode
+    if (mode !== eraMode) {
+      eraMode = mode
+      era += 1
+    }
+    const dispatchEra = era
+    if (mode === 'off' && coordinatorUsed && handoff === undefined) {
+      // Block new coordinator work, cancel the running gate/job and wait
+      // (bounded by the same grace as a takeover) for the lease to come back
+      // before the legacy branch may dispatch.
+      coordinatorUsed = false
+      const barrier = coordinator.quiesce(TAKEOVER_GRACE_MS).catch(() => {})
+      handoff = barrier
+      void barrier.then(() => { if (handoff === barrier) handoff = undefined })
+    }
     if (config.extractEnabled ?? true) {
-      const entry = flight.get(sessionId)
-      // Single-flight: skip while an extraction is in flight or when no new
-      // events have arrived since the last spawn.
-      if (!entry?.extracting && agent.session.seq !== entry?.lastEvents) {
-        flight.set(sessionId, { extracting: true, lastEvents: agent.session.seq })
-        void runExtraction(ctx, agent, home, provider).finally(() => {
-          const cur = flight.get(sessionId)
-          if (cur) cur.extracting = false
+      if (mode !== 'off') {
+        coordinatorUsed = true
+        coordinator.onTurnStopping({ agent, signal })
+      } else if (handoff === undefined) {
+        legacyExtraction(agent)
+      } else {
+        // A post-switch legacy dispatch waits for the coordinator drain and
+        // still checks its era: a flip back to shadow/active owns the stop.
+        const draining = handoff
+        void draining.then(() => {
+          if (era === dispatchEra && !signal.aborted) legacyExtraction(agent)
         })
       }
     }
     if (config.dreamEnabled ?? true) {
       if (!dreamInFlight) {
         dreamInFlight = true
-        void runDream(ctx, agent, home, provider, minHours, minSessions, pressureCooldownMinutes, sessionsRoot, scan)
+        void runDream(ctx, agent, home, provider, lease, minHours, minSessions, pressureCooldownMinutes, sessionsRoot, scan)
           .catch((err) => { ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${String(err)}`) })
           .finally(() => { dreamInFlight = false })
       }
@@ -190,38 +279,12 @@ export function apply(ctx: Context, config: Config = {}): void {
 /** Memo TTL for the raw session-scan result (plan §3.4). */
 const SCAN_MEMO_MS = 30 * 60_000
 
-/** The agent's workspace cwd: where its memory directory is resolved from. */
-function agentCwd(agent: Agent): string {
-  return agent.session.header.cwd ?? process.cwd()
-}
-
-/**
- * Whether an agent is top-level (not a delegated subagent). This is the root
- * fix for the extraction/dream recursion: a subagent's own turn-end must never
- * spawn another memory fork. Fails CLOSED — any throw from reading the depth
- * treats the agent as a child so nothing is spawned.
- */
-function isTopLevel(agent: Agent): boolean {
-  try {
-    return delegationDepthOf(agent) === 0
-  } catch {
-    return false
-  }
-}
-
-/** Surface event types whose count a single extraction batch reviews. */
-const SURFACE_EVENT_TYPES = new Set(['user/message', 'assistant/message', 'tool/result'])
-/** Upper bound on the injected index: first 200 lines or 8 KiB, whichever first. */
-const INDEX_CAP_LINES = 200
-const INDEX_CAP_BYTES = 8 * 1024
-const INDEX_TRUNCATED_MARKER = '(index truncated; rely on MEMORY.md in-dir for the rest)'
-
 async function runExtraction(ctx: Context, agent: Agent, home: string, provider: string): Promise<void> {
   // The extraction writes into the turning agent's repository directory —
   // the shared home root holds only explicitly-global memories.
   const dir = resolveWorkspaceMemoryDir(home, agentCwd(agent))
   // Only model-visible surface events count toward the batch size.
-  const surfaceCount = agent.session.snapshotEvents().filter((e) => SURFACE_EVENT_TYPES.has(e.type)).length
+  const surfaceCount = surfaceCountOf(agent.session.snapshotEvents())
   // The index read happens AFTER the in-flight/content gates (runExtraction is
   // only reached once a spawn is committed), so a skipped spawn never pays the
   // fs cost. Any failure here degrades to an empty index and still spawns.
@@ -238,58 +301,12 @@ async function runExtraction(ctx: Context, agent: Agent, home: string, provider:
     .then(() => {})
 }
 
-/**
- * Read the existing topic index to inject into the extraction prompt: the
- * MEMORY.md body when present, else the names of sibling topic `.md` files.
- * Swallow-all: any error or an absent fs yields an empty index so a spawn is
- * never blocked by the read. Content is capped at 200 lines / 8 KiB so a huge
- * index cannot bloat the prompt.
- */
-async function readExistingIndex(ctx: Context, dir: string): Promise<string> {
-  const fs = ctx.get('fs')
-  if (fs === undefined) return ''
-  try {
-    const memoryTarget = await fs.resolve(join(dir, 'MEMORY.md'))
-    const info = await fs.stat(memoryTarget)
-    let raw: string
-    if (info !== undefined) {
-      raw = await fs.readText(memoryTarget)
-    } else {
-      // No index file: fall back to listing topic `.md` files in the directory.
-      const dirTarget = await fs.resolve(dir)
-      const entries = await fs.listDir(dirTarget)
-      raw = entries
-        .filter((e) => e.type === 'file' && e.name.endsWith('.md') && e.name !== 'MEMORY.md')
-        .map((e) => e.name)
-        .sort()
-        .join('\n')
-    }
-    if (raw === '') return ''
-    // Cap at the first 200 lines OR 8 KiB, whichever comes first; append a
-    // marker when truncated so the model knows to rely on the in-dir file.
-    const lines = raw.split('\n')
-    const kept: string[] = []
-    let bytes = 0
-    let truncated = false
-    for (const line of lines) {
-      if (kept.length >= INDEX_CAP_LINES) { truncated = true; break }
-      const add = line.length + (kept.length > 0 ? 1 : 0)
-      if (bytes + add > INDEX_CAP_BYTES) { truncated = true; break }
-      kept.push(line)
-      bytes += add
-    }
-    const capped = kept.join('\n')
-    return truncated ? `${capped}\n${INDEX_TRUNCATED_MARKER}` : capped
-  } catch {
-    return ''
-  }
-}
-
 async function runDream(
   ctx: Context,
   agent: Agent,
   home: string,
   provider: string,
+  lease: MemoryMutationLease,
   minHours: number,
   minSessions: number,
   pressureCooldownMinutes: number,
@@ -340,8 +357,27 @@ async function runDream(
     if (!pass) return
     hints = window.hints
   }
-  const priorAt = await tryAcquireLock(fs, dir, process.pid, now, policy)
+  // S1-04 §"The repo write lease and its relation to dream": the LOCAL lease is
+  // tried FIRST. A conflict returns without taking the original disk lock, so a
+  // dream never queues behind the disk lock and misleads other processes while
+  // the shared slot is busy. In `off` mode extraction never holds this lease, so
+  // the tryAcquire is then uncontended and dream behaves exactly as before.
+  const releaseLease = lease.tryAcquire(dir)
+  if (releaseLease === undefined) {
+    ctx.logger.debug({ event: 'memory:dream-lease', conflict: 1 })
+    return
+  }
+  let priorAt: number | null
+  try {
+    priorAt = await tryAcquireLock(fs, dir, process.pid, now, policy)
+  } catch (err) {
+    // The lease must never outlive a failed lock attempt.
+    releaseLease()
+    throw err
+  }
   if (priorAt === null) {
+    // Disk-lock failure releases the local lease immediately.
+    releaseLease()
     ctx.logger.warn(`memory-consolidation: consolidation lock held by a live holder in ${dir}`)
     return
   }
@@ -361,45 +397,51 @@ async function runDream(
     const baselineIndex = await readIndexStrict(fs, dir)
     const job = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt, baselineIndex)
     void job.done.then(async (outcome) => {
-      ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
-      if (outcome.status === 'completed') {
-        // Success releases the lock BEFORE clearing the marker (issue #336),
-        // and AWAITs it: void fire-and-forget chains interleave, so only an
-        // awaited release guarantees the marker clear never lands first. A
-        // crash between the two writes then leaves an armed marker with a
-        // free lock — the next cooldown window retries, which is
-        // conservative. The reverse order would leave the marker tombstoned
-        // with the lock still stamped: the exact stale-window delay this fix
-        // removes. The release is guarded (skipped when a reclaimer took the
-        // file mid-dream) and best-effort (failures are swallowed inside).
-        await releaseLock(fs, dir, process.pid, now, policy)
-        // Success tombs the marker in BOTH modes — but only the arms this
-        // dream's rebuild addressed (issue #335 Face B): the clear is
-        // conditional on `pressure.armedAt` (captured at the dream's initial
-        // read, which the fork's index snapshot postdates), so an arm that
-        // landed during the dream survives for the next window. The cooldown
-        // reference advances to completion time, not dream start.
-        void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
-        return
-      }
-      await recordDreamDiagnostic(ctx, fs, dir, policy, {
-        sessionId,
-        phase: 'outcome-failed',
-        detail: outcome.status === 'failed' ? outcome.detail : outcome.status,
-      })
-      // One bounded retry (design 2026-09-24 §4.2): only a FAILED outcome
-      // respawns — `killed` is an intentional abort (session teardown /
-      // controller.abort) and must never respawn. The retry reuses the held
-      // lock (no re-acquire) and does not restamp the pressure marker. The
-      // whole retry block gets its OWN try/catch mirroring the dispatch-throw
-      // branch: a throw inside the retry must never strand the lock.
-      if (outcome.status !== 'failed') {
-        void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
-        return
-      }
+      // The local lease is held across the first round AND the original bounded
+      // retry: it is released at every terminal outcome of this dream.
       try {
-        const retry = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt, baselineIndex)
-        void retry.done.then(async (retryOutcome) => {
+        ctx.logger.debug({ event: 'memory:dream-outcome', status: outcome.status, detail: outcome.status === 'failed' ? outcome.detail : undefined })
+        if (outcome.status === 'completed') {
+          // Success releases the lock BEFORE clearing the marker (issue #336),
+          // and AWAITs it: void fire-and-forget chains interleave, so only an
+          // awaited release guarantees the marker clear never lands first. A
+          // crash between the two writes then leaves an armed marker with a
+          // free lock — the next cooldown window retries, which is
+          // conservative. The reverse order would leave the marker tombstoned
+          // with the lock still stamped: the exact stale-window delay this fix
+          // removes. The release is guarded (skipped when a reclaimer took the
+          // file mid-dream) and best-effort (failures are swallowed inside).
+          await releaseLock(fs, dir, process.pid, now, policy)
+          // Success tombs the marker in BOTH modes — but only the arms this
+          // dream's rebuild addressed (issue #335 Face B): the clear is
+          // conditional on `pressure.armedAt` (captured at the dream's initial
+          // read, which the fork's index snapshot postdates), so an arm that
+          // landed during the dream survives for the next window. The cooldown
+          // reference advances to completion time, not dream start.
+          void clearPressure(fs, dir, Date.now(), policy, pressure.armedAt)
+          return
+        }
+        await recordDreamDiagnostic(ctx, fs, dir, policy, {
+          sessionId,
+          phase: 'outcome-failed',
+          detail: outcome.status === 'failed' ? outcome.detail : outcome.status,
+        })
+        // One bounded retry (design 2026-09-24 §4.2): only a FAILED outcome
+        // respawns — `killed` is an intentional abort (session teardown /
+        // controller.abort) and must never respawn. The retry reuses the held
+        // lock (no re-acquire) and does not restamp the pressure marker. The
+        // whole retry block gets its OWN try/catch mirroring the dispatch-throw
+        // branch: a throw inside the retry must never strand the lock.
+        if (outcome.status !== 'failed') {
+          void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
+          return
+        }
+        try {
+          const retry = await startMemoryJob(ctx, agent, dir, provider, 'memory-consolidation', prompt, baselineIndex)
+          // Awaiting the retry inside this handler keeps the whole first-plus-retry
+          // span inside ONE try/finally, so the local lease cannot leak between the
+          // attempts. The dispatch itself is unchanged (one bounded respawn).
+          const retryOutcome = await retry.done
           ctx.logger.debug({ event: 'memory:dream-outcome', retry: true, status: retryOutcome.status, detail: retryOutcome.status === 'failed' ? retryOutcome.detail : undefined })
           if (retryOutcome.status === 'completed') {
             // Same guarded, awaited release as the first attempt: the retry
@@ -419,12 +461,14 @@ async function runDream(
             detail: `retry ${retryOutcome.status === 'failed' ? retryOutcome.detail : retryOutcome.status}`,
           })
           void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
-        })
-      } catch (err) {
-        const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
-        await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'outcome-failed', detail: `retry ${detail}` })
-        await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
-        ctx.logger.warn(`memory-consolidation: dream retry failed: ${detail}`)
+        } catch (err) {
+          const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
+          await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'outcome-failed', detail: `retry ${detail}` })
+          await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
+          ctx.logger.warn(`memory-consolidation: dream retry failed: ${detail}`)
+        }
+      } finally {
+        releaseLease()
       }
     })
   } catch (err) {
@@ -434,6 +478,7 @@ async function runDream(
     await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-throw', detail })
     await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
     ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${detail}`)
+    releaseLease()
   }
 }
 

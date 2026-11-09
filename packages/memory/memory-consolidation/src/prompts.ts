@@ -9,6 +9,7 @@
  * @module @dsh-cc/memory-consolidation/prompts
  */
 
+import type { ExtractionWindow } from './extraction-window.ts'
 import { MEMORY_AGENT_TOOLS } from './tools.ts'
 
 /** The always-loaded index filename (mirrors `dsh-memory`'s export). */
@@ -44,6 +45,68 @@ export function buildExtractionPrompt(
     '',
     'FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report. Plans or findings narrated in prose without that call are discarded entirely — there is no partial credit, and no one will ask you twice.',
   ].join('\n')
+}
+
+/**
+ * Build the <system-reminder> user prompt that extracts durable facts from ONE
+ * complete review window (design
+ * docs/plans/2026-11-02-systemone-04-memory-extraction-gate.md §"State machine
+ * and commit rules").
+ *
+ * This is the extraction prompt used once the decision gate has captured a
+ * reconstructable window: the reviewed material is the explicit `Review window`
+ * data section, never "the last N messages" of the live session. Three things
+ * must stay true for the skip it protects to be sound:
+ *
+ * - the window bounds are stated explicitly (`fromExclusive` exclusive,
+ *   `throughInclusive` inclusive) so the model never infers the reviewed range;
+ * - the watermark is declared HOST state the model cannot advance, extend or
+ *   reset — the model reports writes and nothing else;
+ * - newer session content is explicitly demoted to context, so a fact that
+ *   arrived after the capture is never counted as already reviewed.
+ * @param window - the complete review window.
+ * @param memoryDir - the memory directory the reported files belong to.
+ * @returns the prompt text.
+ */
+export function buildWindowedExtractionPrompt(window: ExtractionWindow, memoryDir: string): string {
+  const from = String(window.fromExclusive)
+  const through = String(window.throughInclusive)
+  return [
+    'Extract durable memories from the review window below and report them via the `structured_output` tool.',
+    'A memory is a fact or preference that will be useful in FUTURE conversations, not ephemeral task detail.',
+    `Return \`{ "writes": [{ "path", "content" }] }\`: each entry is one file in the memory directory \`${memoryDir}\` — \`path\` is a flat \`.md\` filename (no directories), \`content\` is the complete file body. The plugin writes the files for you; you have no write tools.`,
+    'Write each memory to its own `.md` topic file with YAML frontmatter: name, description, and type (`user` | `feedback` | `project` | `reference`).',
+    `Add or update a one-line pointer in \`${ENTRYPOINT_NAME}\` for each topic (.md). Do not put memory bodies in the index.`,
+    'Never duplicate a topic listed under "Existing topics" below; prefer updating the matching topic file instead of creating a new one (read it first).',
+    `You may use only: ${MEMORY_AGENT_TOOLS.join(', ')}. Read only inside \`${memoryDir}\`.`,
+    'The conversation to review is already in your context — do not open files or browse directories outside the memory directory.',
+    `The review material is the "Review window" section below and nothing else: the host reviewed the session events AFTER seq \`${from}\` and UP TO AND INCLUDING seq \`${through}\`, and that window is the explicit source. Session content outside it — including anything newer — is context only: never extract a fact from it and never treat it as reviewed.`,
+    `\`fromExclusive\` and \`throughInclusive\` are the host's review watermark. It is host state: the model cannot advance, extend, reset or otherwise change it, and any reported value for it is ignored.`,
+    'If the review window contains no new durable fact worth remembering, return an empty `writes` array and finish immediately.',
+    '',
+    `Review window (fromExclusive=${from}, throughInclusive=${through}):`,
+    ...reviewWindowLines(window),
+    '',
+    'Existing topics:',
+    window.existingIndex.length > 0 ? window.existingIndex : '(none yet)',
+    '',
+    'FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report. Plans or findings narrated in prose without that call are discarded entirely — there is no partial credit, and no one will ask you twice.',
+  ].join('\n')
+}
+
+/**
+ * Render the window's reviewed events as the prompt's data section: one line
+ * per event, in the host's ascending seq order, carrying the original role so
+ * an assistant inference is never readable as a user confirmation.
+ * @param window - the complete review window.
+ * @returns the data-section lines.
+ */
+function reviewWindowLines(window: ExtractionWindow): string[] {
+  if (window.events.length === 0) return ['(the window holds no plain-text evidence)']
+  return window.events.map((event) => {
+    const role = event.isError === true ? `${event.kind}, tool error` : event.kind
+    return `- seq ${String(event.seq)} [${role}]: ${event.text}`
+  })
 }
 
 /**

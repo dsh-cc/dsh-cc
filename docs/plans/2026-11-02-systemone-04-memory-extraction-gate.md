@@ -2,7 +2,7 @@
 
 > How to execute: use `superpowers:subagent-driven-development` or `superpowers:executing-plans`, implementing and verifying item by item. This file defines the design only; this PR does not modify product code.
 
-**Feature ID:** S1-04. **Priority:** P1, after recall selection. **Status:** proposed, not implemented.
+**Feature ID:** S1-04. **Priority:** P1, after recall selection. **Status:** implemented (PR pending; amended 2026-11-10 after an adversarial review against the post-S1-01/S1-02 codebase: root-realm bridge for service reachability, guarded ctx.get access, compaction completeness rule, bounded takeover/teardown waits, per-pre-commit mode re-read, over-budget reason).
 
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 
@@ -87,7 +87,7 @@ interface ExtractionWindow {
 }
 type GateVerdict =
   | { kind: 'skip'; probability: number; decisionId: string }
-  | { kind: 'extract'; reason: 'positive' | 'uncertain' | 'audit' | 'incomplete' | 'unavailable' }
+  | { kind: 'extract'; reason: 'positive' | 'uncertain' | 'audit' | 'incomplete' | 'over-budget' | 'unavailable' }
   | { kind: 'cancelled' };
 interface ExtractionDecisionGate {
   decide(window: ExtractionWindow, scope: DecisionScope,
@@ -97,7 +97,7 @@ interface ExtractionDecisionGate {
 
 Take the current snapshot's surface events first and filter `(reviewedThrough, capturedHead]` in ascending seq. A real user message reads `event.data.content` and is accepted only when source is absent or kind=user; plugin injections are not a source of fact. assistant/message reads its content; tool/result reads `data.message.content` plus isError. Keep the original event roles: an assistant inference must not become a user confirmation.
 
-Secondary sources are recognised locally as-is; `memory` injections, completion reminders, advisor and subagent notifications do not enter the window and do not advance the evidence head. Tool call arguments and full request headers do not enter the state. All text blocks of plain-text content are kept in order; an image, audio, an unrecognised block, a missing/invalid seq, or an unreconstructable compacted range marks `complete=false`.
+Secondary sources are recognised locally as-is; `memory` injections, completion reminders, advisor and subagent notifications do not enter the window and do not advance the evidence head. Tool call arguments and full request headers do not enter the state. All text blocks of plain-text content are kept in order; an image, audio, an unrecognised block, a missing/invalid seq, or an unreconstructable compacted range marks `complete=false`. A real user message is accepted only when its source producer kind is `user` (the `source` field is required on every message in the current shape; treating an absent source as user is a defensive arm only). Compaction rule: a surface replacement (`surfaceOp.op === 'replace'`) whose range intersects `(reviewedThrough, capturedHead]` marks the window `complete=false`, and the replacement summary node is never counted as evidence — the legacy whole-session prompt (which reviews the derived post-compaction history) is the only path for such windows.
 
 When the index does not exist, `existingIndex=''` is a complete empty index; a read failure, exceeding the original 200-line/8 KiB injection limit, or any need to truncate marks it incomplete. This feature does not hide a truncation flag inside the text and then still allow a skip. Estimate from the complete state first, then compare against maxSurfaceEvents, maxStateBytes, maxInputTokens and the route's per-question window; anything over a limit extracts directly, and a partial window is never sent to the SystemOne decision model.
 
@@ -105,7 +105,11 @@ This version has one Noul question only and does not split the window and merge 
 
 ## Questions and answer contract
 
-`DecisionRunner`, `BoundDecisionRunner`, `DecisionScope` and the rest are imported directly from S1-02; interfaces are not copied. First obtain the bound runner through the optional `ctx.systemoneDecisions.forAgent(agent)`, then call `bound.scope(window.throughInclusive)` for the authoritative scope; constructing projectKey, sessionId or agentId by hand is forbidden. originSeq explicitly denotes the end of the review window. The ledger feature is fixed to `memory-extraction`; S1-04 is used only as the design ID.
+`DecisionRunner`, `BoundDecisionRunner`, `DecisionScope` and the rest are imported directly from S1-02; interfaces are not copied. First obtain the bound runner through the root-realm bridge service `ccSystemoneDecisions` (see "Preset wiring" below), read per gate via the guarded idiom `ctx.get('ccSystemoneDecisions') as SystemOneDecisionsService | undefined` — never through the `ctx.systemoneDecisions` property, whose access throws when the isolate-realm provision is not visible from the consumer's realm; a service obtained once must not be cached across gates because the provide can appear or dispose at any time. Then call `bound.scope(window.throughInclusive)` for the authoritative scope; constructing projectKey, sessionId or agentId by hand is forbidden. originSeq explicitly denotes the end of the review window. The ledger feature is fixed to `memory-extraction`; S1-04 is used only as the design ID.
+
+## Preset wiring (root-realm bridge)
+
+`decision-usage` is mounted inside the cc-services group with `isolate: { systemoneDecisions: true }`, and `memory-consolidation` is mounted outside that group by an existing invariant (its forks must keep inheriting the parent route). The isolated `systemoneDecisions` name is therefore NOT resolvable from memory-consolidation's realm, and adding it to `inject` would deadlock the plugin's activation. The bridge follows the command-agents precedent: `decision-usage` (or its apply scope) republishes its own service to the ROOT realm under the new name `ccSystemoneDecisions` using the ccPluginManager register-if-absent idiom — `root.provide` when the root slot is empty, `root.set` when another tree already published, plus a fiber effect that clears the publication on unload only when it still points at this tree's instance. A root-fiber publication does not trip the leakedServices preset mount gate. memory-consolidation consumes only `ccSystemoneDecisions`; when two preset trees coexist the first publisher wins and per-tree quota isolation is consciously traded for consumer reachability (quota is keyed by projectKey+sessionId, which is stable across trees). A composition-level test must fail if the consumer realm cannot see the provider.
 
 The host fixes the decision quota scope from `projectKeyOf(path.resolve(session.header.cwd))` and validates the bound scope before reserve and after await. The canonical repo directory from the existing `resolveWorkspaceMemoryDir()` still decides read/write isolation and the mutation lease independently; the budget projectKey does not replace memoryDir, and the memoryDir hash is not used as the decision projectKey. If the bound service or scope is unavailable, extract directly rather than fabricating a scope to keep calling.
 
@@ -143,7 +147,7 @@ In the examples, "use pnpm throughout" is a durable positive and should be extra
 
 ## State machine and commit rules
 
-Add `src/extraction-coordinator.ts`. Build states keyed by `(canonical memoryDir, session header id)` and bind each to its Agent object; do not share by the raw cwd string. When another Agent instance takes over the same key, cancel the old owner and wait for its job.done first, then create the new state at watermark -1; the unverified review result of the old instance must not be inherited.
+Add `src/extraction-coordinator.ts`. Build states keyed by `(canonical memoryDir, session header id)` and bind each to its Agent object; do not share by the raw cwd string. When another Agent instance takes over the same key, cancel the old owner and wait for its job.done first — bounded by `Promise.race` against a fixed 10-second grace — then create the new state at watermark -1; the unverified review result of the old instance must not be inherited. On grace expiry proceed anyway with the fresh state at -1 and drop the old owner's pending watermark commit (the old job's write-back is still host-validated, so a late completion is safe — only its watermark commit is discarded).
 
 ```ts
 interface ExtractionState {
@@ -184,7 +188,7 @@ Outside off mode, extraction holds it from before the fork starts until job.done
 
 dream does not queue while holding the disk lock, which would otherwise mislead other processes after waiting past the original stale threshold. Extraction may queue; dream is retried by the original next turn-stopping scheduling; in pressure mode the original forcedAt early stamping and cooldown keep their original order, and a lease conflict does not start an extra dream round.
 
-This lease prevents concurrent overwrites between different sessions and dream within this plugin; it provides no cross-process transaction. This feature does not widen the meaning of the existing disk lock, nor does it claim to solve two independent harnesses updating the same memoryHome at once. The existing [writeMemoryFiles](../../packages/memory/memory/src/writeback.ts#L158) writes file by file after validation, so a failure may leave a defined prefix; a retry still re-reads the index, and the watermark must not commit on a partial write.
+This lease prevents concurrent overwrites between shadow/active-mode extraction and dream within this plugin; in `off` mode extraction keeps the legacy uncoordinated scheduling (the lease is held only by dream's tryAcquire, which is then uncontended), so the lease's protection claim covers exactly the shadow/active modes. It provides no cross-process transaction. This feature does not widen the meaning of the existing disk lock, nor does it claim to solve two independent harnesses updating the same memoryHome at once. The existing [writeMemoryFiles](../../packages/memory/memory/src/writeback.ts#L158) writes file by file after validation, so a failure may leave a defined prefix; a retry still re-reads the index, and the watermark must not commit on a partial write.
 
 ## Degradation and lifecycle truth table
 
@@ -200,10 +204,12 @@ This lease prevents concurrent overwrites between different sessions and dream w
 | source updated or scope changed during the gate | discard the verdict, wait for the latest stop; cancel when the scope changed | unchanged |
 | fork dispatch throws, done=failed, host write fails | enter cooldown, a later stop may retry | unchanged |
 | Agent/plugin dispose | abort the gate, call job.abort, release/cancel the lease | unchanged, and the state is destroyed |
+| old owner's job never settles within the 10-second grace | proceed with a fresh state at watermark -1, discard the old pending commit | reset to -1 for the new owner |
+| mode flipped to off mid-gate (observed at pre-commit) | discard the verdict, no watermark move, no coordinator fallback; the legacy branch owns the next stop | unchanged |
 
 This feature does not bind the short-lived `agent/turn-stopping` signal to the whole background job. It is used only for the cancellation check before entry; the new controller is driven by Agent/plugin disposal, scope changes and mode switches, so work is not wrongly cancelled after idle. The runner timeout is independent: on timeout, extraction runs once; on cancellation, no fallback is started.
 
-Switching from active/shadow to off first blocks new work, then cancels the new gate and waits for in-flight jobs to abort/done and release the lease, and only then restores the legacy listener; the new and legacy listeners must never dispatch at the same time. In-memory watermarks are cleared. After a process restart or LRU eviction the initial watermark is -1, allowing a repeated extraction and preferring that over a permanent missed memory. sessionStateCap limits only states with no in-flight work, evicting the oldest by lastUsedAt and breaking ties by scopeKey byte order; the number of active states is bounded by the host's active Agent lifecycle, and a new session's extraction must never be skipped because the cache is full. After every settle/dispose, idle LRU convergence runs again.
+Switching from active/shadow to off first blocks new work, then cancels the new gate and waits (bounded by the same 10-second grace as takeover) for in-flight jobs to abort/done and release the lease, and only then hands dispatch back to the legacy branch; the new and legacy listeners must never dispatch at the same time. Wiring shape: ONE `ctx.on('agent/turn-stopping')` handler that reads the current mode snapshot on every entry and branches on it, plus a dispatch generation token so a post-switch legacy dispatch cannot race an in-flight coordinator settle. The mode snapshot is ALSO re-read at every pre-commit check: an active→off flip observed mid-gate is treated exactly like a scope change — the verdict is discarded, the watermark does not move, and no fallback extraction is started by the coordinator (the legacy branch owns the next stop). In-memory watermarks are cleared. After a process restart or LRU eviction the initial watermark is -1, allowing a repeated extraction and preferring that over a permanent missed memory. sessionStateCap limits only states with no in-flight work, evicting the oldest by lastUsedAt and breaking ties by scopeKey byte order; the number of active states is bounded by the host's active Agent lifecycle, and a new session's extraction must never be skipped because the cache is full. After every settle/dispose, idle LRU convergence runs again.
 
 ## Isolation, privacy and metering
 
@@ -227,8 +233,10 @@ Each window allows at most one decision and one extraction; dream's original sin
 | [index.ts](../../packages/memory/memory-consolidation/src/index.ts) | legacy off branch; optional service, new coordinator; dream wired to the local lease |
 | [prompts.ts](../../packages/memory/memory-consolidation/src/prompts.ts) | add `buildWindowedExtractionPrompt(window, memoryDir)`; the two existing builders keep byte-identical output |
 | [memory-job.ts](../../packages/memory/memory-consolidation/src/memory-job.ts) | export the reusable `MemoryJobControl` type, keeping done's semantics of including host write-back |
-| [package.json](../../packages/memory/memory-consolidation/package.json) | dependencies: add `@dsh-cc/systemone` and `@dsh-cc/settings-ns` as `workspace:^`; devDependencies: add `@dsh-cc/settings-provider` as `workspace:^` |
-| [tsconfig.json](../../packages/memory/memory-consolidation/tsconfig.json) | references: add `../../llm-tuning/systemone`, `../../settings/settings-ns` |
+| [package.json](../../packages/memory/memory-consolidation/package.json) | dependencies: add `@dsh-cc/systemone` and `@dsh-cc/settings-ns` as `workspace:^`; devDependencies: add `@dsh-cc/settings-provider` and `@dsh-cc/decision-usage` (type-only consumer; promote to peerDependencies `workspace:^` if its types leak into the public `.d.ts`) as `workspace:^` |
+| [tsconfig.json](../../packages/memory/memory-consolidation/tsconfig.json) | references: add `../../llm-tuning/systemone`, `../../settings/settings-ns`, `../../observability/decision-usage` |
+| [decision-usage index.ts](../../packages/observability/decision-usage/src/index.ts) | root-realm bridge: republish the isolated `systemoneDecisions` service as `ccSystemoneDecisions` via the ccPluginManager register-if-absent idiom, with unload cleanup |
+| [agent.shared.cordis.yml](../../packages/preset/cc/agent.shared.cordis.yml) | extend the decision-usage row comment: the root-realm bridge name and its first-publisher-wins semantics |
 
 If the public `.d.ts` exposes settings-provider types, declare them as peerDependencies `workspace:^`. `ctx.systemoneDecisions` is obtained optionally from the S1-02 decision-usage plugin and bound per Agent via forAgent/scope; the existing `inject=['subagents']` does not thereby force a dependency on the new runner or on `llm`.
 

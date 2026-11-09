@@ -522,6 +522,24 @@
     # unavailable/unconfigured. ORDER: before its consumers (the memory and moa
     # families in the later slices) so `ctx.get('systemoneDecisions')` resolves
     # in their mount; as a provider it depends on nothing after it.
+    #
+    # Root-realm bridge (design
+    # docs/plans/2026-11-02-systemone-04-memory-extraction-gate.md §"Preset
+    # wiring (root-realm bridge)"): the same row ALSO republishes its service to
+    # the ROOT realm as `ccSystemoneDecisions`, because consumers mounted
+    # OUTSIDE this isolate group (memory-consolidation must stay outside so its
+    # forks keep inheriting the parent route) cannot see the isolated name.
+    # Register-if-absent: the first tree to publish owns the root slot
+    # (`root.provide`), a later tree takes the slot over (`root.set`), and a
+    # fiber effect clears the slot on unload only when it still points at that
+    # tree's instance — so a sibling tree's unload never leaves the bridge
+    # dangling and never clears a publication it does not own. "First publisher
+    # wins" in the design's words means the whole process shares ONE bridge
+    # service: per-tree quota isolation is consciously traded for consumer
+    # reachability (quota is keyed by projectKey+sessionId, which is stable
+    # across trees), so consumers re-read the bridge per use instead of caching
+    # it. No isolate key is needed for the bridge — a root-fiber publication
+    # does not trip the preset mount guard.
     - id: decision-usage
       name: '@dsh-cc/decision-usage'
 

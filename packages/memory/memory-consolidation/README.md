@@ -83,13 +83,84 @@ import consolidation from '@dsh-cc/memory-consolidation'
 await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 ```
 
+## Extraction decision gate (`cc-systemone-memory-extraction`)
+
+An optional, default-off gate in front of the turn-end extraction fork. Before a
+fork starts, one System One decision-model call answers a single question over the
+complete review window — the session events since the last reviewed seq, plus the
+existing topic index: *does this window hold at least one durable novel fact?*
+Only an explicit low-probability verdict may omit the fork. Every other outcome —
+an incomplete window, a budget overflow, a missing route or runner, an invalid
+answer, a timeout — extracts exactly as before.
+
+Three modes are read dynamically from the `cc-systemone-memory-extraction`
+settings namespace (kebab-case external keys; any invalid value rejects the whole
+section and keeps the previous snapshot):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `off` | `off` keeps the legacy listener and issues no decision request; `shadow` serialises jobs through the coordinator but still extracts and only records the would-skip; `active` lets an eligible low-probability verdict skip the fork |
+| `route-alias` | `gauge` | configured decision route alias — it selects the System One decision model, never the generative extraction model |
+| `timeout-ms` | `1500` | per-decision wire timeout (integer, 100–5000) |
+| `max-input-tokens` | `6000` | estimated-token budget of one decision state (integer, 512–16000) |
+| `max-surface-events` | `64` | above this many reviewed events the window extracts directly (integer, 1–256) |
+| `max-state-bytes` | `32768` | byte budget of the complete state in UTF-8 (integer, 4096–131072) |
+| `skip-probability` | `0.05` | `p` at or below this may skip (range `0`–`0.20`, both ends inclusive); `0.5` is the fixed positive boundary |
+| `audit-every-n-skips` | `20` | every Nth eligible skip becomes an audit extraction instead (integer, 1–1000) |
+| `failure-cooldown-ms` | `30000` | wait before a failed window may be retried (integer, 1000–300000) |
+| `session-state-cap` | `200` | LRU cap on idle session states with no in-flight work (integer, 1–2000) |
+
+These probabilities are experimental: there is no accuracy or benefit guarantee.
+The gate is inert unless `@dsh-cc/decision-usage` — or another provider of the
+root-realm `ccSystemoneDecisions` service — is mounted and its
+`systemone-decisions` capability rows configure the requested route; without that
+service every eligible window simply extracts (reason `unavailable`), and the
+extraction model, `memoryHome` and `subagentProviderName` keep their original
+configuration under every mode.
+
+**Shadow is not event-for-event identical to the legacy scheduling.** `shadow` and
+`off` produce the same expected memory content with the same read/write
+permissions and the same generative model configuration, but `shadow` deliberately
+tightens the concurrency timing: jobs are serialised through the coordinator and
+the review watermark advances only after the host validated and wrote the batch,
+so an unfinished job is never treated as finished. Only `active` can omit a fork.
+
+**Private input.** A complete window sends current session text plus the existing
+topic index to the configured decision route — a higher disclosure risk than the
+candidate metadata a recall selector sends. Nothing is sent with the default
+`off`. No credentials, request headers, tool arguments or absolute paths enter the
+state; if material would have to be trimmed, the window is marked incomplete and
+the original fork runs instead, so a skip is never based on trimmed text. The
+watermark, skip ordinal and lease live in process memory only — no memory file or
+session event type is added.
+
+**Evaluation and rollback.** [`eval/`](eval/README.md) carries the synthetic
+240-window golden set, the label definition and the offline gates (zero false
+skips on positives — including the explicit-correction and user-preference
+subclasses — zero skips on incomplete windows, fact recall no lower than the
+always-extract baseline, total cost below it). The gated harness
+(`DSH_EXTRACTION_EVAL=1 pnpm vitest run packages/memory/memory-consolidation/tests/eval-extraction-systemone.spec.ts`)
+runs the windows through the real builder and gate with a fake decision runner and
+writes a report that is stamped `invalid-for-release`: a mock run never supports a
+rollout decision. Roll out `shadow` first (at least 100 complete, authorised
+windows with every would-skip positive checked by hand), then `active` in a
+designated workspace. Set the mode back to `off` if an audit fork finds any
+durable fact, a cross-repo write, a watermark that jumped past an unfinished job,
+or a concurrent overwrite of the same memory directory. Rollback is the same flip:
+the coordinator cancels the new gate and waits for the write lease to be released,
+in-memory watermarks and skip counts are discarded, on-disk memory is neither
+migrated nor deleted, and the legacy listener owns the next turn-stopping. The
+default stays `off`; changing it needs its own evaluation evidence and review.
+
 ## Model Experience
 
 The turn-stopping listener is nearly free when the gates are closed (one lock
 read). When the time and session gates open, one forked subagent runs per
 consolidation, restricted to read/search tools plus the `structured_output`
 report tool; its output is not appended to the main transcript. Per turn,
-extraction may start a short background fork.
+extraction may start a short background fork. With the extraction decision gate
+in `active` mode an eligible skip replaces that fork with one short decision call;
+in `shadow` mode the decision call is added on top of the unchanged fork.
 
 ## API
 
@@ -121,3 +192,7 @@ extraction may start a short background fork.
   pointers: an index write is checked against the baseline the job read and rebased onto
   whatever landed meanwhile. Topic-file bodies are still last-writer-wins, and the dream
   lock serializes only consolidations.
+- The extraction decision gate's write lease is a within-process, per-directory
+  lease for the `shadow`/`active` modes of this plugin only. It is not a
+  cross-process transaction, it does not widen the dream lock's meaning, and it
+  makes no claim about two independent harnesses updating one memory home.
