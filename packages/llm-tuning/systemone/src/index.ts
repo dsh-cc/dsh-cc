@@ -1,3 +1,5 @@
 export * from './client.ts'
 export * from './budget.ts'
 export * from './validation.ts'
+export * from './decision.ts'
+export * from './decision-hash.ts'
