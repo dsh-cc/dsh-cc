@@ -69,11 +69,65 @@ import consolidation from '@dsh-cc/memory-consolidation'
 await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 ```
 
+## 抽取决策门（`cc-systemone-memory-extraction`）
+
+轮末抽取 fork 之前可选的一道默认关闭的门。fork 启动前，一次 System One 决策模型调用针对
+完整复查窗口——上次已复查 seq 之后的会话事件，加上现有主题索引——回答单个问题：
+*该窗口是否至少包含一条持久的新事实？* 只有明确的低概率结论才可以省略 fork；其余任何
+情况——窗口不完整、超出预算、缺少路由或 runner、答案非法、超时——都与原来一样执行抽取。
+
+三种模式从 `cc-systemone-memory-extraction` 设置命名空间动态读取（外部键为
+kebab-case；任何非法值都会整段拒绝并保留上一份快照）：
+
+| Key | 默认值 | 含义 |
+|---|---|---|
+| `mode` | `off` | `off` 保留原有的监听器且不发任何决策请求；`shadow` 用新协调器串行化 job，但仍照常抽取，只记录「本可跳过」；`active` 允许合格的低概率结论真正省略 fork |
+| `route-alias` | `gauge` | 已配置的决策路由别名——它只选择 System One 决策模型，绝不选择生成式的抽取模型 |
+| `timeout-ms` | `1500` | 单次决策的线上超时（整数，100–5000） |
+| `max-input-tokens` | `6000` | 单份决策状态的估算 token 预算（整数，512–16000） |
+| `max-surface-events` | `64` | 被复查事件超过此数时窗口直接抽取（整数，1–256） |
+| `max-state-bytes` | `32768` | 完整状态的 UTF-8 字节预算（整数，4096–131072） |
+| `skip-probability` | `0.05` | `p` 小于等于此值才可跳过（范围 `0`–`0.20`，两端含）；`0.5` 是固定的正例边界 |
+| `audit-every-n-skips` | `20` | 每第 N 次合格跳过改为一次审计抽取（整数，1–1000） |
+| `failure-cooldown-ms` | `30000` | 失败窗口可重试前的等待时间（整数，1000–300000） |
+| `session-state-cap` | `200` | 无在飞工作的空闲会话状态的 LRU 上限（整数，1–2000） |
+
+这些概率是实验性设置：不承诺任何准确率或收益。只有在挂载了 `@dsh-cc/decision-usage`
+（或其它提供根领域 `ccSystemoneDecisions` 服务的插件）、且其 `systemone-decisions`
+能力行配置了所请求的路由时，这道门才真正生效；缺少该服务时每个合格窗口都只是照常抽取
+（原因 `unavailable`）。在任何模式下，抽取模型、`memoryHome` 与
+`subagentProviderName` 都仍按原有配置工作。
+
+**`shadow` 与原有调度并非逐事件完全一致。** `shadow` 与 `off` 的预期记忆内容相同，
+读写权限相同，生成式模型配置也相同，但 `shadow` 有意收紧了并发时序：job 经协调器串行化，
+复查 watermark 只有在 host 校验并写盘成功后才会推进，因此未完成的 job 绝不会被当成已完成。
+只有 `active` 才可能省略 fork。
+
+**私有输入。** 完整窗口会把当前会话文本加上现有主题索引发送给已配置的决策路由——这比
+召回选择器发送的候选元数据有更高的披露风险。默认的 `off` 下什么都不发送。状态里不含
+凭据、请求头、工具参数或绝对路径；若某段材料必须先裁剪，该窗口会被标记为不完整并改走原有
+fork，绝不基于裁剪后的文本作出跳过。watermark、跳过序号与租约只存在于进程内存中——不新增
+任何记忆文件或会话事件类型。
+
+**评测与回滚。** [`eval/`](eval/README.md) 提供合成的 240 个窗口的黄金集、标签定义与离线
+门槛（正例零误跳过——含显式纠错与用户偏好两个子类——不完整窗口零跳过、事实召回不低于
+总是抽取的基线、总成本低于该基线）。受环境变量控制的 harness
+（`DSH_EXTRACTION_EVAL=1 pnpm vitest run packages/memory/memory-consolidation/tests/eval-extraction-systemone.spec.ts`）
+用真实的窗口构建器与门、配合假决策 runner 跑完这些窗口，并写出一份盖有
+`invalid-for-release` 标记的报告：mock 运行永远不足以支撑放量决策。先显式开启 `shadow`
+（至少 100 个完整且已授权的窗口，并对每个「本可跳过」的正例人工核对），再在指定工作区开启
+`active`。若任一次审计 fork 发现了持久事实、跨仓库写入、越过未完成 job 的 watermark，或同一
+目录上的并发覆盖，立即把模式设回 `off`。回滚就是同一次切换：协调器取消新门并等待写租约
+释放，内存中的 watermark 与跳过计数被丢弃，磁盘上的记忆既不迁移也不删除，下一次
+turn-stopping 由原有监听器负责。默认值保持 `off`；改动默认值需要单独的评测证据与变更评审。
+
 ## Model Experience
 
 门关闭时，turn-stopping 监听器几乎无成本（一次锁读取）。当时间门与会话门打开时，
 每次整合运行一个 fork subagent，限制为读/搜索工具加 `structured_output` 上报工具；
-其输出不会追加到主 transcript。每轮抽取可能启动一个短暂后台 fork。
+其输出不会追加到主 transcript。每轮抽取可能启动一个短暂后台 fork。抽取决策门处于
+`active` 模式时，一次合格的跳过会用一次简短的决策调用来取代该 fork；处于 `shadow` 模式时，
+决策调用是在保持不变的 fork 之上额外发生的。
 
 ## API
 
@@ -100,3 +154,6 @@ await ctx.plugin(consolidation, { minHours: 24, minSessions: 5 })
 - 并行会话的抽取同时写 `MEMORY.md` 索引时不再互相丢更新：每次索引写入都会对照任务
   开始时读到的基线做校验，期间已有内容落地就在其上重新合并。主题文件正文仍是
   last-writer-wins，dream 锁只串行化整合。
+- 抽取决策门的写租约只是本插件在 `shadow`/`active` 模式下的进程内、按目录租约：
+  它不是跨进程事务，不扩大 dream 锁的含义，也不对两个独立 harness 同时更新同一个
+  memoryHome 作任何承诺。

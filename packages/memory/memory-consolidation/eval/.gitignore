@@ -1,0 +1,3 @@
+# Eval-run artifacts (see README.md): a report is a local, invalid-for-release
+# scratch output of the gated harness, never a committed fixture.
+report-*.json
