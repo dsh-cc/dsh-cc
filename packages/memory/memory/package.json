@@ -37,6 +37,8 @@
   },
   "dependencies": {
     "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/systemone": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
@@ -59,6 +61,7 @@
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/agent-loop-mock": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/settings-provider": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {
