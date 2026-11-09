@@ -173,6 +173,9 @@
       "path": "./packages/observability/config-snapshot"
     },
     {
+      "path": "./packages/observability/decision-usage"
+    },
+    {
       "path": "./packages/observability/sidecar-io"
     },
     {

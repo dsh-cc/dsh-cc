@@ -1,0 +1,27 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../compat/cc-model-aliases"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../settings/settings-provider"
+    },
+    {
+      "path": "../sidecar-io"
+    },
+    {
+      "path": "../../llm-tuning/systemone"
+    }
+  ]
+}
