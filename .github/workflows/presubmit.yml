@@ -42,11 +42,16 @@
 #      keeps half-built artifacts from poisoning the cache, and a
 #      red-test iteration still keeps the already-built cache). node_modules
 #      (1.4G) is never cached — install runs on every run, hardlinking out of
-#      the restored pnpm store. Both caches follow the same single-writer
-#      rule: `quality-gates` saves, `unit-tests` restores only, so parallel
-#      jobs can never race for a key (a losing `cache/save` logs
-#      "Unable to reserve cache" and the entry is wasted). The artifact glob
-#      is fixed-depth and exactly matches the build:lib output set declared
+#      the restored pnpm store. Both caches follow one writer per key *inside
+#      this workflow*: `quality-gates` saves, `unit-tests` restores only, so
+#      the parallel jobs cannot race each other. The pnpm-store key is shared
+#      with formal-design.yml on purpose — cache keys are repo-scoped and both
+#      workflows install from the same lockfiles — so when the two workflows
+#      start a brand-new key at the same time, one of them logs "Failed to
+#      save: Unable to reserve cache"; the other's entry stands and the
+#      conflict is benign (a duplicate store per workflow would cost twice the
+#      storage for no extra hit rate). The artifact glob is fixed-depth and
+#      exactly matches the build:lib output set declared
 #      by the tsdown workspace — no `**`: @actions/glob's `**` follows
 #      symlinks and explodes combinatorially on the pnpm symlink tree (a save
 #      measured 19min without finishing). Harness package depth / tsdown
@@ -280,10 +285,12 @@ jobs:
           HUSKY: 0
         run: pnpm install --frozen-lockfile
 
-      # Single writer for the pnpm-store key (unit-tests restores only) — the
-      # same discipline the harness-lib cache follows, so the parallel jobs
-      # never race for a reservation. Sits right after both installs: every
-      # tarball they pulled is in the store by now.
+      # Writer for the pnpm-store key inside this workflow (unit-tests
+      # restores only) — the same discipline the harness-lib cache follows,
+      # so the parallel jobs never race for a reservation. formal-design.yml
+      # shares the key: if both workflows start a cold key together, one logs
+      # a benign "Unable to reserve cache". Sits right after both installs, so
+      # every tarball they pulled is in the store by now.
       - name: Save the pnpm store
         if: steps.cache-pnpm-store.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

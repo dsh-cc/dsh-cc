@@ -52,8 +52,11 @@ jobs:
       # Pnpm store cache, keyed on the lockfiles with a prefix fallback so a
       # dependency change only downloads the new tarballs (setup-node's
       # `cache: pnpm` restores on the exact key only — see presubmit.yml
-      # deviation #2). This job is the single writer for the key; the Lean
-      # job restores only.
+      # deviation #2). This job is the writer for the key inside this
+      # workflow; the Lean job restores only. The key itself is shared with
+      # presubmit.yml (repo-scoped keys, same lockfiles), so the two workflows
+      # may log one benign "Unable to reserve cache" when both start a cold
+      # key at once.
       - name: Resolve the pnpm store directory
         id: pnpm-store
         run: |
