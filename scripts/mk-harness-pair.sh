@@ -33,6 +33,10 @@
 # .github/workflows/presubmit.yml.
 #
 # Discipline (see docs/dev.md "Parallel harness lines"):
+# - run this from the main checkout BEFORE launching the session that will
+#   work in the pair (the AGENTS.md/change-cookbook §2 stop line against
+#   creating worktrees mid-session applies — the pair's session should start
+#   with its cwd inside .claude/worktrees/<pair>/dsh-cc);
 # - after checkout the harness MUST be built (pnpm install + build:lib) before
 #   trusting any local gate — stale/absent lib/ is the #1 false-green source;
 # - after the line lands in main, fold back: retarget DSH_HARNESS_REF, rebase
