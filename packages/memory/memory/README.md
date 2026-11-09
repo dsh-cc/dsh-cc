@@ -69,6 +69,13 @@ providerless host mounts memory read-only).
   seam-native validation chain (pure-string key sanitization first, then
   `lstat` final-segment symlink rejection, then `resolve` + `contains` prefix
   containment).
+- **SystemOne decision recall (opt-in, off by default)** — with the
+  `cc-systemone-memory-recall` namespace set to `shadow` or `active`, candidate
+  relevance is judged as an independent probability per candidate by the
+  SystemOne decision model instead of a generative filename pick, and the
+  deterministic `include`/`exclude` filter decides what to inject. It is an
+  optional layer on the same recall pipeline: the legacy selector stays and is
+  the fallback, and the feature runs nothing while its mode is `off`.
 
 ## Usage
 
@@ -107,13 +114,92 @@ import memory from '@dsh-cc/memory'
 await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
 ```
 
+## SystemOne decision recall (opt-in, default off)
+
+Recall can also be decided by the SystemOne decision model: one `noul`
+question per candidate returns an independent relevance probability, and a
+deterministic filter picks the injected files. This path ships **off** — `mode`
+defaults to `off`, so no decision request is ever sent until an operator turns
+it on.
+
+The knobs live in their own settings namespace, `cc-systemone-memory-recall`
+(registered through `registerNamespaceSafe`, which also keeps a broken or
+duplicate registration from blocking the mount; keys are kebab-case there). A
+host without a settings service keeps exactly these defaults; an update carrying
+any invalid value is rejected whole and the previous valid snapshot stays in
+force — values are never clamped into range, and a rejected first registration
+leaves every field at its default.
+
+| Field | Default | Range and meaning |
+|---|---|---|
+| `mode` | `off` | `off` / `shadow` / `active` — see the modes below |
+| `route-alias` | `gauge` | 1-128 chars; must already resolve to a configured `protocol: "systemone"` route |
+| `timeout-ms` | `1500` | 100-5000; total deadline for the whole selection (every batch) |
+| `max-input-tokens` | `6000` | 512-16000; per-batch limit for the complete request |
+| `max-candidates` | `96` | 1-256; a larger candidate pool falls back to the legacy selector |
+| `batch-size` | `24` | 1-32; also bounded by the question count the route advertises |
+| `include-probability` | `0.75` | `0.5`-`1`; `p ≥` this is an explicit inclusion |
+| `exclude-probability` | `0.25` | `0`-`0.5` and below `include-probability`; `p ≤` this is an explicit exclusion |
+| `fallback-max-candidates` | `256` | `max-candidates`-1024; above it the round skips recall instead of selecting from a subset |
+| `fallback-max-bytes` | `65536` | 4096-262144; UTF-8 cap on the request text the legacy selector receives |
+
+Modes:
+
+- **`off`** (default) — nothing new runs: the legacy branch alone selects and
+  injects, no route is read and no decision request is sent.
+- **`shadow`** — the legacy branch still selects and injects; the decision model
+  runs alongside and the comparison is recorded only. A shadow result is never
+  injected, so the mode is safe to enable first.
+- **`active`** — the decision model decides. A probability strictly inside
+  `(exclude-probability, include-probability)` makes the whole pool uncertain
+  and falls back to the legacy selector once; every other degradation (no
+  service, no resolvable route, over the candidate limit, batch or token budget,
+  timeout, malformed answer, a route revision change) also falls back exactly
+  once. Cancellation never falls back, and an all-low pool is a valid empty
+  result. Turning the mode back to `off` leaves no persistent state behind.
+
+Relationship to the existing switch and legacy options: `recallEnabled` remains
+the master switch — with `recallEnabled: false` none of the three modes run.
+`recallProviderName`, `recallAgentOptions` and `recallUseSmallFast` configure
+only the legacy selector and its fallback; they do not steer
+SystemOne routing, which resolves its own alias through
+`route-alias`. `sectionEnabled` and `teamEnabled` are unaffected.
+
+Private inputs: the decision route receives the turn's query plus metadata only
+— per candidate its scope, filename, name and description, and the names of
+tools already used this turn. Memory file content, absolute paths, content
+hashes and tool arguments are never sent, and the metadata is data, not
+instructions. A model answer cannot gain file-reading ability: path
+canonicalization, directory boundaries and readability are still enforced by
+the original fs flow, and a selected file whose hash changed on re-read is
+discarded rather than injected.
+
+Optional host dependency: the route is hosted by the optional
+`ctx.systemoneDecisions` service published by `@dsh-cc/decision-usage` (feature
+S1-02). Memory never imports that plugin — the face is structural, so a host
+without it still mounts and simply degrades (`shadow` records no comparison,
+`active` falls back to the legacy selector). **No profile enables this feature
+by default**: the `cc` preset mounts the service row (inert until a consumer
+binds an agent), and the namespace above starts at `mode: off`. Enabling recall
+therefore needs BOTH the plugin and a non-`off` mode; the plugin alone changes
+nothing, and a mode without the plugin only ever falls back.
+
+```jsonc
+// settings cascade
+{ "cc-systemone-memory-recall": { "mode": "shadow", "route-alias": "gauge" } }
+```
+
 ## Model Experience
 
 Baseline cost: one synchronous render of the cached section text per step (no
 I/O). The cheapest path additionally scans the memory directory — when it
 contains topics, recall may spend one small-model subagent call per turn until
 all topics have been shown, then stops. Token growth is bounded by the
-entrypoint truncation caps and the five-file recall ceiling.
+entrypoint truncation caps and the five-file recall ceiling. With
+SystemOne recall in `shadow` or `active`, a turn may instead spend one decision request
+per batch — bounded by `max-candidates`, `batch-size` and `timeout-ms`, and
+metered by the host's decision ledger (`@dsh-cc/decision-usage`) when that
+service is mounted.
 
 ## API
 
@@ -134,6 +220,11 @@ entrypoint truncation caps and the five-file recall ceiling.
   consolidation-pressure marker (`.consolidation-needed`) that queues a forced
   dream when the index gate signals pressure.
 - `MemoryRecall` — the pre-step recall coordinator.
+- `SETTINGS_NAMESPACE` / `DEFAULT_RECALL_DECISION_SETTINGS` /
+  `DEFAULT_RECALL_DECISION_SECTION` / `recallDecisionSettings(section)` /
+  `registerRecallDecisionSettings(ctx)` — the `cc-systemone-memory-recall`
+  namespace (kebab-case fields), its design defaults and the camelCase reader, which
+  the recall slices consume.
 - `truncateEntrypointContent(raw)` — apply the line/byte caps.
 - `resolveMemoryHome`, `resolveWorkspaceMemoryDir`, `canonicalMemoryRoot`,
   `projectSlug`, `cwdOf`, `resolveProjectMemoryRoot` — memdir root and

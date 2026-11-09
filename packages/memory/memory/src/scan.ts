@@ -7,8 +7,19 @@
 
 import type { FileSystem, FsError, FsTarget } from '@deepseek-ai/dsh-fs'
 import { parseMemoryFile } from './parser.ts'
+import { sha256Hex } from './recall-dispatch-key.ts'
 import { ENTRYPOINT_NAME } from './truncate.ts'
 import type { MemoryIndexEntry } from './types.ts'
+
+/** Optional scan behavior knobs. */
+export interface MemoryScanOptions {
+  /**
+   * Compute each topic file's `contentHash` from the bytes the scan already read
+   * (no extra reads, and content is never sent anywhere). Active recall needs it
+   * to re-verify a selected file before injecting it. Default false.
+   */
+  withContentHash?: boolean
+}
 
 /** One observed memdir state. */
 export interface MemoryDirectoryState {
@@ -28,12 +39,15 @@ export interface MemoryDirectoryState {
  * @param fs - the contiguous filesystem seam.
  * @param dir - the memory directory to scan.
  * @param signal - optional cancellation for the underlying fs reads.
+ * @param options - optional behavior knobs ({@link MemoryScanOptions}); the
+ *   default scans exactly as before.
  * @returns the observed directory state, never throwing for absent files.
  */
 export async function scanMemoryDirectory(
   fs: FileSystem,
   dir: string,
   signal?: AbortSignal,
+  options: MemoryScanOptions = {},
 ): Promise<MemoryDirectoryState> {
   const topics: MemoryIndexEntry[] = []
   let entrypoint: string | undefined
@@ -58,7 +72,14 @@ export async function scanMemoryDirectory(
     if (raw === undefined) continue
     const parsed = parseMemoryFile(raw)
     if (parsed === undefined) continue
-    topics.push({ path: entry.target.displayPath, filename: entry.name, frontmatter: parsed.frontmatter })
+    topics.push({
+      path: entry.target.displayPath,
+      filename: entry.name,
+      frontmatter: parsed.frontmatter,
+      // Hash the bytes this scan already has in memory: a second read could see
+      // different content than the parse that produced this entry.
+      ...(options.withContentHash === true ? { contentHash: sha256Hex(raw) } : {}),
+    })
   }
   topics.sort((a, b) => a.filename.localeCompare(b.filename))
   return { dir, entrypoint, topics }

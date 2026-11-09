@@ -11,12 +11,15 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import z from '@deepseek-ai/schemastery'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
 import { toAgentOptions } from '@dsh-cc/model-aliases'
 import { resolveMemoryHome } from './paths.ts'
 import { MemorySection } from './section.ts'
 import { MemoryRecall, SubagentMemorySelector } from './recall.ts'
+import { registerRecallDecisionSettings } from './recall-decision-settings.ts'
+import type { SystemOneDecisionsLike } from './recall-coordinator-support.ts'
 import { registerMemorySaveTool } from './save.ts'
 
 export { parseMemoryFile } from './parser.ts'
@@ -51,6 +54,25 @@ export { MemorySection, renderMemorySection, renderTeamMemorySection, renderLaye
 export type { MemoryLayer } from './section.ts'
 export { MemoryRecall, SubagentMemorySelector, MAX_RECALL_MEMORIES, RECALL_FILES_SCHEMA } from './recall.ts'
 export type { MemorySelector, RecallCandidate } from './recall.ts'
+export { INJECTED_SOURCE_DENYLIST, resolveRecallTurn } from './recall-query.ts'
+export type { RecallMessageLike, RecallTurn } from './recall-query.ts'
+export { COMPLETED_KEY_CAP, RecallCoordinator } from './recall-coordinator.ts'
+export type { RecallCoordinatorOptions, RecallState, RecallTicket } from './recall-coordinator.ts'
+export type { RecallDecisionBinding, SystemOneDecisionsLike } from './recall-coordinator-support.ts'
+export type { RecallShadowDeps, RecallShadowRecord } from './recall-shadow.ts'
+export {
+  DEFAULT_RECALL_DECISION_SECTION,
+  DEFAULT_RECALL_DECISION_SETTINGS,
+  SETTINGS_NAMESPACE,
+  recallDecisionSettings,
+  registerRecallDecisionSettings,
+  validateRecallDecisionSettings,
+} from './recall-decision-settings.ts'
+export type {
+  RecallDecisionMode,
+  RecallDecisionSection,
+  RecallDecisionSettings,
+} from './recall-decision-settings.ts'
 export { TeamMemoryError, sanitizePathKey, resolveTeamMemoryRoot, validateTeamMemKey, readTeamMemFile, TEAM_MEMORY_DIR, TEAM_ENTRYPOINT_NAME } from './team.ts'
 export {
   MEMORY_SAVE_TOOL,
@@ -174,7 +196,18 @@ export function apply(ctx: Context, config: Config = {}): void {
     })
   }
   if (config.recallEnabled ?? true) {
-    new MemoryRecall(ctx, home, {
+    // The SystemOne decision service is OPTIONAL (S1-02's plugin provides it):
+    // absent, the recall feature degrades to the legacy branch and the plugin
+    // still mounts. Memory never imports the hosting plugin — the face is
+    // structural (SystemOneDecisionsLike).
+    let decisions: SystemOneDecisionsLike | undefined
+    try {
+      decisions = ctx.get('systemoneDecisions' as never) as SystemOneDecisionsLike | undefined
+    } catch {
+      decisions = undefined
+    }
+    const readSettings = registerRecallDecisionSettings(ctx)
+    const recall = new MemoryRecall(ctx, home, {
       providerName: config.recallProviderName ?? 'fork',
       enabled: true,
       createSelector: (c, agent) => new SubagentMemorySelector(
@@ -183,6 +216,15 @@ export function apply(ctx: Context, config: Config = {}): void {
         config.recallProviderName ?? 'fork',
         resolveRecallAgentOptions(c, config),
       ),
+      readSettings,
+      // One bound runner per Agent; the service mints the decision scope itself.
+      ...(decisions === undefined
+        ? {}
+        : { decisionsFor: (agent: Agent) => decisions.forAgent(agent) }),
     })
+    // Lifecycle: the plugin context owns the listeners, and an agent's own
+    // disposal drops its per-agent recall state (shown/completed/running).
+    ctx.effect(() => () => recall.dispose())
+    ctx.on('agent/disposed', ({ agent }) => recall.release(agent))
   }
 }

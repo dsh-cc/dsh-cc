@@ -2681,6 +2681,12 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
+      '@dsh-cc/settings-ns':
+        specifier: workspace:^
+        version: link:../../settings/settings-ns
+      '@dsh-cc/systemone':
+        specifier: workspace:^
+        version: link:../../llm-tuning/systemone
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2739,6 +2745,9 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
+      '@dsh-cc/settings-provider':
+        specifier: workspace:^
+        version: link:../../settings/settings-provider
 
   packages/memory/memory-consolidation:
     dependencies:

@@ -9,6 +9,8 @@
   ],
   "references": [
     { "path": "../../core/tools" },
-    { "path": "../../compat/cc-model-aliases" }
+    { "path": "../../compat/cc-model-aliases" },
+    { "path": "../../llm-tuning/systemone" },
+    { "path": "../../settings/settings-ns" }
   ]
 }

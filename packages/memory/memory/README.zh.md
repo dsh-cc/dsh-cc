@@ -49,6 +49,11 @@ side-query 动态召回。所有文件访问都走可选的 `ctx.fs` 缝，因�
   工作区 + 团队 + 全局提示词。每次团队记忆访问都走 seam 原生校验链（先纯字符串键
   sanitization，再 `lstat` 末段 symlink 拒绝，最后 `resolve` + `contains` 前缀
   包含校验）。
+- **SystemOne 决策召回（可选，默认关闭）** —— 把 `cc-systemone-memory-recall` 命名空间
+  设为 `shadow` 或 `active` 后，候选相关性由 SystemOne 决策模型对每个候选给出独立的
+  概率，而不是生成式地挑文件名，再由确定性的 `include`/`exclude` 阈值决定注入什么。
+  它是同一条召回管线上的一层可选能力：旧 selector 仍然保留并作为 fallback，且当
+  `mode` 为 `off` 时该特性完全不运行。
 
 ## 使用
 
@@ -82,11 +87,72 @@ import memory from '@dsh-cc/memory'
 await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
 ```
 
+## SystemOne 决策召回（可选，默认关闭）
+
+召回也可以由 SystemOne 决策模型决定：每个候选一个 `noul` 问题，返回该候选独立的
+相关性概率，再由确定性阈值挑选注入的文件。该路径**默认关闭**——`mode` 默认为
+`off`，在操作者开启之前不会发出任何决策请求。
+
+配置项位于独立命名空间 `cc-systemone-memory-recall`（通过 `registerNamespaceSafe`
+注册，重复或失败的注册也不会阻塞挂载；该层键名为 kebab-case）。没有 settings 服务的
+宿主完全按下列默认值运行；任何字段非法的更新会被整体拒绝、保留上一个有效快照——
+取值从不被夹取到合法区间，首次注册被拒则全部字段停在默认值。
+
+| 字段 | 默认值 | 范围与含义 |
+|---|---|---|
+| `mode` | `off` | `off` / `shadow` / `active` —— 见下方模式说明 |
+| `route-alias` | `gauge` | 1-128 字符；必须已解析为配置好的 `protocol: "systemone"` 路由 |
+| `timeout-ms` | `1500` | 100-5000；单次选择（含所有批次）的总截止时间 |
+| `max-input-tokens` | `6000` | 512-16000；单批完整请求的上限 |
+| `max-candidates` | `96` | 1-256；候选池超过该值即回退到旧 selector |
+| `batch-size` | `24` | 1-32；同时受路由公布的问题数量上限约束 |
+| `include-probability` | `0.75` | `0.5`-`1`；`p ≥` 该值为显式纳入 |
+| `exclude-probability` | `0.25` | `0`-`0.5` 且低于 `include-probability`；`p ≤` 该值为显式排除 |
+| `fallback-max-candidates` | `256` | `max-candidates`-1024；超过则本轮跳过召回，绝不以子集顶替完整结果 |
+| `fallback-max-bytes` | `65536` | 4096-262144；旧 selector 收到的请求文本的 UTF-8 上限 |
+
+三种模式：
+
+- **`off`**（默认）—— 不运行任何新逻辑：仍由旧分支选择并注入，不读路由、不发决策请求。
+- **`shadow`** —— 旧分支照旧选择并注入；决策模型并行运行，比较结果只记录、不注入，
+  因此适合作为第一步开启。
+- **`active`** —— 由决策模型决定。概率严格落在
+  `(exclude-probability, include-probability)` 区间内意味着整个候选池不确定，回退到
+  旧 selector 一次；其他退化（无服务、路由不可解析、超过候选上限、批次或 token 预算、
+  超时、答案非法、路由 revision 变化）同样只回退一次。取消（cancellation）不回退，
+  全部概率偏低则是合法的空结果。把模式切回 `off` 不留下任何持久状态。
+
+与既有开关和旧 selector 选项的关系：`recallEnabled` 仍是总开关——为 `false` 时三种
+模式都不运行。`recallProviderName`、`recallAgentOptions` 与 `recallUseSmallFast` 只
+配置旧 selector 及其 fallback，不参与 SystemOne 路由；后者通过 `route-alias` 解析
+自己的路由。`sectionEnabled` 与 `teamEnabled` 语义不变。
+
+私有输入：决策路由只收到本轮查询加上元数据——每个候选的 scope、filename、name 与
+description，以及本轮已使用过的工具名；记忆文件正文、绝对路径、内容哈希与工具参数
+永不出网，且元数据只是数据、不是指令。模型答案也无法获得读文件能力：路径规范化、
+目录边界与可读性仍由原 fs 流程校验，选中的文件若重读时哈希已变即整批丢弃而不注入。
+
+可选宿主依赖：该路由由 `@dsh-cc/decision-usage`（S1-02 特性）提供的可选
+`ctx.systemoneDecisions` 服务承载。memory 从不 import 该插件——接口是结构化对接，
+宿主缺少该服务时插件照常挂载、只是退化（`shadow` 不记录比较，`active` 回退到旧
+selector）。**没有任何 profile 默认启用该特性**：`cc` preset 会挂载该服务行（在消费者
+绑定 agent 之前保持惰性），而上述命名空间从 `mode: off` 起步。因此启用召回需要
+**同时**具备插件与非 `off` 的 `mode`；只挂插件不会改变任何行为，只有 mode 而没有插件
+则永远只会回退。
+
+```jsonc
+// settings 级联
+{ "cc-systemone-memory-recall": { "mode": "shadow", "route-alias": "gauge" } }
+```
+
 ## Model Experience
 
 基准开销：每步一次同步渲染缓存的 section 文本（无 I/O）。最便宜路径还会扫描
 记忆目录——当存在主题时，召回每轮可能花费一次小型模型 subagent 调用，直到所有
-主题均已展示为止。token 增长受入口截断上限与五文件召回上限约束。
+主题均已展示为止。token 增长受入口截断上限与五文件召回上限约束。若 SystemOne 召回
+处于 `shadow` 或 `active`，一轮可能改为每个批次花费一次决策请求——受
+`max-candidates`、`batch-size` 与 `timeout-ms` 约束，并在宿主挂载
+（`@dsh-cc/decision-usage`）时由决策账本计量。
 
 ## API
 
@@ -106,6 +172,10 @@ await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
   `markPressureForced(...)` / `clearPressure(...)` / `PRESSURE_FILE` ——
   整合压力标记（`.consolidation-needed`）：索引门产生压力时排队一次强制 dream。
 - `MemoryRecall` —— pre-step 召回协调器。
+- `SETTINGS_NAMESPACE` / `DEFAULT_RECALL_DECISION_SETTINGS` /
+  `DEFAULT_RECALL_DECISION_SECTION` / `recallDecisionSettings(section)` /
+  `registerRecallDecisionSettings(ctx)` —— `cc-systemone-memory-recall` 命名空间
+  （kebab-case 字段）、其设计默认值，以及各召回切片消费的 camelCase reader。
 - `truncateEntrypointContent(raw)` —— 施加行/字节上限。
 - `resolveMemoryHome`、`resolveWorkspaceMemoryDir`、`canonicalMemoryRoot`、
   `projectSlug`、`cwdOf`、`resolveProjectMemoryRoot` —— memdir 根与工作区解析辅助。

@@ -2,7 +2,7 @@
 
 > Implementation: use `superpowers:subagent-driven-development` or `superpowers:executing-plans`, implementing and verifying item by item. This file defines design only; this PR does not modify product code.
 
-**Feature ID:** S1-03. **Priority:** P1. **Status:** proposed, not yet implemented.
+**Feature ID:** S1-03. **Priority:** P1. **Status:** implemented — PR #352 (open, pending merge) 〔src:ws:specs/tla/memory-recall-dispatch/implementation.md#L87-L95〕.
 
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 
@@ -12,7 +12,7 @@
 
 **Stack:** TypeScript, Cordis, the existing file memory, the System One native decision interface, Vitest.
 
-Prerequisite designs: [overview](2026-11-02-systemone-00-overview.md), [answer contract validation](2026-11-02-systemone-01-contract-validation.md), [decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). This feature does not depend on S1-04.
+Prerequisite designs: [overview](2026-11-02-systemone-00-overview.md), [answer contract validation](2026-11-02-systemone-01-contract-validation.md), [decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). This feature does not depend on S1-04 〔src:ws:docs/plans/2026-11-02-systemone-00-overview.md#L1-L3〕.
 
 ## Formal design
 
@@ -55,15 +55,15 @@ Add `cc-systemone-memory-recall`, registered through `registerNamespaceSafe`. Ex
 | External field | Internal field and type | Default | Validation range and meaning |
 | --- | --- | --- | --- |
 | `mode` | `mode: 'off' \| 'shadow' \| 'active'` | `off` | off does not read the runner and sends no decision request |
-| `route-alias` | `routeAlias: string` | `gauge` | non-empty, length 1-128; must already be configured |
-| `timeout-ms` | `timeoutMs: number` | `1500` | integer, 100-5000; total deadline for the whole selection |
-| `max-input-tokens` | `maxInputTokens: number` | `6000` | integer, 512-16000; per-batch limit for the complete request |
-| `max-candidates` | `maxCandidates: number` | `96` | integer, 1-256; above this, switch to the old selector |
-| `batch-size` | `batchSize: number` | `24` | integer, 1-32; also bounded by the route's question count |
-| `include-probability` | `includeProbability: number` | `0.75` | finite number, 0.5-1 |
-| `exclude-probability` | `excludeProbability: number` | `0.25` | finite number, 0-0.5, and less than include |
-| `fallback-max-candidates` | `fallbackMaxCandidates: number` | `256` | integer, maxCandidates-1024 |
-| `fallback-max-bytes` | `fallbackMaxBytes: number` | `65536` | integer, 4096-262144; UTF-8 limit for the old selector's request text |
+| `route-alias` | `routeAlias: string` | `gauge`  〔src:ws:packages/memory/memory/README.md#L136-L144〕| non-empty, length 1-128; must already be configured |
+| `timeout-ms` | `timeoutMs: number` | `1500` | integer, 100-5000; total deadline for the whole selection  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `max-input-tokens` | `maxInputTokens: number` | `6000` | integer, 512-16000; per-batch limit for the complete request  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `max-candidates` | `maxCandidates: number` | `96` | integer, 1-256; above this, switch to the old selector  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `batch-size` | `batchSize: number` | `24` | integer, 1-32; also bounded by the route's question count  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `include-probability` | `includeProbability: number` | `0.75` | finite number, 0.5-1  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `exclude-probability` | `excludeProbability: number` | `0.25` | finite number, 0-0.5, and less than include  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `fallback-max-candidates` | `fallbackMaxCandidates: number` | `256` | integer, maxCandidates-1024  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `fallback-max-bytes` | `fallbackMaxBytes: number` | `65536` | integer, 4096-262144; UTF-8 limit for the old selector's request text  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 
 If any field of the namespace is invalid, reject that update and keep the previous valid snapshot; if the first registration is invalid, use the defaults. Do not clamp invalid probabilities into range.
 
@@ -133,7 +133,7 @@ Expect `answered.answers.m0000` to be `{ type: 'noul', noul: 0.91 }`. The Noul v
 
 First apply the existing top-level, real user input, visible directory and fresh candidate filters, then compute the budget. Real user events are those with a missing `data.source` or `kind='user'`, following the existing [genuine-user check](../../packages/interaction/completion-gate/src/lineage.ts#L42); do not default new plugin sources to user.
 
-Batches are determined jointly by `batchSize`, the number of questions the route advertises, and the full payload estimate. The route's question-count ceiling is the `maxQuestions` bound from the S1-02 route identity. Two caps are distinct: per-request questions are capped at the route's `maxQuestions` (each batch sends at most `min(batchSize, maxQuestions)` questions), and the run's batch count is capped at `ceil(maxCandidates / batchSize)`. Plan the batches first (each capped at `min(batchSize, maxQuestions)` questions), then compare the planned batch count directly against the run's batch-count cap `ceil(maxCandidates / batchSize)`; if the planned count exceeds the cap, degrade the whole run before any dispatch rather than sending partial batches. Every candidate must enter exactly one batch, in full; every question must satisfy the route's per-question window on its own. Run at most `ceil(maxCandidates / batchSize)` batches sequentially, four by default; each batch's timeout is the remaining milliseconds of the total deadline, and if fewer than 100 milliseconds remain, degrade the whole run. Each batch reserves budget independently through the runner; if any batch is unavailable, all SystemOne results from this run are discarded.
+Batches are determined jointly by `batchSize`, the number of questions the route advertises, and the full payload estimate. The route's question-count ceiling is the `maxQuestions` bound from the S1-02 route identity. Two caps are distinct: per-request questions are capped at the route's `maxQuestions` (each batch sends at most `min(batchSize, maxQuestions)` questions), and the run's batch count is capped at `ceil(maxCandidates / batchSize)`. Plan the batches first (each capped at `min(batchSize, maxQuestions)` questions), then compare the planned batch count directly against the run's batch-count cap `ceil(maxCandidates / batchSize)`; if the planned count exceeds the cap, degrade the whole run before any dispatch rather than sending partial batches. Every candidate must enter exactly one batch, in full; every question must satisfy the route's per-question window on its own. Run at most `ceil(maxCandidates / batchSize)` batches sequentially, four by default; each batch's timeout is the remaining milliseconds of the total deadline, and if fewer than 100 milliseconds remain, degrade the whole run. Each batch reserves budget independently through the runner; if any batch is unavailable, all SystemOne results from this run are discarded. 〔src:ws:packages/memory/memory/README.md#L139-L140〕
 
 Do not truncate the query or the candidate descriptions. If a single-candidate request still exceeds the budget, if the candidate count exceeds the limit, or if the route does not advertise context capability, degrade directly. `maxInputTokens` covers state, all questions and protocol margin, checked uniformly by the S1-02 algorithm.
 
@@ -213,7 +213,7 @@ S1-02 handles unified metering and hash-only JSONL logging. memory adds no raw-t
 | `packages/memory/memory/src/recall-coordinator.ts` (new) | ticket, generation, per-Agent tools, shown and injection commit |
 | `packages/memory/memory/src/recall-decision-settings.ts` (new) | namespace, range and cross-field validation |
 | [recall.ts](../../packages/memory/memory/src/recall.ts) | keep the legacy selector; dispatch by mode; add the actually delivered path mirror and seedShown, never inferring delivery from historically mis-marked shown |
-| [scan.ts](../../packages/memory/memory/src/scan.ts), [types.ts](../../packages/memory/memory/src/types.ts) | scan gains an optional fourth parameter `{ withContentHash?: boolean }`, default false; active uses true and computes SHA-256 from the already-read raw bytes; MemoryIndexEntry gains an optional contentHash; no extra reads and no sending content |
+| [scan.ts](../../packages/memory/memory/src/scan.ts), [types.ts](../../packages/memory/memory/src/types.ts)  〔src:ws:specs/tla/memory-recall-dispatch/implementation.md#L106-L106〕| scan gains an optional fourth parameter `{ withContentHash?: boolean }`, default false; active uses true and computes SHA-256 from the already-read raw bytes; MemoryIndexEntry gains an optional contentHash; no extra reads and no sending content |
 | [index.ts](../../packages/memory/memory/src/index.ts) | obtain the optional service and call forAgent; original configuration precedence, lifecycle wiring and new type exports |
 | [package.json](../../packages/memory/memory/package.json) | dependencies gain `@dsh-cc/systemone` and `@dsh-cc/settings-ns` as `workspace:^`; devDependencies gain `@dsh-cc/settings-provider` as `workspace:^` |
 | [tsconfig.json](../../packages/memory/memory/tsconfig.json) | references gain `../../llm-tuning/systemone` and `../../settings/settings-ns`; read the settings service types through type imports only |
@@ -234,7 +234,7 @@ When implementing, check whether `settings-provider` appears in the exported `.d
 | --- | --- |
 | probabilities `[0.25, 0.75, 0.91]` | select the third and the second; no fallback |
 | probabilities `[0.10, 0.50, 0.91]` | whole-pool fallback exactly once; partially adopting the third item is forbidden |
-| 97 candidates, default maxCandidates=96 | zero SystemOne requests, complete legacy adaptation; at 257 candidates both make zero requests |
+| 97 candidates, default maxCandidates=96 | zero SystemOne requests, complete legacy adaptation; at 257 candidates both make zero requests  〔src:ws:specs/tla/memory-recall-dispatch/implementation.md#L114-L130〕|
 | 25 candidates, batchSize=24 | two batches covering everything; a failed second batch discards it all |
 | workspace/global same-named `rules.md` | different IDs; selecting the workspace ID reads only the workspace path |
 | query B arrives while A is unfinished, then A returns first | A is not injected and not marked shown; B is finally sent exactly once |
@@ -260,7 +260,7 @@ The first two commands must all PASS. If the real-route evaluation SKIPs, uses m
 
 ## Release gate and rollback
 
-Offline, pin the current 40-query golden set first, and add at least 40 more covering same-named cross-layer files, real tool gotchas, no available memory, duplicate queries and long descriptions. Every arm uses the same candidate pool and queries, at least three rounds, with per-query results reported. Follow the original [W4 gate](../../packages/memory/memory/eval/README.md#L1): F1 no lower than the inherited baseline minus 0.03, no query class collapsing to zero hits, and the new no-relevant-memory class mis-injection rate no higher than the baseline (the no-relevant-memory mis-injection criterion is this feature's own addition, not part of W4).
+Offline, pin the current 40-query golden set first, and add at least 40 more covering same-named cross-layer files, real tool gotchas, no available memory, duplicate queries and long descriptions. Every arm uses the same candidate pool and queries, at least three rounds, with per-query results reported. Follow the original [W4 gate](../../packages/memory/memory/eval/README.md#L1): F1 no lower than the inherited baseline minus 0.03, no query class collapsing to zero hits, and the new no-relevant-memory class mis-injection rate no higher than the baseline (the no-relevant-memory mis-injection criterion is this feature's own addition, not part of W4) 〔src:ws:packages/memory/memory/eval/README.md#L1-L3〕.
 
 End-to-end, verify with an authorized, redactable replay session: zero cross-repository/Agent leakage, zero stale injection, and off's existing recall tests unchanged. active's actual delivered memory recall rate must not be below the baseline; the total cost, counting all batches, fallback and reservation, must be below the baseline; p95 selection latency must not exceed the baseline. These are launch requirements; there are no measurement results yet.
 
