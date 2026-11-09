@@ -19,7 +19,7 @@
  */
 
 import type { DecisionScope } from '@dsh-cc/systemone'
-import { MAX_RECALL_MEMORIES } from './recall.ts'
+import { MAX_RECALL_MEMORIES } from './recall-selector.ts'
 
 /** The layer a candidate was scanned from. */
 export type RecallScope = 'workspace' | 'global'

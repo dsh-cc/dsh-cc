@@ -26,8 +26,8 @@ import type {
   SystemOneAnswer,
   SystemOneQuestion,
 } from '@dsh-cc/systemone'
-import { MAX_RECALL_MEMORIES } from './recall.ts'
-import type { MemorySelector, RecallCandidate } from './recall.ts'
+import { MAX_RECALL_MEMORIES } from './recall-selector.ts'
+import type { MemorySelector, RecallCandidate } from './recall-selector.ts'
 import type { RecallDecisionSettings } from './recall-decision-settings.ts'
 import { planRecallBatches, selectIds, shouldDegradeForDeadline } from './recall-decision.ts'
 import type {

@@ -39,4 +39,11 @@ export interface MemoryIndexEntry {
   filename: string
   /** Rationalized frontmatter (name/description/type). */
   frontmatter: MemoryFrontmatter
+  /**
+   * SHA-256 of the file's raw bytes, present only when the scan was asked for
+   * content hashes (`withContentHash`). The active recall coordinator re-reads a
+   * selected file and discards the whole result on a mismatch; the hash itself
+   * never leaves the host.
+   */
+  contentHash?: string
 }

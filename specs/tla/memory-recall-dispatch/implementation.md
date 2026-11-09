@@ -83,3 +83,91 @@ invariants**, never design defects:
   pending ticket (a ticket may be dropped when superseded — that is the
   specified newest-wins behaviour, not a defect).
 - S1-02 metering and hash-only logging.
+
+## Implementation record — S1-03 slice 3 (active coordinator + wiring)
+
+Keyed to the approved behavioral source
+`docs/plans/2026-11-02-systemone-03-memory-recall.md` (§"Query generations and
+when shown takes effect", §"Failure table and mode switching", §"Privacy,
+caching and logging", §"File and dependency inventory") and to this package's
+verified run `20261103T040257Z-577158c3-9f8f-4b38-bf4b-9dda3f89251b`
+(`checks.json`: core case + 5 probes, 9 invariants). The package artifacts store
+no content digest, so the design path plus that run id are the keys; the TLA
+model and `checks.json` are unchanged by this slice.
+
+### Observed mechanisms
+
+| Model element | Implemented symbol |
+|---|---|
+| `Arrive` / ticket | `recall-coordinator.ts` `RecallCoordinator.run`; origin via `recall-query.ts` `resolveRecallTurn` (newest persisted genuine `user/message` matched BY TEXT, `Number(event.seq)`; `session.seq` is never used), then `recall-dispatch-key.ts` `recallLocalKey` |
+| `pend` (newest wins) | `RecallState.pending`, replaced on every new key |
+| `runGen`/`runKey`, `AbortOnArrive` | `RecallState.running` slot + `controller.abort()` in `run` |
+| `OldFinally` (own generation only) | `start()`'s `finally` clears the slot by IDENTITY (`state.running === slot`) and starts at most one newest pending ticket |
+| `Start`/`ScanOk` | `scanRecallLayers` (`recall-coordinator-support.ts`) with `{ withContentHash: true }`; `scan.ts` hashes the raw bytes it already read (no extra reads, content never sent) |
+| dispatch key / `IgnoreCompleted` | `recall-dispatch-key.ts`: local key + manifest hash + sorted-tools hash + route identity + effective-settings hash; `completed` is consulted only once the full key exists |
+| `ScanFail`/`ReadFail`/`InjectFail`/`InjectEmpty` | `execute()` terminal writes: read failure / empty read-back / content-hash mismatch / `agent.inject()` throw. A scan failure writes nothing |
+| `InjectOk`, `ShownSubsetDelivered` | `shown` + `recordDelivered` written only after a synchronous `agent.inject()` returned |
+| `NoReinject` across keys/generations/modes | `MemoryRecall` DeliveredRecallPaths mirror (every mode), `seedShown`, and shown refreshed from the mirror on each read |
+| `NoStaleInject` | `isCurrent()`: generation, per-Agent WeakMap identity, scopeKey, task signal, `agent.status !== 'idle'`, re-checked before reading, after reading and before injection |
+| `Dispose` | `RecallCoordinator.dispose()` aborts every live controller; `cancel`/`release` per Agent; `agent/disposed` wiring in `index.ts` |
+
+### Checked (actual code tests)
+
+`pnpm vitest run packages/memory/memory/tests` → 19 files passed, 1 skipped
+(`DSH_RECALL_EVAL` unset), **305 tests passed**: the 288 pre-existing tests
+unchanged plus 17 new in `tests/recall-decision-lifecycle.spec.ts`.
+`pnpm typecheck`, `node scripts/check-spec-deps.mjs`,
+`node scripts/check-file-size.mjs` and `pnpm check:inject` all pass.
+
+Matrix row → test (all in the new spec):
+
+- query B arrives while A is unfinished, A returns first → "drops a superseded
+  query A and sends query B exactly once".
+- same text with a new user origin / repeated origin → "executes the same text
+  for a new user origin and never for a repeated origin".
+- no persisted user event → "sends no request while the turn has no persisted
+  user event".
+- tool belongs to another Agent → "a tool executed for another agent never
+  pollutes this agent set".
+- agent idle after reading → "an agent that went idle after reading injects
+  nothing and marks no shown".
+- selected content empty / read failure / changed hash / inject throws → the
+  four "terminal dispatch keys" legs; each asserts the path never enters shown
+  and that the key is not paid twice.
+- scopeKey change clears state → "clears the completed set when the scope key
+  changes"; dispose/Agent dispose abort → "aborts the in-flight task on
+  dispose" and "releases one agent state …".
+- shadow comparison opposite to the baseline → "runs only the baseline in shadow
+  mode and logs no content or query" (the record contains no query, filename or
+  body); unavailable comparison is reported, never fabricated.
+
+Guard loading check: with BOTH the generation guard in `isCurrent` and the
+supersede `controller.abort()` removed, the superseded-A leg fails; with either
+guard alone it passes, i.e. the two are defence in depth as modeled.
+
+### Deviations (implementation, not modeled semantics)
+
+- `originSeq` comes from the session snapshot; a multi-message pre-step batch
+  has no single persisted row, so its LAST genuine message text is the
+  attribution fallback. The ticket key stays `(memoryDir, sessionId, originSeq,
+  queryHash)` of the joined query.
+- `recentTools` is per `exec.agent`; a call the host does not attribute keeps a
+  host-wide set (pre-existing `tools/post-execute` callers emit no agent), so
+  attribution isolates other agents without changing unattributed behaviour.
+- The empty-content branch is unreachable in practice (a topic must parse
+  frontmatter to be scanned, and both branches inject the whole file text); it
+  is kept as a guard and the test drives the observable equivalent (an empty
+  read-back, which also mismatches the hash).
+- The shadow record is a host-logger `info` line carrying fixed enum values and
+  counts only; the synthetic-fixture comparison report remains the explicitly
+  offline-evaluation concern named above.
+- `recall.ts` was split (per-file size budget): the generative selector now
+  lives in `recall-selector.ts` and is re-exported from `recall.ts`, and the
+  decision modules import `MAX_RECALL_MEMORIES` from there, removing a module
+  cycle through `recall.ts`.
+
+### Blockers
+
+None. Not verified here (unchanged from above): judgement quality, metering,
+and the real-route eval arm; the README/lockfile task of the design's task list
+is out of this slice.
