@@ -107,6 +107,50 @@ stale claims are yours.
   removed `scripts/link-worktree-deps.sh` approach): it polluted sibling
   worktrees, missed per-package node_modules, and broke `.bin`.
 
+### Parallel harness lines (pair worktrees)
+
+Every `@deepseek-ai/*` `link:` dependency materializes in `node_modules` as a
+relative symlink that climbs out of the package tree, so **a dsh-cc checkout
+resolves its harness from the sibling `deepseek-harness` directory next to
+the checkout root**. The main checkout's sibling is the shared
+`../deepseek-harness` clone pinned to the `DSH_HARNESS_REF` line, and flat
+`.claude/worktrees/<name>` checkouts reach the same clone through the
+`.claude/worktrees/deepseek-harness` symlink — so by default every checkout
+follows ONE harness line.
+
+To adapt dsh-cc to a different harness line (e.g. npm `next` when it has
+diverged from `latest`) **in parallel with main-line work**, use a pair
+worktree: a directory under `.claude/worktrees/` holding a dsh-cc worktree
+plus its own private harness checkout as its sibling. The scaffold is
+`scripts/mk-harness-pair.sh` (git-ignored location, both worktree
+registrations land in their respective repos' metadata):
+
+```bash
+# create: <ref> is a sha/rev in the harness repo, or a bare version like
+# 0.2.2-rc.1 (resolved to its `release(dsh):` commit, version re-checked)
+scripts/mk-harness-pair.sh create pair-next --ref <next-line-sha-or-version>
+scripts/mk-harness-pair.sh list
+scripts/mk-harness-pair.sh remove pair-next   # teardown, branch kept by default
+```
+
+`create` checks out the harness at the ref, runs `pnpm install` + `build:lib`
+(+ `build:native-system` with `--native` for Task/background specs), installs
+the dsh-cc worktree, and verifies the node_modules links resolve into the
+pair's own harness. The script needs an escalated shell when run from inside a
+sandboxed session (it writes worktree metadata in both repos' `.git`).
+
+Discipline:
+
+- **Stale/absent harness `lib/` is the #1 false-green source** — never trust
+  `tsc`/vitest output from a pair whose harness was not built after checkout.
+- Sessions working on a pair should launch with their cwd inside
+  `.claude/worktrees/<pair>/dsh-cc` (serena binds to the startup cwd).
+- After the line lands in main: retarget `DSH_HARNESS_REF` in presubmit.yml,
+  move the shared sibling clone to the new ref
+  (`git checkout --detach <sha> && git clean -xfd packages && pnpm install
+  --frozen-lockfile && pnpm run build:lib`), then `remove` the pair so stale
+  harness snapshots do not accumulate.
+
 ## Cache hit-rate benchmark (`cache-trajectory`)
 
 `packages/test-support/cache-trajectory` is the Item 6 benchmark: a standard

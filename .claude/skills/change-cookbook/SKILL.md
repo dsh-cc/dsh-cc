@@ -38,6 +38,11 @@ into disagreement before deciding.
   worktree after creating it.
 - In a fresh worktree: run `pnpm install --frozen-lockfile` before the first
   pnpm command. Do not invent cross-worktree `node_modules` link hacks.
+- Need a worktree against a **different harness line** (npm `next` vs
+  `latest`, pre-migration adaptation)? Do not touch the shared sibling
+  harness clone — create a pair worktree instead:
+  `scripts/mk-harness-pair.sh create <pair> --ref <sha-or-version>`
+  (geometry + discipline in docs/dev.md "Parallel harness lines").
 
 ## 3. Verify before claiming Done
 
