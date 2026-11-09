@@ -125,16 +125,24 @@ function stubLane(result: Partial<SystemOneClassification> = {}): SystemOneLane 
   }
 }
 
-/** Envelope whose verdict + ambiguity answers are both controlled. */
+/**
+ * Envelope whose verdict + ambiguity answers are both controlled. Legal by
+ * construction: each Choice map sums to 1 with the chosen label at the
+ * probability maximum, which the strict client validator requires.
+ */
 function envelope(allowProbability: number, ambiguity?: string): unknown {
-  return {
-    model: 'laya-rl-agent',
-    answers: {
-      verdict: { type: 'choice', choice: 'allow', probabilities: { allow: allowProbability, ask: 0.3, deny: 0.1 } },
-      ...(ambiguity === undefined ? {} : { ambiguity: { type: 'choice', choice: ambiguity } }),
-    },
-    usage: { input_tokens: 83, output_tokens: 0 },
+  const rest = 1 - allowProbability
+  const answers: Record<string, unknown> = {
+    verdict: { type: 'choice', choice: 'allow', probabilities: { allow: allowProbability, ask: rest * 0.75, deny: rest * 0.25 } },
   }
+  if (ambiguity !== undefined) {
+    answers.ambiguity = {
+      type: 'choice',
+      choice: ambiguity,
+      probabilities: ambiguity === 'specified' ? { specified: 0.9, underspecified: 0.1 } : { underspecified: 0.9, specified: 0.1 },
+    }
+  }
+  return { model: 'laya-rl-agent', answers, usage: { input_tokens: 83, output_tokens: 0 } }
 }
 
 function makeCapturingFetch(envelopes: unknown[], bodies: Array<{ questions: unknown }>): typeof fetch {
@@ -204,7 +212,7 @@ describe('underspec→ASK: cache + key plumbing (§5.5)', () => {
       model: 'm',
       answers: {
         verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 } },
-        ambiguity: { type: 'choice', choice: 'underspecified' },
+        ambiguity: { type: 'choice', choice: 'underspecified', probabilities: { underspecified: 0.9, specified: 0.1 } },
       },
       usage: { input_tokens: 83, output_tokens: 0 },
     }
@@ -238,17 +246,25 @@ describe('underspec→ASK: cache + key plumbing (§5.5)', () => {
     expect(bodies.length).toBe(1) // one wire call, second served from the LRU
   })
 
-  it('flag off ⇒ no ambiguity question on the wire and no escalation, even if the envelope claims underspecified', async () => {
+  it('flag off ⇒ no ambiguity question on the wire and no escalation; an unasked ambiguity answer rejects the whole response', async () => {
     const bodies: Array<{ questions: unknown }> = []
-    const envelope = {
+    const legal = {
       model: 'm',
       answers: {
         verdict: { type: 'choice', choice: 'allow', probabilities: { allow: 0.9, ask: 0.05, deny: 0.05 } },
-        ambiguity: { type: 'choice', choice: 'underspecified' },
       },
       usage: { input_tokens: 83, output_tokens: 0 },
     }
-    const lane = createSystemOneLane(8, { fetchImpl: makeCapturingFetch([envelope], bodies) })
+    // An envelope that answers a question nobody asked is outside the contract
+    // (the answer set must equal the request set), so it is rejected whole.
+    const unasked = {
+      ...legal,
+      answers: {
+        ...legal.answers,
+        ambiguity: { type: 'choice', choice: 'underspecified', probabilities: { underspecified: 0.9, specified: 0.1 } },
+      },
+    }
+    const lane = createSystemOneLane(8, { fetchImpl: makeCapturingFetch([legal, unasked], bodies) })
     const audits: ClassifierAuditEventData[] = []
     const face = faces()
     face.audit = (_session, event) => { audits.push(event) }
@@ -258,6 +274,12 @@ describe('underspec→ASK: cache + key plumbing (§5.5)', () => {
     expect(out).toBe('allow')
     expect(bodies[0]!.questions).not.toHaveProperty('ambiguity')
     expect(audits.at(-1)!.ambiguity).toBeUndefined()
+    // Same settings, a different command (so the LRU cannot serve the hit):
+    // the unasked ambiguity answer makes the verdict unusable, hence ask.
+    const unaskedExec = { name: 'Bash', arguments: { command: 'pwd' }, agent: { session: { header: { id: 's' }, snapshotEvents: () => [] } } } as never
+    const rejected = await systemOneEscalate(unaskedExec, BACKEND, lane, face, opts)
+    expect(rejected).toMatchObject({ kind: 'ask', reason: 'systemone validation: question-set-mismatch' })
+    expect(audits.at(-1)!.failure).toBe('malformed')
   })
 
   it('failure rows omit the ambiguity field', async () => {

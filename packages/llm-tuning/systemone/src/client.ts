@@ -17,10 +17,18 @@
  * Once the budget is spent the last 429 falls through to the ordinary
  * `failure: 'error'` degradation, exactly as before retries existed.
  *
+ * Every call validates strictly on both sides (design doc §"Validation rules"):
+ * the request is pre-checked before any network work — an invalid request sends
+ * nothing — and only a fully valid, request-matched envelope returns `ok: true`.
+ * Any contract violation is `failure: 'malformed'` with a fixed
+ * `systemone validation: <code>` reason, and is never retried.
+ *
  * Never throws: every failure mode maps to a tagged `SystemOneResult`.
  *
  * @module @dsh-cc/systemone/client
  */
+
+import { validateSystemOneRequest, validateSystemOneResponse } from './validation.ts'
 
 /**
  * Maximum 429 retries after the first attempt (so at most 3 requests). Kept
@@ -139,31 +147,6 @@ export type SystemOneResult =
   | { ok: true; model: string; answers: Record<string, SystemOneAnswer>; usage: SystemOneUsage }
   | { ok: false; failure: SystemOneFailure; reason: string }
 
-/**
- * Structurally validate one answer entry. Unknown `type` values are DROPPED
- * (not an error) — the gateway may evolve answer shapes independently.
- * Dependency-free on purpose (no zod).
- */
-function parseAnswer(value: unknown): SystemOneAnswer | undefined {
-  if (typeof value !== 'object' || value === null) return undefined
-  const record = value as Record<string, unknown>
-  const type = record.type
-  if (type !== 'choice' && type !== 'score' && type !== 'noul') return undefined
-  const answer: SystemOneAnswer = { type }
-  if (typeof record.choice === 'string') answer.choice = record.choice
-  if (typeof record.score === 'number') answer.score = record.score
-  if (typeof record.noul === 'number') answer.noul = record.noul
-  if (typeof record.confidence === 'number') answer.confidence = record.confidence
-  if (typeof record.probabilities === 'object' && record.probabilities !== null) {
-    const probabilities: Record<string, number> = {}
-    for (const [key, prob] of Object.entries(record.probabilities as Record<string, unknown>)) {
-      if (typeof prob === 'number') probabilities[key] = prob
-    }
-    answer.probabilities = probabilities
-  }
-  return answer
-}
-
 export async function systemoneDecide(opts: {
   baseURL: string
   model: string
@@ -176,6 +159,17 @@ export async function systemoneDecide(opts: {
   /** Timing seams for the bounded 429 retry (defaults: real clock/timers). */
   clock?: SystemOneRetryClock
 }): Promise<SystemOneResult> {
+  // Request pre-check (design doc §"Request pre-check"): an unusable request
+  // never reaches the network, so an invalid request means zero fetch calls.
+  const request = validateSystemOneRequest({
+    model: opts.model,
+    state: opts.state,
+    questions: opts.questions,
+    timeoutMs: opts.timeoutMs,
+  })
+  if (!request.ok) {
+    return { ok: false, failure: 'malformed', reason: `systemone validation: ${request.code}` }
+  }
   const doFetch = opts.fetchImpl ?? fetch
   const now = opts.clock?.now ?? Date.now
   const sleep = opts.clock?.sleep ?? defaultSleep
@@ -235,30 +229,23 @@ export async function systemoneDecide(opts: {
     let parsed: unknown
     try {
       parsed = JSON.parse(body)
-    } catch (error) {
-      return { ok: false, failure: 'error', reason: `response parse failed: ${(error as Error).message}` }
+    } catch {
+      // HTTP success with an unparseable body: an invalid envelope, not a
+      // transport error, and never retried.
+      return { ok: false, failure: 'malformed', reason: 'systemone validation: invalid-envelope' }
     }
-    if (typeof parsed !== 'object' || parsed === null || typeof (parsed as Record<string, unknown>).answers !== 'object' || (parsed as Record<string, unknown>).answers === null) {
-      return { ok: false, failure: 'malformed', reason: 'systemone response failed schema validation' }
+    // Strict, request-aware validation: a successful return means every asked
+    // question has a type-matching, in-range answer, and usage is auditable.
+    // The server model is kept as-is (never backfilled with the request alias).
+    const validated = validateSystemOneResponse(opts.questions, parsed)
+    if (!validated.ok) {
+      return { ok: false, failure: 'malformed', reason: `systemone validation: ${validated.code}` }
     }
-    const envelope = parsed as { model?: unknown; answers: Record<string, unknown>; usage?: unknown }
-    const answers: Record<string, SystemOneAnswer> = {}
-    for (const [key, raw] of Object.entries(envelope.answers)) {
-      const answer = parseAnswer(raw)
-      if (answer !== undefined) answers[key] = answer
-    }
-    if (Object.keys(answers).length === 0) {
-      return { ok: false, failure: 'malformed', reason: 'systemone response failed schema validation' }
-    }
-    const usageRecord = (typeof envelope.usage === 'object' && envelope.usage !== null ? envelope.usage : {}) as Record<string, unknown>
     return {
       ok: true,
-      model: typeof envelope.model === 'string' ? envelope.model : opts.model,
-      answers,
-      usage: {
-        input_tokens: typeof usageRecord.input_tokens === 'number' ? usageRecord.input_tokens : 0,
-        output_tokens: typeof usageRecord.output_tokens === 'number' ? usageRecord.output_tokens : 0,
-      },
+      model: validated.value.model,
+      answers: validated.value.answers,
+      usage: validated.value.usage,
     }
   } catch (error) {
     if (opts.signal?.aborted === true) {

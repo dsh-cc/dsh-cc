@@ -80,6 +80,16 @@ describe('gateVerdict', () => {
     expect(gateVerdict(T1_ANSWER, opts)).toEqual({ verdict: 'allow', reason: '' })
   })
 
+  it('allow without a usable probability => ask via the independent guard', () => {
+    const guarded = { verdict: 'ask', reason: 'gauge allow probability missing or invalid' }
+    // Empty map, NaN, negative and above-1 values must never reach the
+    // threshold comparison, which would otherwise fall through to allow.
+    expect(gateVerdict({ type: 'choice', choice: 'allow', probabilities: {} }, opts)).toEqual(guarded)
+    expect(gateVerdict({ type: 'choice', choice: 'allow', probabilities: { allow: Number.NaN } }, opts)).toEqual(guarded)
+    expect(gateVerdict({ type: 'choice', choice: 'allow', probabilities: { allow: -0.2 } }, opts)).toEqual(guarded)
+    expect(gateVerdict({ type: 'choice', choice: 'allow', probabilities: { allow: 1.5 } }, opts)).toEqual(guarded)
+  })
+
   it('ask choice => ask with the annotated judged-ask reason', () => {
     expect(gateVerdict({ type: 'choice', choice: 'ask', probabilities: { allow: 0.28, ask: 0.51, deny: 0.21 } }, opts)).toEqual({
       verdict: 'ask',
@@ -313,11 +323,24 @@ describe('classifyViaSystemOne', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  /** The verdict call shape plus the ambiguity question actually asked. */
+  const preparedWithAmbiguity = () =>
+    prepareSystemOneInput({ name: 'Bash', arguments: { command: 'git status' } }, slots, DEFAULT_GAUGE_CONTEXT_WINDOW, {
+      ambiguityAsk: true,
+      task: 'check the working tree',
+    })
+
   it('valid choice ambiguity answer is extracted next to an unchanged verdict', async () => {
     const verdict = await classifyViaSystemOne(
-      prepared(),
+      preparedWithAmbiguity(),
       { baseURL: 'http://x', model: 'laya' },
-      { timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T1_ANSWER, ambiguity: { type: 'choice', choice: 'underspecified' } }) },
+      {
+        timeoutMs: 1000,
+        fetchImpl: fetchWith({
+          verdict: T1_ANSWER,
+          ambiguity: { type: 'choice', choice: 'underspecified', probabilities: { underspecified: 0.8, specified: 0.2 } },
+        }),
+      },
     )
     expect(verdict.verdict).toBe('allow')
     expect(verdict.reason).toBe('')
@@ -325,26 +348,28 @@ describe('classifyViaSystemOne', () => {
     expect(verdict.failure).toBeUndefined()
   })
 
-  it('wrong-type ambiguity answer (score envelope) is absent, no failure tag', async () => {
+  it('wrong-type ambiguity answer (score envelope) rejects the whole response (no partial consumption)', async () => {
     const verdict = await classifyViaSystemOne(
-      prepared(),
+      preparedWithAmbiguity(),
       { baseURL: 'http://x', model: 'laya' },
       { timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T1_ANSWER, ambiguity: { type: 'score', choice: 'underspecified' } }) },
     )
-    expect(verdict.verdict).toBe('allow')
+    expect(verdict.verdict).toBe('ask')
     expect(verdict.ambiguity).toBeUndefined()
-    expect(verdict.failure).toBeUndefined()
+    expect(verdict.failure).toBe('malformed')
+    expect(verdict.reason).toBe('systemone validation: answer-type-mismatch')
   })
 
-  it('foreign-label ambiguity answer is absent, no failure tag', async () => {
+  it('foreign-label ambiguity answer rejects the whole response (no partial consumption)', async () => {
     const verdict = await classifyViaSystemOne(
-      prepared(),
+      preparedWithAmbiguity(),
       { baseURL: 'http://x', model: 'laya' },
       { timeoutMs: 1000, fetchImpl: fetchWith({ verdict: T1_ANSWER, ambiguity: { type: 'choice', choice: 'allow' } }) },
     )
-    expect(verdict.verdict).toBe('allow')
+    expect(verdict.verdict).toBe('ask')
     expect(verdict.ambiguity).toBeUndefined()
-    expect(verdict.failure).toBeUndefined()
+    expect(verdict.failure).toBe('malformed')
+    expect(verdict.reason).toBe('systemone validation: invalid-choice')
   })
 
   it('absent ambiguity key is absent, no failure tag', async () => {
