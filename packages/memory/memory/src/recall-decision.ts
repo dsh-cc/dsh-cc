@@ -3,13 +3,13 @@
  * docs/plans/2026-11-02-systemone-03-memory-recall.md §"Candidate identity and
  * input contract", §"Complete batching and deterministic filtering").
  *
- * This module owns the contracts and everything that can be decided without a
+ * The pure half owns the contracts and everything that can be decided without a
  * runner: per-pool candidate identity (stable `mNNNN` IDs), the deterministic
  * probability filter with its whole-pool grey-zone signal, the complete batch
  * plan checked against the run's batch-count cap, and the remaining-deadline
- * degrade helper. Runner adaptation (request assembly, `identifyRoute`,
- * reservations, re-identification, the legacy ID adapter) lives in a later
- * slice and is deliberately absent here.
+ * degrade helper. The adapter half (request assembly, `identifyRoute`, answer
+ * validation, the legacy ID adapter, the composed dispatch) lives in
+ * `recall-decision-runner.ts` so neither module outgrows the per-file budget.
  *
  * Privacy: `RecallTopic.path` is host-only — it exists to map a selection back
  * to a file and must never be sent to the runner. Only scope, filename, name and
