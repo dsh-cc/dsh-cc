@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 1,
+  "description": "Offline evaluation corpus for S1-05 semantic tool discovery. Synthetic and redaction-safe: no real paths, credentials, or model identifiers. The human target set per case is `expectedNames`; `admitted: false` on a candidate means the scope's permission gate denies it, so it must never be admitted to the pool or activated.",
+  "cases": [
+    {
+      "id": "zh-citations",
+      "subset": "chinese",
+      "query": "这篇文章引用了哪些文献",
+      "candidates": [
+        { "name": "paper_references", "description": "List the works a paper cites, with venue and year.", "searchHint": "references citations bibliography", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "schema_migrator", "description": "Apply pending schema migrations to a database.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["paper_references"],
+      "notes": "Correct tool scores zero lexically; the Chinese query yields no ASCII tokens at all."
+    },
+    {
+      "id": "zh-bulk-rename",
+      "subset": "chinese",
+      "query": "把这几个文件里的旧函数名批量改掉",
+      "candidates": [
+        { "name": "bulk_file_editor", "description": "Rewrite identifiers across many files under the project root.", "searchHint": "bulk rename edit files", "lexicalScore": 0 },
+        { "name": "git_blame_view", "description": "Show which commit last touched each line of a file.", "lexicalScore": 0 },
+        { "name": "log_reader", "description": "Read application logs and filter by level or time.", "lexicalScore": 0 },
+        { "name": "json_patcher", "description": "Apply a JSON patch document to a JSON file.", "lexicalScore": 0 },
+        { "name": "http_fetcher", "description": "Fetch a URL and return its decoded body.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["bulk_file_editor"],
+      "notes": "Editing intent in Chinese; every candidate is at lexical zero."
+    },
+    {
+      "id": "zh-web-lookup",
+      "subset": "chinese",
+      "query": "上网查一下这个库的最新版本",
+      "candidates": [
+        { "name": "web_search", "description": "Query a search engine and return ranked result links.", "searchHint": "search web online", "lexicalScore": 0 },
+        { "name": "dependency_auditor", "description": "Report known vulnerabilities in declared dependencies.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["web_search"],
+      "notes": "Online lookup phrased as 上网查; no literal match with the English tool metadata."
+    },
+    {
+      "id": "zh-table-columns",
+      "subset": "chinese",
+      "query": "把这张 CSV 表格的列顺序重写一遍",
+      "candidates": [
+        { "name": "table_rewriter", "description": "Reshape a table: reorder, drop, or rename columns.", "searchHint": "table columns reorder", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a CSV file.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "json_patcher", "description": "Apply a JSON patch document to a JSON file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["table_rewriter"],
+      "notes": "The only ASCII token (CSV) belongs to the summarizer, so the lexical control picks the wrong tool."
+    },
+    {
+      "id": "zh-test-run",
+      "subset": "chinese",
+      "query": "跑一下这个目录下的单元测试",
+      "candidates": [
+        { "name": "test_runner", "description": "Run the unit test suite for a project and report failures.", "searchHint": "tests suite run", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 },
+        { "name": "schema_migrator", "description": "Apply pending schema migrations to a database.", "lexicalScore": 0 },
+        { "name": "log_reader", "description": "Read application logs and filter by level or time.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["test_runner"],
+      "notes": "Test execution intent in Chinese."
+    },
+    {
+      "id": "zh-changelog",
+      "subset": "chinese",
+      "query": "根据最近的提交记录生成变更日志",
+      "candidates": [
+        { "name": "changelog_writer", "description": "Turn commit subjects between two tags into a release changelog.", "searchHint": "changelog release notes", "lexicalScore": 0 },
+        { "name": "git_blame_view", "description": "Show which commit last touched each line of a file.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["changelog_writer"],
+      "notes": "A commit-history tool is thematically adjacent but does not write notes."
+    },
+    {
+      "id": "zh-translate",
+      "subset": "chinese",
+      "query": "把这段 JSON 说明翻译成英文",
+      "candidates": [
+        { "name": "text_translator", "description": "Translate paragraphs between natural languages.", "searchHint": "translate language", "lexicalScore": 0 },
+        { "name": "json_patcher", "description": "Apply a JSON patch document to a JSON file.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "prose_polisher", "description": "Rewrite awkward sentences while keeping the meaning.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["text_translator"],
+      "notes": "JSON is the payload format, not the requested operation; the control activates the patcher."
+    },
+    {
+      "id": "zh-pdf-captions",
+      "subset": "chinese",
+      "query": "把这份扫描件里的图表标题都抽出来",
+      "candidates": [
+        { "name": "pdf_extractor", "description": "Extract headings, captions, and tables from a PDF.", "searchHint": "pdf extract captions", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "table_rewriter", "description": "Reshape a table: reorder, drop, or rename columns.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["pdf_extractor"],
+      "notes": "A scanned document and its captions, phrased without the word PDF."
+    },
+
+    {
+      "id": "syn-sources",
+      "subset": "synonym",
+      "query": "which sources does this article draw on",
+      "candidates": [
+        { "name": "paper_references", "description": "List the works a paper cites, with venue and year.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search over documentation and source files.", "lexicalScore": 5 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["paper_references"],
+      "notes": "Shared token 'source' only appears on the wrong (search) tool."
+    },
+    {
+      "id": "syn-secrets",
+      "subset": "synonym",
+      "query": "strip secrets from the config before sharing",
+      "candidates": [
+        { "name": "secret_redactor", "description": "Replace secret-looking literals with placeholders before sharing.", "searchHint": "redact secrets scrub credentials", "lexicalScore": 0 },
+        { "name": "json_patcher", "description": "Apply a JSON patch document to a config file.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "storage_reclaimer", "description": "Free space on the volume by deleting caches and stale artifacts.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["secret_redactor"],
+      "notes": "The overlapping token 'config' belongs to the patcher."
+    },
+    {
+      "id": "syn-condense-diff",
+      "subset": "synonym",
+      "query": "condense the changes between two revisions",
+      "candidates": [
+        { "name": "commit_digest", "description": "Condense the changes between two revisions into a summary.", "searchHint": "digest diff revisions", "lexicalScore": 0 },
+        { "name": "git_blame_view", "description": "Show which commit last touched each line; compares two revisions.", "lexicalScore": 6 },
+        { "name": "changelog_writer", "description": "Turn commit subjects between two tags into a release changelog.", "lexicalScore": 2 },
+        { "name": "log_reader", "description": "Read application logs and filter by level or time.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["commit_digest"],
+      "notes": "Two distractors share literal tokens with the query."
+    },
+    {
+      "id": "syn-resume-later",
+      "subset": "synonym",
+      "query": "pick this back up tomorrow morning",
+      "candidates": [
+        { "name": "background_queue", "description": "Defer a task to run later and resume it on request.", "searchHint": "defer resume queue", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar; morning slots preferred.", "lexicalScore": 5 },
+        { "name": "log_reader", "description": "Read application logs and filter by level or time.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["background_queue"],
+      "notes": "Resumption intent; the only shared token is temporal."
+    },
+    {
+      "id": "syn-disk-room",
+      "subset": "synonym",
+      "query": "make some room on the volume",
+      "candidates": [
+        { "name": "storage_reclaimer", "description": "Free space on the volume by deleting caches and stale artifacts.", "searchHint": "reclaim disk space", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite on the volume and compare numbers to a baseline.", "lexicalScore": 4 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "pdf_extractor", "description": "Extract headings, captions, and tables from a PDF.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["storage_reclaimer"],
+      "notes": "The noun 'volume' is shared with an unrelated benchmark tool."
+    },
+    {
+      "id": "syn-wording",
+      "subset": "synonym",
+      "query": "fix the awkward wording in my paragraph",
+      "candidates": [
+        { "name": "prose_polisher", "description": "Rewrite awkward sentences while keeping the meaning.", "searchHint": "polish prose wording", "lexicalScore": 0 },
+        { "name": "text_translator", "description": "Translate paragraphs between natural languages.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "screenshot_grabber", "description": "Capture a rendered page to an image.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["prose_polisher"],
+      "notes": "Paraphrase of an editing request; translation is not requested."
+    },
+
+    {
+      "id": "none-jazz",
+      "subset": "none",
+      "query": "recommend a jazz album for the evening",
+      "candidates": [
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule evening meetings onto a team calendar.", "lexicalScore": 4 },
+        { "name": "dependency_auditor", "description": "Report known vulnerabilities in declared dependencies.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "No candidate can recommend music; the control activates the calendar tool."
+    },
+    {
+      "id": "none-interview-loop",
+      "subset": "none",
+      "query": "draft an interview loop for a backend engineer",
+      "candidates": [
+        { "name": "schema_migrator", "description": "Apply pending schema migrations to a database.", "lexicalScore": 0 },
+        { "name": "dependency_auditor", "description": "Report known vulnerabilities in declared dependencies.", "lexicalScore": 0 },
+        { "name": "test_runner", "description": "Run the unit test suite of a project; used during engineer onboarding.", "lexicalScore": 5 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Hiring content, not engineering operations."
+    },
+    {
+      "id": "none-weather",
+      "subset": "none",
+      "query": "will it rain in the mountains this weekend",
+      "candidates": [
+        { "name": "http_fetcher", "description": "Fetch a URL and return its decoded body.", "lexicalScore": 0 },
+        { "name": "screenshot_grabber", "description": "Capture a rendered page to an image.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule weekend on-call rotation onto a team calendar.", "lexicalScore": 6 },
+        { "name": "storage_reclaimer", "description": "Free space on the volume by deleting caches and stale artifacts.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Weather question; the shared token 'weekend' is a false friend."
+    },
+    {
+      "id": "none-legal-age",
+      "subset": "none",
+      "query": "what is the legal drinking age in this country",
+      "candidates": [
+        { "name": "http_fetcher", "description": "Fetch a URL and return its decoded body; ignores legal notices.", "lexicalScore": 3 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "A factual question no local tool can answer."
+    },
+
+    {
+      "id": "restricted-log-lookup",
+      "subset": "restricted",
+      "query": "look up the failing request ids in the logs",
+      "candidates": [
+        { "name": "log_reader", "description": "Read application logs and filter by level or time.", "searchHint": "logs filter request ids", "lexicalScore": 0 },
+        { "name": "incident_secrets_dump", "description": "Dump process environment including credentials for incident triage.", "lexicalScore": 8, "admitted": false },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "http_fetcher", "description": "Fetch a URL and return its decoded body.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["log_reader"],
+      "notes": "The scope denies the credential-dumping tool; only the admissible log reader may activate."
+    },
+    {
+      "id": "restricted-env-dump",
+      "subset": "restricted",
+      "query": "dump every environment variable for incident triage",
+      "candidates": [
+        { "name": "incident_secrets_dump", "description": "Dump process environment including credentials for incident triage.", "lexicalScore": 9, "admitted": false },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 2 },
+        { "name": "log_reader", "description": "Read application logs and filter by level or time.", "lexicalScore": 0 },
+        { "name": "storage_reclaimer", "description": "Free space on the volume by deleting caches and stale artifacts.", "lexicalScore": 0 },
+        { "name": "http_fetcher", "description": "Fetch a URL and return its decoded body.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "The only relevant tool is denied, so the admissible target set is empty and a denial leak is a hard failure."
+    }
+  ]
+}

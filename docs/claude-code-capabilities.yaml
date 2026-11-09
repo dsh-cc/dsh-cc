@@ -1155,7 +1155,17 @@ capabilities:
     category: engine
     plane: host
     upstream:
-      summary: Search-activated deferred tools kept out of the model-visible schema.
+      summary: >-
+        Search-activated deferred tools kept out of the model-visible schema.
+        dsh-cc also ships an optional semantic discovery layer (S1-05): an
+        independent relevance judgment over every admitted candidate, so a
+        Chinese or synonymous query with no literal overlap can still reach the
+        right deferred tool. 〔src:ws:packages/core/tool-search/README.md#L36-L76〕
+        `mode: off` is the default and keeps the lexical path byte-identical;
+        `shadow` only recommends (the lexical hits still run) while `active`
+        activates the judged names, and the per-tool permission gate is
+        re-checked before any activation, so a recommendation never widens a
+        scope and a denied tool never loads.
       refs: []
     dimensions:
       recognized: true
@@ -1164,7 +1174,9 @@ capabilities:
       ux: full
     evidence:
       - { type: source, path: packages/bundle/cc-tui/cordis.patch.yml, anchor: "- id: tool-search" }
+      - { type: source, path: packages/core/tool-search/src/discovery.ts }
       - { type: test, path: packages/core/tool-search/tests/tool-search.spec.ts }
+      - { type: test, path: packages/core/tool-search/tests/discovery.spec.ts }
     deviation: { kind: none }
 
   engine.tool-use-summary:

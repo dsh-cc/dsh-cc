@@ -1,6 +1,6 @@
 # S1-05: Fill the tool-discovery gap with an independent relevance judgment
 
-**Status: proposed, not implemented. Priority: P2.** This document defines the implementation and acceptance plan only.
+**Status: implemented (mode off by default); evaluation corpus and offline evaluator included. Priority: P2.** This document defines the implementation and acceptance plan only.
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 **Dependencies:** [Overview](2026-11-02-systemone-00-overview.md), [Answer contract validation](2026-11-02-systemone-01-contract-validation.md), [Decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). Complete S1-01 and S1-02 before taking on this feature.
 
