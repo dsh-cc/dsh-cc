@@ -162,6 +162,28 @@ describe('buildAmbiguityQuestion', () => {
     const total = question.instructions.length + Object.values(question.criteria ?? {}).join('').length
     expect(total).toBeLessThanOrEqual(AMBIGUITY_TEXT_CAP)
   })
+
+  // 2026-11-09 corpus A/B (scripts/eval-ambiguity.mjs): these two discriminators
+  // are what moved read-only escalations from 73% to 7% false-`underspecified`
+  // without collapsing named-target mutations into always-ask. Losing either
+  // sentence silently restores the production false-positive rate.
+  it('exempts read-only inspection unconditionally (no task-naming requirement)', () => {
+    const question = buildAmbiguityQuestion({ hardDeny: [], softDeny: [], allowExceptions: [], environment: [] })
+    const specified = question.criteria?.specified ?? ''
+    // The read-exemption segment must not mention task naming at all. A conditional
+    // exemption ("when the task names the paths") is the exact regression that
+    // produced 73% false positives in production, so pin the structural absence
+    // rather than one phrasing of it.
+    const exemptionSegment = specified.split(';')[0] ?? ''
+    expect(exemptionSegment).toContain('read-only inspection')
+    expect(exemptionSegment).toContain('idempotent checks')
+    expect(exemptionSegment).not.toContain('task')
+  })
+
+  it('treats command-only targets as unnamed', () => {
+    const question = buildAmbiguityQuestion({ hardDeny: [], softDeny: [], allowExceptions: [], environment: [] })
+    expect(question.criteria?.underspecified ?? '').toContain('command-only targets are not named')
+  })
 })
 
 describe('prepareSystemOneInput ambiguity slot', () => {
