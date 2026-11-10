@@ -9,7 +9,9 @@
  * Three dispatch modes (design
  * docs/plans/2026-11-02-systemone-03-memory-recall.md §"Failure table and mode
  * switching"):
- * - `off` (default): the legacy generative selector, exactly as before.
+ * - `off` (default): the legacy generative selector (its query is the genuine
+ *   user text only — see `genuineUserQuery`; before the 2026-11-10 fix it also
+ *   carried harness notice text the retired denylist never excluded).
  * - `shadow`: that legacy baseline PLUS a SystemOne comparison which is recorded
  *   and never injected.
  * - `active`: `RecallCoordinator` (SystemOne `noul` questions, legacy fallback).
@@ -31,14 +33,14 @@ import { DEFAULT_RECALL_DECISION_SETTINGS } from './recall-decision-settings.ts'
 import type { RecallDecisionMode, RecallDecisionSettings } from './recall-decision-settings.ts'
 import { compareShadowRecall } from './recall-shadow.ts'
 import type { RecallShadowRecord } from './recall-shadow.ts'
-import { INJECTED_SOURCE_DENYLIST } from './recall-query.ts'
+import { genuineUserQuery } from './recall-query.ts'
 import type { RecallMessageLike } from './recall-query.ts'
 import { SubagentMemorySelector } from './recall-selector.ts'
 import type { MemorySelector } from './recall-selector.ts'
 
-// The injected-source denylist is defined once in `./recall-query.ts`, shared by
-// the legacy branch and the active coordinator; it is re-exported here because
-// other packages pin its contents against this anchor.
+// The injected-source inventory is defined once in `./recall-query.ts`; it is
+// no longer the genuine test for recall (the structural allowlist is) but is
+// re-exported here because other packages pin its contents against this anchor.
 export { INJECTED_SOURCE_DENYLIST } from './recall-query.ts'
 export { MAX_RECALL_MEMORIES, RECALL_FILES_SCHEMA, SubagentMemorySelector } from './recall-selector.ts'
 export type { MemorySelector, RecallCandidate } from './recall-selector.ts'
@@ -324,7 +326,7 @@ export class MemoryRecall {
     logger.info(`memory-recall shadow ${JSON.stringify(record)}`)
   }
 
-  /** The legacy generative-selection branch, unchanged in `off` (and the baseline of `shadow`). */
+  /** The legacy generative-selection branch (the baseline of `off` and `shadow`). */
   private async legacyRecall(
     agent: Agent,
     messages: readonly RecallMessageLike[],
@@ -333,16 +335,13 @@ export class MemoryRecall {
   ): Promise<void> {
     const fileSystem = this.ctx.get('fs')
     if (fileSystem === undefined) return
-    // Build the query ONLY from real user input: messages carrying an
-    // injected source kind (memory bodies, subagent-child notices) are
-    // excluded — a query built from injected text yields empty selections
-    // and re-triggers recall forever. A message with no source is user input.
-    const query = messages
-      .filter(message => message.source === undefined
-        || !INJECTED_SOURCE_DENYLIST.includes(message.source.kind ?? ''))
-      .map(message => message.content.filter(block => block.type === 'text').map(block => block.text ?? '').join(' '))
-      .join('\n')
-      .trim()
+    // Build the query ONLY from genuine user input: the structural allowlist
+    // in `genuineUserQuery` (source absent or kind 'user') excludes every
+    // injected message — harness notices, memory bodies, subagent-child
+    // notices — so a query built from injected text cannot re-trigger recall.
+    // Since the 2026-11-10 origin fix this also excludes injected notices the
+    // retired denylist never carried (cc-shell-glue, moa, …).
+    const query = genuineUserQuery(messages)
     if (query.length === 0) return
     // Recall spans both layers: the agent's workspace directory and the
     // global directory. Shown-tracking keys on full paths, so identical

@@ -35,9 +35,9 @@ function topicBody(name: string, description: string, body = 'body'): string {
   return `---\nname: ${name}\ndescription: ${description}\ntype: reference\n---\n${body}`
 }
 
-/** One session-log event face used by the origin lookup. */
-function userEvent(seq: number, text: string): unknown {
-  return { type: 'user/message', seq, time: 1_700_000_000_000 + seq, data: { content: [{ type: 'text', text }] } }
+/** One session-log event face used by the origin lookup: the turn's own anchor. */
+function turnStart(seq: number): unknown {
+  return { type: 'turn/start', seq, time: 1_700_000_000_000 + seq, data: { turn: seq } }
 }
 
 /** The fixed route identity of the fake runner. */
@@ -240,13 +240,13 @@ describe('RecallCoordinator: query generations', () => {
   it('drops a superseded query A and sends query B exactly once', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'query A'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['query A'])
     await until(() => rig.runner.requests.length === 1, 'query A dispatched')
 
     // B arrives while A is still in flight; A is aborted but its promise is
     // still ours to settle.
-    events.push(userEvent(2, 'query B'))
+    events.push(turnStart(2))
     drivePreStep(rig.ctx, agent, ['query B'])
     await settle()
     expect(rig.runner.requests).toHaveLength(1)
@@ -265,17 +265,17 @@ describe('RecallCoordinator: query generations', () => {
     expect(injectedText(inject)).not.toContain('Git')
 
     // A's git.md was never marked shown: a third turn still sees it fresh.
-    events.push(userEvent(3, 'query C'))
+    events.push(turnStart(3))
     drivePreStep(rig.ctx, agent, ['query C'])
     await until(() => rig.runner.requests.length === 3, 'query C dispatched')
     expect(candidatesOf(rig.runner.requests[2]!).map(candidate => candidate.filename)).toEqual(['git.md'])
     await rig.dispose()
   })
 
-  it('executes the same text for a new user origin and never for a repeated origin', async () => {
+  it('executes the same text for a new turn anchor and never for a repeated anchor', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'why does this fail?'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['why does this fail?'])
     await until(() => rig.runner.requests.length === 1, 'first dispatch')
     rig.runner.answerNext(request => answerOnly(request, ['bash.md']))
@@ -286,8 +286,8 @@ describe('RecallCoordinator: query generations', () => {
     await settle()
     expect(rig.runner.requests).toHaveLength(1)
 
-    // The same TEXT from a new user message is a new turn: it executes.
-    events.push(userEvent(5, 'why does this fail?'))
+    // The same TEXT under a new turn/start anchor is a new turn: it executes.
+    events.push(turnStart(5))
     drivePreStep(rig.ctx, agent, ['why does this fail?'])
     await until(() => rig.runner.requests.length === 2, 'second dispatch')
     expect(rig.runner.requests[1]!.state.query).toBe('why does this fail?')
@@ -297,10 +297,52 @@ describe('RecallCoordinator: query generations', () => {
     await rig.dispose()
   })
 
-  it('sends no request while the turn has no persisted user event', async () => {
+  it('dispatches before the turn\'s user event is persisted (the real pre-step ordering)', async () => {
+    const rig = await mount({ files: TWO_TOPICS })
+    // The REAL ordering: turn/start is in the log, the turn's user/message
+    // lands only after the pre-step waterfall — so it is absent here.
+    const { agent, inject, events } = makeAgent()
+    events.push(turnStart(1))
+    drivePreStep(rig.ctx, agent, ['a query the log has not seen as a user event'])
+    await until(() => rig.runner.requests.length === 1, 'dispatch without a persisted user event')
+    rig.runner.answerNext(request => answerOnly(request, ['bash.md']))
+    await until(() => inject.mock.calls.length === 1, 'injection')
+    await rig.dispose()
+  })
+
+  it('re-dispatches an A→B→A replay when the recentTools key input changed', async () => {
+    const rig = await mount({ files: TWO_TOPICS })
+    const { agent, inject, events } = makeAgent()
+    events.push(turnStart(1))
+    drivePreStep(rig.ctx, agent, ['query A'])
+    await until(() => rig.runner.requests.length === 1, 'A dispatched')
+    rig.runner.answerNext(request => answerOnly(request, ['bash.md']))
+    await until(() => inject.mock.calls.length === 1, 'A injected (terminal)')
+    // B in the same turn: a different query text dispatches under its own key.
+    drivePreStep(rig.ctx, agent, ['query B'])
+    await until(() => rig.runner.requests.length === 2, 'B dispatched')
+    rig.runner.answerNext(request => answerOnly(request, []))
+    await settle()
+    // An identical A replay with UNCHANGED key inputs is the completed key:
+    // suppressed (the r2-adjudicated intentional per-turn dedupe).
+    drivePreStep(rig.ctx, agent, ['query A'])
+    await settle()
+    expect(rig.runner.requests).toHaveLength(2)
+    // The same A replay AFTER a tool was used is a NEW key (recentTools hash)
+    // and dispatches again.
+    void rig.ctx.emit('tools/post-execute', { agent, name: 'bash' } as never, {} as never, async () => {})
+    await settle()
+    drivePreStep(rig.ctx, agent, ['query A'])
+    await until(() => rig.runner.requests.length === 3, 'A re-dispatched after a tool use')
+    rig.runner.answerNext(request => answerOnly(request, ['git.md']))
+    await until(() => inject.mock.calls.length === 2, 'second injection')
+    await rig.dispose()
+  })
+
+  it('sends no request while the log has no turn/start anchor', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject } = makeAgent()
-    drivePreStep(rig.ctx, agent, ['a query the log has not seen'])
+    drivePreStep(rig.ctx, agent, ['a query the log has no anchor for'])
     await settle()
     expect(rig.runner.requests).toHaveLength(0)
     expect(inject).not.toHaveBeenCalled()
@@ -310,7 +352,7 @@ describe('RecallCoordinator: query generations', () => {
   it('clears the completed set when the scope key changes', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject, events, session } = makeAgent()
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'first dispatch')
     rig.runner.answerNext(request => answerOnly(request, ['bash.md']))
@@ -328,7 +370,7 @@ describe('RecallCoordinator: query generations', () => {
   it('aborts the in-flight task on dispose', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     rig.recall.dispose()
@@ -341,7 +383,7 @@ describe('RecallCoordinator: query generations', () => {
   it('releases one agent state and aborts its in-flight task (Agent dispose)', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     rig.recall.release(agent)
@@ -358,12 +400,12 @@ describe('RecallCoordinator: recentTools isolation', () => {
     const one = makeAgent({ id: 'session-1' })
     const two = makeAgent({ id: 'session-2' })
     await rig.ctx.emit('tools/post-execute', { name: 'Bash', agent: two.agent }, undefined, async () => ({}))
-    one.events.push(userEvent(1, 'q one'))
+    one.events.push(turnStart(1))
     drivePreStep(rig.ctx, one.agent, ['q one'])
     await until(() => rig.runner.requests.length === 1, 'agent one dispatch')
     expect(recentToolsOf(rig.runner.requests[0]!)).toEqual([])
 
-    two.events.push(userEvent(1, 'q two'))
+    two.events.push(turnStart(1))
     drivePreStep(rig.ctx, two.agent, ['q two'])
     await until(() => rig.runner.requests.length === 2, 'agent two dispatch')
     expect(recentToolsOf(rig.runner.requests[1]!)).toEqual(['Bash'])
@@ -378,7 +420,7 @@ describe('RecallCoordinator: freshness checkpoints', () => {
   it('an agent that went idle after reading injects nothing and marks no shown', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     agent.status = 'idle' as never
@@ -388,7 +430,7 @@ describe('RecallCoordinator: freshness checkpoints', () => {
 
     // bash.md was not marked shown: a running agent's next turn still sees it.
     agent.status = 'running' as never
-    events.push(userEvent(2, 'q2'))
+    events.push(turnStart(2))
     drivePreStep(rig.ctx, agent, ['q2'])
     await until(() => rig.runner.requests.length === 2, 'second dispatch')
     expect(candidatesOf(rig.runner.requests[1]!).map(candidate => candidate.filename)).toContain('bash.md')
@@ -401,7 +443,7 @@ describe('RecallCoordinator: freshness checkpoints', () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, events } = makeAgent()
     rig.recall.seedShown(agent, ['/root/projects/work-repo/bash.md', 'relative/git.md'])
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     // bash.md was seeded as delivered; git.md only via a non-canonical entry.
@@ -422,7 +464,7 @@ describe('RecallCoordinator: terminal dispatch keys', () => {
       (truncateReads && String(target.targetKey) === '/root/projects/work-repo/bash.md'
         ? ''
         : await original(target))
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     // The scan saw real content; only the read-back comes back empty.
@@ -449,7 +491,7 @@ describe('RecallCoordinator: terminal dispatch keys', () => {
       if (failing.has(String(target.targetKey))) throw new Error('read failed')
       return await original(target)
     }
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     // The scan has read the file already; only the read-back fails.
@@ -466,7 +508,7 @@ describe('RecallCoordinator: terminal dispatch keys', () => {
   it('a content-hash mismatch discards the whole result', async () => {
     const rig = await mount({ files: TWO_TOPICS })
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     const scanned = rig.fs.backingText('/root/projects/work-repo/bash.md')!
@@ -491,14 +533,14 @@ describe('RecallCoordinator: terminal dispatch keys', () => {
     inject.mockImplementation(() => {
       throw new Error('inject exploded')
     })
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'dispatch')
     rig.runner.answerNext(request => answerOnly(request, ['bash.md']))
     await settle()
     expect(inject).toHaveBeenCalledTimes(1)
     // No path was marked shown, so a new turn re-selects bash.md...
-    events.push(userEvent(2, 'q2'))
+    events.push(turnStart(2))
     drivePreStep(rig.ctx, agent, ['q2'])
     await until(() => rig.runner.requests.length === 2, 'second dispatch')
     expect(candidatesOf(rig.runner.requests[1]!).map(candidate => candidate.filename)).toContain('bash.md')
@@ -515,7 +557,7 @@ describe('MemoryRecall mode dispatch', () => {
     ;(rig.ctx as { logger?: unknown }).logger = { info: (line: string) => lines.push(line) }
     rig.legacy.selection = ['bash.md']
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'why does this test fail randomly?'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['why does this test fail randomly?'])
     await until(() => rig.runner.requests.length === 1, 'shadow decision dispatched')
     // The decision disagrees with the baseline (it wants git.md) — it is still
@@ -540,7 +582,7 @@ describe('MemoryRecall mode dispatch', () => {
     ;(rig.ctx as { logger?: unknown }).logger = { info: (line: string) => lines.push(line) }
     rig.legacy.selection = ['bash.md']
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'a query'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['a query'])
     await until(() => lines.length === 1, 'shadow record')
     expect(rig.runner.requests).toHaveLength(0)
@@ -555,13 +597,13 @@ describe('MemoryRecall mode dispatch', () => {
     const rig = await mount({ files: TWO_TOPICS })
     rig.legacy.selection = ['git.md']
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'active dispatch')
 
     // The operator switches the mode off mid-flight.
     rig.settings.mode = 'off'
-    events.push(userEvent(2, 'q2'))
+    events.push(turnStart(2))
     drivePreStep(rig.ctx, agent, ['q2'])
     await until(() => rig.legacy.calls.length === 1, 'legacy baseline ran')
     await until(() => inject.mock.calls.length === 1, 'baseline injection')
@@ -578,7 +620,7 @@ describe('MemoryRecall mode dispatch', () => {
     const rig = await mount({ files: [['bash.md', topicBody('Bash', 'Bash reference documentation')]] })
     rig.legacy.selection = ['bash.md']
     const { agent, inject, events } = makeAgent()
-    events.push(userEvent(1, 'q1'))
+    events.push(turnStart(1))
     drivePreStep(rig.ctx, agent, ['q1'])
     await until(() => rig.runner.requests.length === 1, 'active dispatch')
     rig.runner.answerNext(request => answerOnly(request, ['bash.md']))
@@ -588,7 +630,7 @@ describe('MemoryRecall mode dispatch', () => {
     // Back to the legacy branch: every candidate is already delivered, so the
     // selector is never even asked — the mirror, not a mis-marked shown set.
     rig.settings.mode = 'off'
-    events.push(userEvent(2, 'q2'))
+    events.push(turnStart(2))
     drivePreStep(rig.ctx, agent, ['q2'])
     await settle()
     expect(rig.legacy.calls).toHaveLength(0)

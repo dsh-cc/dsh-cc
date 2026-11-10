@@ -73,7 +73,7 @@ export interface RecallState {
 export interface RecallTicket {
   /** Local key from `(memoryDir, sessionId, originSeq, queryHash)`. */
   key: string
-  /** Seq of this turn's real user message; the decision scope origin. */
+  /** Seq of this turn's `turn/start` event; the decision scope origin (issue #359 redesign — a user-message seq is not persisted until after the pre-step waterfall). */
   originSeq: number
   /** The query text (host-side; never logged). */
   query: string
@@ -149,8 +149,10 @@ export class RecallCoordinator {
     if (this.disposed) return
     const state = this.stateFor(agent)
     const turn = resolveRecallTurn(agent, messages)
-    // No persisted user event for this query yet: send no request and write no
-    // completed entry — the next pre-step retries.
+    // No genuine query (an injected-only batch) or no turn anchor in the log:
+    // send no request and write no completed entry. There is no later
+    // pre-step retry — later steps of the same turn claim nothing new — so a
+    // turn that cannot resolve now simply does not dispatch this round.
     if (turn === undefined) return
     const key = recallLocalKey(
       this.memoryDirOf(agent),
