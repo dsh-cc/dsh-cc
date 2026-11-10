@@ -20,6 +20,7 @@
 
 import type { DecisionScope } from '@dsh-cc/systemone'
 import { MAX_RECALL_MEMORIES } from './recall-selector.ts'
+import type { RecallIndexedLayers } from './recall-preselect.ts'
 
 /** The layer a candidate was scanned from. */
 export type RecallScope = 'workspace' | 'global'
@@ -46,6 +47,13 @@ export interface RecallDecisionInput {
   query: string
   recentTools: readonly string[]
   topics: readonly RecallTopic[]
+  /**
+   * Per-layer memory-index membership for the pre-selection tie-break.
+   * Host-local only: never enters the wire state or the legacy manifest,
+   * and the legacy fallback paths ignore it. Absent is exactly the shipped
+   * pre-selection order.
+   */
+  indexedFilenames?: Readonly<RecallIndexedLayers>
 }
 
 /**

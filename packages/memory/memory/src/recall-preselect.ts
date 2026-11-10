@@ -16,10 +16,12 @@
  * words), so bigrams carry the relevance signal; a run of two or more Han
  * codepoints contributes its bigrams, an isolated one backs off to a unigram.
  *
- * The total order is score desc, then the UTF-8 byte order of filename, scope
- * and path. The scope/path legs are LOCAL tie-breaks only (note: scope order
- * ranks `global` before `workspace`, the opposite of the canonical
- * scope-then-path ID assignment) and never cross the wire.
+ * The total order is score desc, then INDEX MEMBERSHIP for the topic's own
+ * layer (indexed first, when a membership map is provided), then the UTF-8
+ * byte order of filename, scope and path. The scope/path legs are LOCAL
+ * tie-breaks only (note: scope order ranks `global` before `workspace`, the
+ * opposite of the canonical scope-then-path ID assignment) and never cross
+ * the wire.
  *
  * @module @dsh-cc/memory/recall-preselect
  */
@@ -64,6 +66,46 @@ function filenameTokens(filename: string): Set<string> {
 }
 
 /**
+ * Per-layer membership of the memory index (MEMORY.md): the basenames the
+ * index of each layer's own directory currently references. The index is the
+ * memory system's maintained view of currently-tracked memories, so
+ * "indexed" is the principled tie-break between lexically-tied candidates —
+ * never a score, and never crossing layers (a workspace index entry never
+ * promotes a global namesake).
+ */
+export interface RecallIndexedLayers {
+  /** Basenames referenced by the workspace layer's MEMORY.md. */
+  workspace?: ReadonlySet<string>
+  /** Basenames referenced by the global layer's MEMORY.md. */
+  global?: ReadonlySet<string>
+}
+
+/**
+ * Extract the basenames a memory-index text references. Two line shapes
+ * exist in the wild and both are accepted, line-anchored:
+ * `… [label](name.md) …` (the production format, with or without a link
+ * title) and `… (name.md)` at end of line (the eval fixture's
+ * `- Label: … (name.md)`).
+ *
+ * Every `(...)` group on a line contributes each whitespace-separated token
+ * that ends in `.md`; tokens containing `://` are rejected (external links);
+ * directory prefixes are dropped and the BASENAME is recorded. Pure and
+ * bounded: no matches (or empty text) yields an empty set.
+ * @param entrypoint - the MEMORY.md text the scan already returned.
+ * @returns the referenced basenames.
+ */
+export function parseIndexedBasenames(entrypoint: string): ReadonlySet<string> {
+  const names = new Set<string>()
+  for (const group of entrypoint.match(/\(([^)]+)\)/g) ?? []) {
+    for (const token of group.slice(1, -1).split(/\s+/u)) {
+      if (!token.endsWith('.md') || token.includes('://')) continue
+      names.add(token.slice(token.lastIndexOf('/') + 1))
+    }
+  }
+  return names
+}
+
+/**
  * One candidate's lexical score against the query units: one point per unit
  * contained in `name + ' ' + description`, plus one point per unit equal to a
  * filename token.
@@ -88,17 +130,31 @@ function scoreTopic(topic: RecallTopic, units: readonly string[], tokens: Readon
  * (best first) of the caller's own entries; IDs are never touched.
  *
  * The selector's trim loop re-uses this order to drop the lowest-ranked
- * remaining candidate, so ranking exists in exactly one place.
+ * remaining candidate, so ranking exists in exactly one place. BOTH rank
+ * consumers (the pre-selection cut and the trim re-rank) must pass the same
+ * membership map, or the trim can re-drop exactly the topics the cut
+ * rescued.
  * @param topics - the candidate pool.
  * @param query - the recall query.
+ * @param indexed - the per-layer index membership (tie-break only; absent
+ *   is exactly the shipped order).
  * @returns the pool sorted best-first.
  */
-export function rankRecallTopics(topics: readonly RecallTopic[], query: string): RecallTopic[] {
+export function rankRecallTopics(
+  topics: readonly RecallTopic[],
+  query: string,
+  indexed?: Readonly<RecallIndexedLayers>,
+): RecallTopic[] {
   const units = queryUnits(query)
   return topics
-    .map(topic => ({ topic, score: scoreTopic(topic, units, filenameTokens(topic.filename)) }))
+    .map(topic => ({
+      topic,
+      score: scoreTopic(topic, units, filenameTokens(topic.filename)),
+      member: indexed?.[topic.scope]?.has(topic.filename) ? 1 : 0,
+    }))
     .sort((a, b) =>
       b.score - a.score ||
+      b.member - a.member ||
       compareUtf8(a.topic.filename, b.topic.filename) ||
       compareUtf8(a.topic.scope, b.topic.scope) ||
       compareUtf8(a.topic.path, b.topic.path))
@@ -114,10 +170,17 @@ export function rankRecallTopics(topics: readonly RecallTopic[], query: string):
  * @param topics - the complete ID-assigned pool.
  * @param query - the recall query.
  * @param cap - how many candidates may be kept.
+ * @param indexed - the per-layer index membership (tie-break only; absent
+ *   is exactly the shipped behavior).
  * @returns the kept candidates in canonical order.
  */
-export function preselectRecallTopics(topics: readonly RecallTopic[], query: string, cap: number): RecallTopic[] {
+export function preselectRecallTopics(
+  topics: readonly RecallTopic[],
+  query: string,
+  cap: number,
+  indexed?: Readonly<RecallIndexedLayers>,
+): RecallTopic[] {
   if (topics.length <= cap) return [...topics]
-  const keep = new Set(rankRecallTopics(topics, query).slice(0, Math.max(cap, 0)))
+  const keep = new Set(rankRecallTopics(topics, query, indexed).slice(0, Math.max(cap, 0)))
   return topics.filter(topic => keep.has(topic))
 }

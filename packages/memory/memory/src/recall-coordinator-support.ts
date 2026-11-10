@@ -19,6 +19,7 @@ import { scanMemoryDirectory } from './scan.ts'
 import type { MemoryIndexEntry } from './types.ts'
 import type { RecallDecisionRunner } from './recall-decision-runner.ts'
 import type { RecallScope, RecallTopicSeed } from './recall-decision.ts'
+import { parseIndexedBasenames } from './recall-preselect.ts'
 
 /**
  * The optional SystemOne decision face the coordinator consumes. A
@@ -80,6 +81,14 @@ function topicSeed(entry: MemoryIndexEntry, scope: RecallScope): RecallTopicSeed
   }
 }
 
+/** Both scanned layers plus each layer's memory-index membership. */
+export interface RecallLayerScan {
+  /** The complete ID-less candidate pool (workspace first, then global). */
+  seeds: RecallTopicSeed[]
+  /** Per-layer MEMORY.md basenames for the pre-selection tie-break. */
+  indexed: Readonly<{ workspace: ReadonlySet<string>; global: ReadonlySet<string> }>
+}
+
 /**
  * Scan both layers of one agent (`workspace` then `global`) into the complete
  * id-less candidate pool. Content hashes are computed from the bytes the scan
@@ -95,13 +104,19 @@ export async function scanRecallLayers(
   memoryDir: string,
   home: string,
   signal: AbortSignal,
-): Promise<RecallTopicSeed[]> {
+): Promise<RecallLayerScan> {
   const [workspaceScan, globalScan] = await Promise.all([
     scanMemoryDirectory(fileSystem, memoryDir, signal, { withContentHash: true }),
     scanMemoryDirectory(fileSystem, home, signal, { withContentHash: true }),
   ])
-  return [
-    ...workspaceScan.topics.map(entry => topicSeed(entry, 'workspace')),
-    ...globalScan.topics.map(entry => topicSeed(entry, 'global')),
-  ]
+  return {
+    seeds: [
+      ...workspaceScan.topics.map(entry => topicSeed(entry, 'workspace')),
+      ...globalScan.topics.map(entry => topicSeed(entry, 'global')),
+    ],
+    indexed: {
+      workspace: parseIndexedBasenames(workspaceScan.entrypoint ?? ''),
+      global: parseIndexedBasenames(globalScan.entrypoint ?? ''),
+    },
+  }
 }

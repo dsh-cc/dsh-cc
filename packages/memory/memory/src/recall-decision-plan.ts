@@ -206,7 +206,7 @@ export function planJudgedRecallBatches(
 ): RecallTopic[][] | undefined {
   const capBatches = recallBatchCountCap(settings.maxCandidates, settings.batchSize)
   let pool = topics.length > settings.maxCandidates
-    ? preselectRecallTopics(topics, input.query, settings.maxCandidates)
+    ? preselectRecallTopics(topics, input.query, settings.maxCandidates, input.indexedFilenames)
     : [...topics]
   for (;;) {
     if (pool.length === 0) return undefined
@@ -215,7 +215,7 @@ export function planJudgedRecallBatches(
     if (plan.length <= capBatches) return plan
     // Drop the lowest-ranked survivor (ranked best-first, so the tail) and
     // re-plan: cheap low-rank topics are what made the early batches large.
-    const ranked = rankRecallTopics(pool, input.query)
+    const ranked = rankRecallTopics(pool, input.query, input.indexedFilenames)
     const worst = ranked[ranked.length - 1]!
     pool = pool.filter(candidate => candidate !== worst)
   }
