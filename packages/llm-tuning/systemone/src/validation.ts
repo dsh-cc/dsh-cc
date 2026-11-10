@@ -60,11 +60,25 @@ const MIN_SCORE_LEVELS = 2
 const MAX_SCORE_LEVELS = 10
 
 /**
- * Tolerance for both the probability sum and the chosen-versus-maximum gap.
- * Values are neither clipped nor renormalized: an out-of-tolerance
- * distribution is a malformed response, not something to repair.
+ * The gateway quantizes every emitted probability and score to 4 decimal
+ * places (issue #361, live evidence 2026-11-10). Every rounding-sensitive
+ * comparison tolerates the drift this quantization introduces — values are
+ * still neither clipped nor renormalized, and a semantically inconsistent
+ * answer (gap >= 0.1) stays rejected by orders of magnitude:
+ * - the probability-sum check tolerates `options * ROUNDING_UNIT` — 2x the
+ *   worst-case drift of an n-term sum of 4-dp values (half-up or truncation);
+ * - the score-vs-expectation check tolerates
+ *   `(1 + levels * (levels - 1) / 2) * ROUNDING_UNIT` — 2x the worst case of
+ *   the score's own rounding plus each probability's index-weighted rounding;
+ * - the chosen-versus-maximum check tolerates one quantization unit plus FP
+ *   slack: a monotone quantizer cannot invert a true argmax, so only a
+ *   single-unit disagreement between the choice head and the probability head
+ *   is benign, and the slack repairs the FP boundary in `max - tolerance`
+ *   (1552/9999 adjacent 4-dp pairs fail a strict subtraction in IEEE).
  */
-const PROBABILITY_TOLERANCE = 1e-4
+const ROUNDING_UNIT = 1e-4
+/** FP slack for the chosen-versus-maximum subtraction boundary. */
+const FP_SLACK = 1e-12
 
 /** Identifier alphabet for question ids and choice option ids. */
 const IDENTIFIER = /^[A-Za-z0-9_-]+$/
@@ -209,7 +223,8 @@ export function validateSystemOneRequest(opts: {
 /**
  * Read a probability map whose key set must equal `expected` exactly. Each
  * value must be a finite number in `[0, 1]` and the sum must be within
- * `PROBABILITY_TOLERANCE` of 1. Returns a prototype-free map or `undefined`.
+ * `expected.size * ROUNDING_UNIT` of 1 (2x the worst-case 4-dp drift of an
+ * n-term sum). Returns a prototype-free map or `undefined`.
  */
 function readProbabilities(value: unknown, expected: ReadonlySet<string>): Record<string, number> | undefined {
   if (!isPlainObject(value)) return undefined
@@ -224,7 +239,7 @@ function readProbabilities(value: unknown, expected: ReadonlySet<string>): Recor
     probabilities[key] = probability
     sum += probability
   }
-  if (Math.abs(sum - 1) > PROBABILITY_TOLERANCE) return undefined
+  if (Math.abs(sum - 1) > expected.size * ROUNDING_UNIT) return undefined
   return probabilities
 }
 
@@ -253,7 +268,7 @@ function validateChoiceAnswer(
   for (const probability of Object.values(probabilities)) max = Math.max(max, probability)
   const chosenProbability = probabilities[choice]
   if (chosenProbability === undefined) return failure('invalid-probabilities')
-  if (chosenProbability < max - PROBABILITY_TOLERANCE) return failure('invalid-probabilities')
+  if (chosenProbability < max - (ROUNDING_UNIT + FP_SLACK)) return failure('invalid-probabilities')
   const confidence = readConfidence(raw)
   if (!confidence.ok) return confidence
   const answer: SystemOneAnswer = { type: 'choice', choice, probabilities }
@@ -277,10 +292,13 @@ function validateScoreAnswer(
   if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > levels - 1) {
     return failure('invalid-score')
   }
-  // A non-integer score is allowed, but it must match its own distribution.
+  // A non-integer score is allowed, but it must match its own distribution
+  // within 2x the worst-case 4-dp rounding drift: the score's own rounding
+  // plus each probability's index-weighted rounding.
   let expectedScore = 0
   for (const [index, probability] of Object.entries(probabilities)) expectedScore += Number(index) * probability
-  if (Math.abs(score - expectedScore) > PROBABILITY_TOLERANCE) return failure('invalid-score')
+  const scoreTolerance = (1 + (levels * (levels - 1)) / 2) * ROUNDING_UNIT
+  if (Math.abs(score - expectedScore) > scoreTolerance) return failure('invalid-score')
   const confidence = readConfidence(raw)
   if (!confidence.ok) return confidence
   const answer: SystemOneAnswer = { type: 'score', score, probabilities }

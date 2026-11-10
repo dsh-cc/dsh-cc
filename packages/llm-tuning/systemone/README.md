@@ -55,9 +55,12 @@ undefined/function/symbol values are rejected), model and timeout bounds —
 and a failed pre-check returns `malformed` with zero fetch calls. Responses
 must answer exactly the requested question set with type-matching answers:
 choice probabilities cover the criteria exactly, each finite in `[0,1]`,
-sum within `1e-4` of 1, and the chosen option not more than `1e-4` below
+sum within `options * 1e-4` of 1 (2x the worst-case 4-decimal rounding drift,
+issue #361), and the chosen option not more than one quantization unit plus FP
+slack below
 the maximum; score answers carry the full `"0".."n-1"` distribution with
-`score` within `1e-4` of its expected value; usage reports both token
+`score` within `(1 + n*(n-1)/2) * 1e-4` of its expected value (2x the
+worst-case 4-decimal rounding drift, issue #361); usage reports both token
 counts as non-negative safe integers (a missing value is never coerced to
 zero). Any violation rejects the whole response — partial consumption is
 forbidden — with the fixed reason `systemone validation: <code>`. The
