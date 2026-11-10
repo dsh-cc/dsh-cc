@@ -19,7 +19,7 @@ import { resolveMemoryHome } from './paths.ts'
 import { MemorySection } from './section.ts'
 import { MemoryRecall, SubagentMemorySelector } from './recall.ts'
 import { registerRecallDecisionSettings } from './recall-decision-settings.ts'
-import type { SystemOneDecisionsLike } from './recall-coordinator-support.ts'
+import type { RecallDecisionBinding, SystemOneDecisionsLike } from './recall-coordinator-support.ts'
 import { registerMemorySaveTool } from './save.ts'
 
 export { parseMemoryFile } from './parser.ts'
@@ -170,6 +170,39 @@ function resolveRecallAgentOptions(c: Context, config: Config): unknown {
 }
 
 /**
+ * Resolve the optional SystemOne decision service PER USE (issue #368).
+ *
+ * The SystemOne decision service is OPTIONAL (S1-02's plugin provides it):
+ * absent, the recall feature degrades to the legacy branch and the plugin still
+ * mounts. Memory never imports the hosting plugin — the face is structural
+ * (`SystemOneDecisionsLike`).
+ *
+ * The preset loader mounts a group's children concurrently (`Promise.all`), so
+ * a strict `ctx.get` at apply time cannot see a sibling whose fiber is not
+ * ACTIVE yet — an apply-time capture would be structurally `undefined` in
+ * every real boot. Reading at use time (a pre-step or a coordinator turn, long
+ * after the mount sweep) observes the provider as it is at that instant: a
+ * provider that is absent, unreadable, mid-reload or unloading reads as
+ * "no decision service" for that use, never as a stale pinned instance.
+ *
+ * `forAgent` sits INSIDE the guard: it mints the quota/lock scope and can
+ * realistically throw (memory-consolidation guards the same call); a throwing
+ * provider must read as absent, never reject into the fire-and-forget sidecar.
+ *
+ * @param ctx - the plugin context whose realm carries the isolate name.
+ * @returns a per-use resolver returning the agent's binding, or `undefined`.
+ */
+export function recallDecisionsFor(ctx: Context): (agent: Agent) => RecallDecisionBinding | undefined {
+  return (agent: Agent) => {
+    try {
+      return (ctx.get('systemoneDecisions' as never) as SystemOneDecisionsLike | undefined)?.forAgent(agent)
+    } catch {
+      return undefined
+    }
+  }
+}
+
+/**
  * Register the `memory` system-prompt section and recall listener.
  * @param ctx - the host context carrying the system-prompt and agent seams.
  * @param config - memory behavior knobs.
@@ -196,16 +229,6 @@ export function apply(ctx: Context, config: Config = {}): void {
     })
   }
   if (config.recallEnabled ?? true) {
-    // The SystemOne decision service is OPTIONAL (S1-02's plugin provides it):
-    // absent, the recall feature degrades to the legacy branch and the plugin
-    // still mounts. Memory never imports the hosting plugin — the face is
-    // structural (SystemOneDecisionsLike).
-    let decisions: SystemOneDecisionsLike | undefined
-    try {
-      decisions = ctx.get('systemoneDecisions' as never) as SystemOneDecisionsLike | undefined
-    } catch {
-      decisions = undefined
-    }
     const readSettings = registerRecallDecisionSettings(ctx)
     const recall = new MemoryRecall(ctx, home, {
       providerName: config.recallProviderName ?? 'fork',
@@ -218,9 +241,11 @@ export function apply(ctx: Context, config: Config = {}): void {
       ),
       readSettings,
       // One bound runner per Agent; the service mints the decision scope itself.
-      ...(decisions === undefined
-        ? {}
-        : { decisionsFor: (agent: Agent) => decisions.forAgent(agent) }),
+      // Resolved PER USE (issue #368): the preset loader mounts a group's
+      // children concurrently, and a strict `ctx.get` at apply time cannot see
+      // a sibling whose fiber is not ACTIVE yet — a one-shot apply-time capture
+      // is structurally `undefined` in every real boot.
+      decisionsFor: recallDecisionsFor(ctx),
     })
     // Lifecycle: the plugin context owns the listeners, and an agent's own
     // disposal drops its per-agent recall state (shown/completed/running).
