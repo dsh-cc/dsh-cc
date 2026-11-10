@@ -35,7 +35,6 @@ Add `context-routing` under the existing `moa` namespace, keeping the legacy pat
 | raw field | default | legal values |
 |---|---|---|
 | `mode` | `off` | off/shadow/active |
-| `route-alias` | `gauge` | non-empty configured SystemOne alias |
 | `timeout-ms` | 1500 | integer 100..8000 |
 | `max-input-tokens` | 4000 | integer 512..16000 |
 | `max-under-tier-probability` | 0.10 | finite number 0..0.5 |

@@ -53,7 +53,6 @@ Add the namespace `cc-systemone-memory-extraction`. External keys are kebab-case
 | External field | Internal field and type | Default | Valid range and use |
 | --- | --- | --- | --- |
 | `mode` | `mode: 'off' \| 'shadow' \| 'active'` | `off` | off does not read the runner |
-| `route-alias` | `routeAlias: string` | `gauge` | non-empty, length 1–128, resolves configured routes only |
 | `timeout-ms` | `timeoutMs: number` | `1500` | integer, 100–5000 |
 | `max-input-tokens` | `maxInputTokens: number` | `6000` | integer, 512–16000, covering state, questions and protocol headroom |
 | `max-surface-events` | `maxSurfaceEvents: number` | `64` | integer, 1–256; above this, extract directly |
@@ -63,7 +62,7 @@ Add the namespace `cc-systemone-memory-extraction`. External keys are kebab-case
 | `failure-cooldown-ms` | `failureCooldownMs: number` | `30000` | integer, 1000–300000; wait before a failed window may be retried |
 | `session-state-cap` | `sessionStateCap: number` | `200` | integer, 1–2000; LRU cap on idle/cooldown states with no in-flight work |
 
-These probabilities are experimental settings; there is no existing accuracy or benefit guarantee. Any invalid update rejects the whole snapshot and keeps the previous one; an initialisation failure uses the defaults. `memoryHome`, `subagentProviderName` and the generative extraction model still follow the original config. The new route-alias controls only the SystemOne decision model, not the fork.
+These probabilities are experimental settings; there is no existing accuracy or benefit guarantee. Any invalid update rejects the whole snapshot and keeps the previous one; an initialisation failure uses the defaults. `memoryHome`, `subagentProviderName` and the generative extraction model still follow the original config. The decision route is the fixed lane alias (`DECISION_LANE_ALIAS`); it controls only the SystemOne decision model, not the fork.
 
 ## Building a complete window from the event watermark
 
@@ -113,11 +112,11 @@ This version has one Noul question only and does not split the window and merge 
 
 The host fixes the decision quota scope from `projectKeyOf(path.resolve(session.header.cwd))` and validates the bound scope before reserve and after await. The canonical repo directory from the existing `resolveWorkspaceMemoryDir()` still decides read/write isolation and the mutation lease independently; the budget projectKey does not replace memoryDir, and the memoryDir hash is not used as the decision projectKey. If the bound service or scope is unavailable, extract directly rather than fabricating a scope to keep calling.
 
-First get `{ provider, model, revision, perRequestTokens, perQuestionTokens, maxOutputTokens }` from `runner.identifyRoute(routeAlias, scope)`, treating undefined as unavailable; do not resolve the provider or a fallback route privately. Pin that identity to this generation; re-identify after await, and any identity/revision change invalidates the old skip and routes to extraction. There is no answer cache across generations; a checkpoint change must bump the capability revision, and evaluation pins the checkpoint/revision.
+First get `{ provider, model, revision, perRequestTokens, perQuestionTokens, maxOutputTokens }` from `runner.identifyRoute(DECISION_LANE_ALIAS, scope)`, treating undefined as unavailable; do not resolve the provider or a fallback route privately. Pin that identity to this generation; re-identify after await, and any identity/revision change invalidates the old skip and routes to extraction. There is no answer cache across generations; a checkpoint change must bump the pinned route revision, and evaluation pins the checkpoint/revision.
 
 ```ts
 const request: DecisionRequest = {
-  feature: 'memory-extraction', mode: 'active', routeAlias: 'gauge',
+  feature: 'memory-extraction', mode: 'active',
   questionVersion: 'memory-extraction-worth-v1', policyVersion: 'memory-extraction-v1',
   scope, state: {
     window: { fromExclusive: 12, throughInclusive: 16, complete: true,
