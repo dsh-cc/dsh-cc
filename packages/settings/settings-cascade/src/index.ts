@@ -25,10 +25,8 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { dirname } from 'node:path'
 import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
-import { resolveLocalSettingsDir, type LocalRootDeps } from './local-root.ts'
 import { mergeSettingsSection } from './merge.ts'
 import { reassembleTrustedAutoMode, reassembleTrustedKey, TRUSTED_SOURCE_KEYS } from './trusted-scope.ts'
 import { isAccessDenied, isENOENT, isPlainObject, MAX_PERSIST_ATTEMPTS } from './shared-guards.ts'
@@ -43,6 +41,8 @@ export { runUserSectionEdit, type UserSectionEdit } from './edit-user-section.ts
 
 export { resolveLocalSettingsDir, type LocalRootDeps, type LocalRootExec, type LocalRootExecResult } from './local-root.ts'
 export { reassembleTrustedKey, TRUSTED_SOURCE_KEYS } from './trusted-scope.ts'
+export { resolveSpec } from './spec.ts'
+export type { CascadePolicyConfig, Config, ResolvedSpec } from './spec.ts'
 export { mergeValue, mergeSettingsSection, unionDenyPrecedence } from './merge.ts'
 export { AutoModeSchema, AutoModeClassifierSchema, type AutoMode, type AutoModeClassifier } from './auto-mode.ts'
 export { PermissionsSchema, PERMISSION_MODES, type Permissions, type PermissionMode } from './permissions.ts'
@@ -61,105 +61,19 @@ export const SETTING_SOURCES = [
 /** One source in the settings cascade. */
 export type SettingsSource = (typeof SETTING_SOURCES)[number]
 
-/** Policy sub-sources in first-source-wins priority order. */
-export interface CascadePolicyConfig {
-  /** Hosted remote settings — the highest-priority policy source. */
-  remoteSettings?: unknown
-  /** System-level managed settings file. */
-  systemPath?: string
-  /** User-writable managed settings file. */
-  userPath?: string
-}
-
-/** Plugin configuration: source file locations and switches. */
-export interface Config {
-  /** Launch directory: seeds the project settings path and the git probe for the local settings path. */
-  projectDir?: string
-  /** Harness home used for the default user settings path. */
-  dshHome?: string
-  /** User settings file; defaults to `settings.json` under the harness home. */
-  userSettingsPath?: string
-  /** Project settings file; defaults to `<project>/.claude/settings.json`. */
-  projectSettingsPath?: string
-  /** Local settings file; defaults to git main-checkout / toplevel `.claude/settings.local.json`. */
-  localSettingsPath?: string
-  /** Command-line `--settings` file; the flag layer's file half. */
-  flagSettingsPath?: string
-  /** Inline `--settings` content; merged over the flag file. */
-  flagSettingsInline?: unknown
-  /** Policy sub-sources; the first non-empty one wins. */
-  policy?: CascadePolicyConfig
-  /** Watcher write-settle tuning (chokidar `awaitWriteFinish`); defaults 100/10. */
-  watch?: {
-    /** How long a file must stay unchanged before its event fires. */
-    stabilityThresholdMs?: number
-    /** How often a settling file is polled for further changes. */
-    pollIntervalMs?: number
-  }
-}
-
-/** Fully resolved provider parameters; defaulting happens here, never inline. */
-export interface ResolvedSpec {
-  sources: {
-    userSettings: string | undefined
-    projectSettings: string | undefined
-    localSettings: string | undefined
-    flagSettings: string | undefined
-  }
-  flagSettingsInline: unknown
-  policy: {
-    systemPath: string | undefined
-    userPath: string | undefined
-    remoteSettings: unknown
-  }
-}
-
-/**
- * Resolve the runtime spec from plugin config: explicit paths win, otherwise
- * the defaults derive from the harness home and the project directory. The
- * project settings stay at the launch directory, but the local settings file
- * path hoists Claude Code-style to the git main checkout root (linked
- * worktree) or git toplevel (subdirectory start) via
- * {@link resolveLocalSettingsDir} — the session cwd and git operations are
- * untouched, and explicit `localSettingsPath` never hoists.
- */
-export function resolveSpec(config: Config, deps?: LocalRootDeps): ResolvedSpec {
-  const launchDir = resolve(config.projectDir ?? process.cwd())
-  const home = resolveDshHome(config.dshHome)
-  return {
-    sources: {
-      userSettings: config.userSettingsPath ?? join(home, 'settings.json'),
-      projectSettings: config.projectSettingsPath ?? join(launchDir, '.claude', 'settings.json'),
-      localSettings: config.localSettingsPath
-        ?? join(resolveLocalSettingsDir(launchDir, deps), '.claude', 'settings.local.json'),
-      flagSettings: config.flagSettingsPath,
-    },
-    flagSettingsInline: config.flagSettingsInline,
-    policy: {
-      remoteSettings: config.policy?.remoteSettings,
-      systemPath: config.policy?.systemPath,
-      userPath: config.policy?.userPath,
-    },
-  }
-}
 
 /**
  * Consumer-facing trusted-view seam: a provider that can reassemble one
  * top-level settings key from its TRUSTED layers only — user settings, the
  * explicit --settings flag layer, and managed/policy — skipping the project
  * and local (repo-carried) layers. Consumers duck-type the API
- * (`settings?.trustedSection?.(key)`) and fall back to the merged read when
- * the provider lacks it.
+ * (`settings?.trustedSection?.(key)`) and MUST fail closed when the provider
+ * lacks it — never fall back to the provenance-lossy merged read.
  * @see SettingsCascadeProvider.trustedSection
  */
-export interface TrustedSectionReader {
-  /**
-   * Trusted-only reassembly of one top-level settings `key` under the
-   * {@link reassembleTrustedKey} rule — `undefined` when no trusted layer
-   * carries the key.
-   */
-  trustedSection(key: string): Record<string, unknown> | undefined
-}
+export type { TrustedSectionReader } from './trusted-section.ts'
+import { resolveSpec, type Config, type ResolvedSpec } from './spec.ts'
+import { reassembleTrustedView, type TrustedSectionReader } from './trusted-section.ts'
 
 /**
  * Claude Code-style five-level settings cascade Provider. Reads the user,
@@ -423,29 +337,15 @@ export class SettingsCascadeProvider extends SettingsProvider implements Trusted
   /**
    * Read one top-level settings `key` from the TRUSTED layers only — user
    * settings, the flag layer (file + inline), and managed/policy — skipping
-   * the project and local (repo-carried) layers. Trusted values deep-merge in
-   * merge order (user → flag → policy) with ordinary merge semantics, the same
-   * rule as {@link reassembleTrustedKey}. `key` is deliberately NOT added to
-   * {@link TRUSTED_SOURCE_KEYS}: the merged document every other consumer sees
-   * keeps the full provenance-lossy merge, so this is a per-consumer view and
-   * not a global trusted-scope opt-in.
-   *
-   * Computed from the retained raw layers (never by mutating the merged
-   * document) and returned detached, so a caller cannot perturb the published
-   * view. Total by contract: no load yet, a key no trusted layer carries, a
-   * non-object reassembly result, or a junk layer shape all yield `undefined`.
+   * the project and local (repo-carried) layers. Same rule as
+   * {@link reassembleTrustedKey}; `key` is deliberately NOT added to
+   * {@link TRUSTED_SOURCE_KEYS} (per-consumer view, not a global opt-in).
+   * Total by contract; see {@link reassembleTrustedView}.
    * @param key - the top-level settings key to reassemble.
    * @returns the trusted-only value of `key`, or `undefined`.
    */
   trustedSection(key: string): Record<string, unknown> | undefined {
-    try {
-      const scratch: Record<string, unknown> = {}
-      reassembleTrustedKey(scratch, this.trustedLayerDocs, key)
-      const value = Object.hasOwn(scratch, key) ? scratch[key] : undefined
-      return isPlainObject(value) ? structuredClone(value) : undefined
-    } catch {
-      return undefined
-    }
+    return reassembleTrustedView(this.trustedLayerDocs, key)
   }
 
   /**
@@ -555,3 +455,4 @@ export class SettingsCascadeProvider extends SettingsProvider implements Trusted
 }
 
 export default SettingsCascadeProvider
+
