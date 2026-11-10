@@ -82,27 +82,28 @@ describe('assignRecallTopicIds', () => {
 })
 
 describe('selectIds', () => {
-  it('selects the boundary items [0.25, 0.75, 0.91] without a fallback', () => {
+  it('selects the boundary items [0.25, 0.75, 0.91], dropping nothing', () => {
     const ids = selectIds([row('m0000', 0.25), row('m0001', 0.75), row('m0002', 0.91)], 0.25, 0.75)
     // 0.75 is an explicit inclusion, 0.25 an explicit exclusion; no grey zone.
-    expect(ids).toEqual(['m0002', 'm0001'])
+    expect(ids).toEqual({ ids: ['m0002', 'm0001'], greyDropped: 0 })
   })
 
-  it('signals a whole-pool fallback for [0.10, 0.50, 0.91] instead of adopting the high item', () => {
-    expect(selectIds([row('m0000', 0.1), row('m0001', 0.5), row('m0002', 0.91)], 0.25, 0.75)).toBeUndefined()
+  it('drops the in-band row per candidate instead of abstaining the whole pool', () => {
+    expect(selectIds([row('m0000', 0.1), row('m0001', 0.5), row('m0002', 0.91)], 0.25, 0.75))
+      .toEqual({ ids: ['m0002'], greyDropped: 1 })
   })
 
   it('treats the grey zone as the OPEN interval (excludeProbability, includeProbability)', () => {
     // Exactly at either boundary is not grey.
-    expect(selectIds([row('m0000', 0.25), row('m0001', 0.75)], 0.25, 0.75)).toEqual(['m0001'])
-    // Just inside it is.
-    expect(selectIds([row('m0000', 0.2501)], 0.25, 0.75)).toBeUndefined()
-    expect(selectIds([row('m0000', 0.7499)], 0.25, 0.75)).toBeUndefined()
+    expect(selectIds([row('m0000', 0.25), row('m0001', 0.75)], 0.25, 0.75)).toEqual({ ids: ['m0001'], greyDropped: 0 })
+    // Just inside it is dropped per candidate.
+    expect(selectIds([row('m0000', 0.2501)], 0.25, 0.75)).toEqual({ ids: [], greyDropped: 1 })
+    expect(selectIds([row('m0000', 0.7499)], 0.25, 0.75)).toEqual({ ids: [], greyDropped: 1 })
   })
 
-  it('returns an empty (not undefined) selection when every probability is low', () => {
+  it('returns an empty selection with greyDropped 0 when every probability is low', () => {
     const ids = selectIds([row('m0000', 0.04), row('m0001', 0.1), row('m0002', 0.25)], 0.25, 0.75)
-    expect(ids).toEqual([])
+    expect(ids).toEqual({ ids: [], greyDropped: 0 })
   })
 
   it('takes exactly MAX_RECALL_MEMORIES items ordered by probability, workspace first, then ID bytes', () => {
@@ -117,16 +118,16 @@ describe('selectIds', () => {
     ]
     const ids = selectIds(rows, 0.25, 0.75)
     expect(MAX_RECALL_MEMORIES).toBe(5)
-    expect(ids).toEqual(['m0006', 'm0000', 'm0005', 'm0001', 'm0002'])
+    expect(ids).toEqual({ ids: ['m0006', 'm0000', 'm0005', 'm0001', 'm0002'], greyDropped: 0 })
   })
 
   it('breaks exact probability ties by UTF-8 byte order of the ID', () => {
     const ids = selectIds([row('m0010', 0.9), row('m0009', 0.9)], 0.25, 0.75)
-    expect(ids).toEqual(['m0009', 'm0010'])
+    expect(ids).toEqual({ ids: ['m0009', 'm0010'], greyDropped: 0 })
   })
 
-  it('selects nothing (empty, not undefined) from an empty pool', () => {
-    expect(selectIds([], 0.25, 0.75)).toEqual([])
+  it('selects nothing from an empty pool', () => {
+    expect(selectIds([], 0.25, 0.75)).toEqual({ ids: [], greyDropped: 0 })
   })
 })
 

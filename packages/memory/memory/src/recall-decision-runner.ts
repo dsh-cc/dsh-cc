@@ -74,7 +74,6 @@ export type RecallFallbackReason =
   | 'batch-count-over-cap'
   | 'deadline'
   | 'malformed-answer'
-  | 'grey-zone'
   // Selector-side admission: no candidate of the judged pool fits a batch, or
   // the pool cannot be trimmed into the run's batch cap. Distinct from
   // 'unavailable-budget', which is the runner's own post-`run()` preflight.
@@ -171,7 +170,7 @@ export class SystemOneRecallDecisionSelector implements RecallDecisionSelector {
     // stays the only thing that runs.
     if (mode === 'off') return { kind: 'fallback', reason: 'mode-off', judged: 0 }
     // Nothing to judge: a valid, runner-free empty result.
-    if (input.topics.length === 0) return { kind: 'selected', ids: [], probabilities: {}, judged: 0 }
+    if (input.topics.length === 0) return { kind: 'selected', ids: [], probabilities: {}, judged: 0, greyDropped: 0 }
 
     // The consumer never resolves a provider itself: an unidentified route
     // degrades before the first request.
@@ -242,12 +241,13 @@ export class SystemOneRecallDecisionSelector implements RecallDecisionSelector {
       if (this.now() > deadline) return { kind: 'fallback', reason: 'deadline', judged }
     }
 
-    const ids = selectIds(rows, settings.excludeProbability, settings.includeProbability)
-    // A probability inside the open grey zone makes the whole pool uncertain.
-    if (ids === undefined) return { kind: 'fallback', reason: 'grey-zone', judged }
+    const { ids, greyDropped } = selectIds(rows, settings.excludeProbability, settings.includeProbability)
+    // In-band rows were dropped per candidate; the confident subset is
+    // terminal (#366's band rule) and an empty result flows into the
+    // caller's empty-selection fallback over the full pool.
     const probabilities: Record<string, number> = {}
     for (const row of rows) probabilities[row.id] = row.probability
-    return { kind: 'selected', ids, probabilities, judged }
+    return { kind: 'selected', ids, probabilities, judged, greyDropped }
   }
 }
 
@@ -335,7 +335,7 @@ export async function adaptLegacyRecallSelection(
  * one legacy call happens per selection; `cancelled` never falls back.
  */
 export type RecallDispatch =
-  | { kind: 'selected'; ids: string[]; probabilities: Record<string, number>; judged: number }
+  | { kind: 'selected'; ids: string[]; probabilities: Record<string, number>; judged: number; greyDropped: number }
   | { kind: 'cancelled' }
   | { kind: 'fallback'; reason: string; legacy: LegacyRecallAdaptation }
   | { kind: 'skipped'; reason: 'mode-off' }

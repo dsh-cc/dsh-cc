@@ -65,7 +65,7 @@ export interface RecallDecisionInput {
  * `pool` vs `judged` without re-deriving the pre-selection.
  */
 export type RecallSelection =
-  | { kind: 'selected'; ids: string[]; probabilities: Record<string, number>; judged: number }
+  | { kind: 'selected'; ids: string[]; probabilities: Record<string, number>; judged: number; greyDropped: number }
   | { kind: 'fallback'; reason: string; judged: number }
   | { kind: 'cancelled' }
 
@@ -117,32 +117,43 @@ export interface RecallProbabilityRow {
   scope: RecallScope
 }
 
+/** The per-candidate grey-zone outcome: the kept IDs plus how many were dropped. */
+export interface RecallSelectionIds {
+  /** The selected IDs (at most {@link MAX_RECALL_MEMORIES}), possibly empty. */
+  ids: string[]
+  /** How many judged rows fell inside the open grey band (lo, hi). */
+  greyDropped: number
+}
+
 /**
- * Deterministic filter over the model's probabilities (design code block,
- * doc-verbatim).
+ * Deterministic filter over the model's probabilities.
  *
- * `lo` is an explicit exclusion and `hi` an explicit inclusion. Any probability
- * STRICTLY inside the open interval `(lo, hi)` is an uncertainty about the whole
- * pool: the caller must fall back to the legacy selector rather than drop a
- * possibly relevant candidate or adopt a partial result. All-low probabilities
- * yield a valid empty selection and never call the legacy selector.
+ * `lo` is an explicit exclusion and `hi` an explicit inclusion. A probability
+ * STRICTLY inside the open interval `(lo, hi)` is a per-candidate
+ * uncertainty: the row is DROPPED from selection (never included), but it no
+ * longer poisons the whole run — a confident subset delivers terminally
+ * (#366's 97-256 band rule), and an empty result flows into the caller's
+ * `empty-selection` fallback over the full pool. `greyDropped` counts every
+ * in-band judged row, independent of the selection cap, so soak telemetry can
+ * distinguish all-grey (`ids: [], greyDropped > 0`) from all-low
+ * (`ids: [], greyDropped: 0`).
  * @param rows - probabilities for the complete candidate pool.
  * @param lo - the exclusion threshold (`excludeProbability`).
  * @param hi - the inclusion threshold (`includeProbability`).
- * @returns the selected IDs (at most {@link MAX_RECALL_MEMORIES}), or
- *   `undefined` when the pool must fall back.
+ * @returns the kept IDs and the dropped count; never `undefined`.
  */
 export function selectIds(
   rows: readonly RecallProbabilityRow[],
   lo: number,
   hi: number,
-): string[] | undefined {
-  if (rows.some(r => r.probability > lo && r.probability < hi)) return undefined
-  return rows.filter(r => r.probability >= hi).sort((a, b) =>
+): RecallSelectionIds {
+  const greyDropped = rows.filter(r => r.probability > lo && r.probability < hi).length
+  const ids = rows.filter(r => r.probability >= hi).sort((a, b) =>
     b.probability - a.probability ||
     Number(a.scope === 'global') - Number(b.scope === 'global') ||
     Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)),
   ).slice(0, MAX_RECALL_MEMORIES).map(r => r.id)
+  return { ids, greyDropped }
 }
 
 /** Why a recall run degrades instead of dispatching SystemOne requests. */
