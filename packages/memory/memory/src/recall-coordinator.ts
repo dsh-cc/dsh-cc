@@ -303,7 +303,7 @@ export class RecallCoordinator {
     const fileSystem = this.ctx.get('fs')
     if (fileSystem === undefined) return
     const settings = this.options.readSettings()
-    const seeds = await scanRecallLayers(fileSystem, this.memoryDirOf(agent), this.options.home, signal)
+    const { seeds, indexed } = await scanRecallLayers(fileSystem, this.memoryDirOf(agent), this.options.home, signal)
     // A checkpoint before reading content: everything below may inject.
     if (!this.isCurrent(agent, state, ticket, signal)) return
     // Shown is refreshed from the mirror on every read: a delivery made by
@@ -320,7 +320,7 @@ export class RecallCoordinator {
       : binding.identifyRoute(DECISION_LANE_ALIAS, scope)
     const dispatchKey = recallDispatchKey({
       localKey: ticket.key,
-      manifestHash: recallManifestHash(seeds),
+      manifestHash: recallManifestHash(seeds, indexed),
       toolsHash: recallToolsHash(recentTools),
       route: identity,
       settingsHash: recallSettingsHash(settings),
@@ -330,7 +330,7 @@ export class RecallCoordinator {
       this.markCompleted(state, dispatchKey)
       return
     }
-    const input: RecallDecisionInput = { query: ticket.query, recentTools, topics }
+    const input: RecallDecisionInput = { query: ticket.query, recentTools, topics, indexedFilenames: indexed }
     const legacy = this.options.createSelector(this.ctx, agent)
     // Without a bound scope nothing is dispatched: the legacy selection, adapted
     // exactly once over the complete pool, IS this round's fallback.

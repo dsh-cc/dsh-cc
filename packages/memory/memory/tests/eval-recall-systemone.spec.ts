@@ -370,7 +370,7 @@ describe('W4 recall-selection eval — SystemOne arm', () => {
       const records: QueryRecord[] = []
       for (const [index, query] of golden.queries.entries()) {
         const signal = new AbortController().signal
-        const seeds = await scanRecallLayers(ctx.fs, FIXTURES, globalHome, signal)
+        const { seeds } = await scanRecallLayers(ctx.fs, FIXTURES, globalHome, signal)
         const topics: RecallTopic[] = assignRecallTopicIds(seeds)
         const filenameById = new Map(topics.map(topic => [topic.id, topic.filename]))
         const input: RecallDecisionInput = { query: query.query, recentTools: [], topics }

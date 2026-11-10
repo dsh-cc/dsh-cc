@@ -87,7 +87,7 @@ export async function compareShadowRecall(
     deps.report({ kind: 'skipped', reason: 'no-service' })
     return
   }
-  const seeds = await scanRecallLayers(fileSystem, memoryDir, deps.home, signal)
+  const { seeds, indexed } = await scanRecallLayers(fileSystem, memoryDir, deps.home, signal)
   if (signal.aborted) return
   // The comparison judges the same fresh pool the baseline branch saw: already
   // delivered paths are out of every arm.
@@ -97,6 +97,7 @@ export async function compareShadowRecall(
     query: turn.query,
     recentTools: sortedTools(deps.recentTools(agent)),
     topics,
+    indexedFilenames: indexed,
   }
   const selection = await new SystemOneRecallDecisionSelector(binding, settings)
     .select(input, binding.scope(turn.originSeq), signal)

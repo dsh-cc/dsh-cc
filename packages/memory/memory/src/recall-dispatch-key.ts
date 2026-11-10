@@ -62,15 +62,27 @@ export interface RecallManifestRow {
  * content hash of every candidate, in canonical order (workspace first, then
  * UTF-8 path order) so the digest does not depend on scan order.
  * @param rows - the complete scanned pool.
+ * @param indexed - the per-layer memory-index membership the pre-selection
+ *   consumed. An index-only edit (identical topic bytes, changed MEMORY.md)
+ *   changes the judged pool, so the membership joins the dispatch identity:
+ *   canonicalized layer-sorted and basename-sorted, insertion-order
+ *   independent. Absent keeps the shipped digest.
  * @returns the manifest digest.
  */
-export function recallManifestHash(rows: readonly RecallManifestRow[]): string {
+export function recallManifestHash(
+  rows: readonly RecallManifestRow[],
+  indexed?: Readonly<Partial<Record<'workspace' | 'global', ReadonlySet<string>>>>,
+): string {
   const canonical = rows
     .map(row => [row.scope, row.path, row.contentHash] as const)
     .sort((a, b) =>
       (a[0] === b[0] ? 0 : a[0] === 'workspace' ? -1 : 1)
       || Buffer.compare(Buffer.from(a[1], 'utf8'), Buffer.from(b[1], 'utf8')))
-  return sha256Hex(JSON.stringify(canonical))
+  const membership = indexed === undefined
+    ? undefined
+    : (['global', 'workspace'] as const)
+      .map(scope => [scope, [...(indexed[scope] ?? [])].sort()] as const)
+  return sha256Hex(JSON.stringify(membership === undefined ? canonical : [canonical, membership]))
 }
 
 /**
