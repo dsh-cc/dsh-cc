@@ -441,3 +441,52 @@ describe('trusted provider-record read', () => {
     expect(readProviderRecord(throwing, 'testone')).toBeUndefined()
   })
 })
+
+describe('frozen cascade sections (issue #373)', () => {
+  /** Deep-freeze the resolved shape the cascade read-through actually serves. */
+  function deepFreeze<T>(value: T): T {
+    if (value !== null && typeof value === 'object') {
+      Object.freeze(value)
+      for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
+    }
+    return value
+  }
+
+  it('a deep-frozen section with a non-empty routes pin keeps the route usable end to end', async () => {
+    // The regression: the frozen routes dict used to throw the schema
+    // re-admission, parse invalid, fail the section closed, and kill every
+    // identifyRoute — silently, with zero ledger rows.
+    const frozen = deepFreeze(structuredClone(settingsSection()))
+    expect(Object.isFrozen(frozen)).toBe(true)
+    expect(Object.isFrozen((frozen as Record<string, { routes: unknown }>).routes)).toBe(true)
+    const { deps } = makeService({ readSettings: () => frozen })
+    const service = createSystemOneDecisionsService(deps)
+    const holder = fakeAgent()
+    try {
+      const bound = service.forAgent(holder.agent)
+      expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope(3))).toBeDefined()
+    } finally {
+      holder.dispose()
+    }
+  })
+
+  it('an invalid section warns exactly once through deps.warn with a stable reason', async () => {
+    const warnSpy = vi.fn()
+    const { deps } = makeService({
+      readSettings: () => settingsSection({ 'max-retries': 'nope' as unknown as number }),
+      warn: warnSpy,
+    })
+    const service = createSystemOneDecisionsService(deps)
+    const holder = fakeAgent()
+    try {
+      const bound = service.forAgent(holder.agent)
+      // Two route resolutions, one warn (warn-once semantics).
+      expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope(3))).toBeUndefined()
+      expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope(3))).toBeUndefined()
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy.mock.calls[0]?.[0]).toMatch(/systemone-decisions: section invalid \([a-z-]+\) — no decision route is usable/)
+    } finally {
+      holder.dispose()
+    }
+  })
+})

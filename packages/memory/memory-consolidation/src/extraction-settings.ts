@@ -20,7 +20,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings-ns'
 
 /**
  * Branded namespace id, derived from the registrar's own signature so this
@@ -154,7 +154,10 @@ export function parseExtractionDecisionSettings(raw: unknown): ExtractionDecisio
   if (raw === undefined) return undefined
   let resolved: Record<string, unknown>
   try {
-    resolved = SettingsObject(raw as Record<string, never>) as unknown as Record<string, unknown>
+    // Issue #373 (latent here, scalar-only schema): the cascade read-through
+    // serves deep-frozen sections and schemastery re-admission mutates in
+    // place — always re-admit a mutable, structure-preserving copy.
+    resolved = SettingsObject(copyForMutation(raw) as Record<string, never>) as unknown as Record<string, unknown>
   } catch {
     return undefined
   }

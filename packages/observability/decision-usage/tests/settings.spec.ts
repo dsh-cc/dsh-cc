@@ -53,6 +53,58 @@ describe('tri-state parse', () => {
   })
 })
 
+describe('frozen cascade sections (issue #373)', () => {
+  /** Deep-freeze the resolved shape the cascade read-through actually serves. */
+  function deepFreeze<T>(value: T): T {
+    if (value !== null && typeof value === 'object') {
+      Object.freeze(value)
+      for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
+    }
+    return value
+  }
+
+  it('a deep-frozen section with a non-empty routes dict parses valid (the regression)', () => {
+    const frozen = deepFreeze(structuredClone(section({ routes: { gauge: { 'max-output-tokens': 4096 } } })))
+    expect(Object.isFrozen(frozen)).toBe(true)
+    expect(Object.isFrozen((frozen as Record<string, { routes: unknown }>).routes)).toBe(true)
+    const parsed = parseDecisionSettings(frozen)
+    expect(parsed.status).toBe('valid')
+    if (parsed.status !== 'valid') return
+    expect(parsed.settings.routes).toEqual({ gauge: { 'max-output-tokens': 4096 } })
+  })
+
+  it('a rule-invalid frozen section stays invalid (freeze never masks rules)', () => {
+    const frozen = deepFreeze(structuredClone(section({ 'max-retries': 'nope' as unknown as number })))
+    expect(parseDecisionSettings(frozen).status).toBe('invalid')
+  })
+
+  it('freeze-equivalence: parse(x) deep-equals parse(deepFreeze(x)) for representative inputs', () => {
+    const inputs: unknown[] = [
+      undefined,
+      section(),
+      section({ routes: { gauge: { 'max-output-tokens': 4096 } } }),
+      section({ routes: { gauge: null } }),
+      section({ routes: { gauge: { 'per-request-tokens': 0 }, other: { revision: 'r' } } }),
+      section({ unknownExtra: 'kept' }),
+      section({ 'max-retries': 'nope' as unknown as number }),
+      section({ capabilities: { any: true } }),
+      'not-an-object',
+    ]
+    for (const input of inputs) {
+      const unfrozen = structuredClone(input)
+      const frozen = deepFreeze(structuredClone(input))
+      expect(parseDecisionSettings(frozen)).toEqual(parseDecisionSettings(unfrozen))
+    }
+  })
+
+  it('parse never writes into the caller object', () => {
+    const input = structuredClone(section({ routes: { gauge: { 'max-output-tokens': 4096 } } }))
+    const before = structuredClone(input)
+    parseDecisionSettings(input)
+    expect(input).toEqual(before)
+  })
+})
+
 describe('invalid sections fail closed', () => {
   it('every malformed quota key invalidates the section', () => {
     const invalid: Record<string, unknown>[] = [
@@ -63,25 +115,32 @@ describe('invalid sections fail closed', () => {
       section({ 'max-retries': 3 }),
       section({ 'ledger-max-bytes': 1 }),
     ]
-    for (const raw of invalid) expect(parseDecisionSettings(raw)).toEqual({ status: 'invalid' })
+    // Type faults carry 'quota-key-type'; range/step faults surface through
+    // the schema itself as 'schema'. Every case carries a reason either way.
+    for (const raw of invalid) {
+      const parsed = parseDecisionSettings(raw)
+      expect(parsed.status).toBe('invalid')
+      if (parsed.status === 'invalid') expect(typeof parsed.reason).toBe('string')
+    }
+    expect(parseDecisionSettings(section({ 'max-retries': 'nope' as unknown as number }))).toEqual({ status: 'invalid', reason: 'quota-key-type' })
   })
 
   it('routes must be a plain object when present', () => {
     for (const routes of [[], 'gauge', 7, null]) {
-      expect(parseDecisionSettings(section({ routes }))).toEqual({ status: 'invalid' })
+      expect(parseDecisionSettings(section({ routes }))).toEqual({ status: 'invalid', reason: 'routes-shape' })
     }
   })
 
   it('a non-object section is invalid, never absent', () => {
-    for (const raw of [null, 7, 'section', []]) expect(parseDecisionSettings(raw)).toEqual({ status: 'invalid' })
+    for (const raw of [null, 7, 'section', []]) expect(parseDecisionSettings(raw)).toEqual({ status: 'invalid', reason: 'not-an-object' })
   })
 
   it('a leftover non-empty capabilities table fails the section closed', () => {
     const legacy = section({ capabilities: [{ provider: 'pi', model: 'm' }] })
-    expect(parseDecisionSettings(legacy)).toEqual({ status: 'invalid' })
+    expect(parseDecisionSettings(legacy)).toEqual({ status: 'invalid', reason: 'legacy-capabilities' })
     // Not an array at all is equally invalid.
-    expect(parseDecisionSettings(section({ capabilities: {} }))).toEqual({ status: 'invalid' })
-    expect(parseDecisionSettings(section({ capabilities: undefined }))).toEqual({ status: 'invalid' })
+    expect(parseDecisionSettings(section({ capabilities: {} }))).toEqual({ status: 'invalid', reason: 'legacy-capabilities' })
+    expect(parseDecisionSettings(section({ capabilities: undefined }))).toEqual({ status: 'invalid', reason: 'legacy-capabilities' })
   })
 
   it('an empty leftover capabilities array is tolerated (inert)', () => {
@@ -92,7 +151,7 @@ describe('invalid sections fail closed', () => {
 describe('valid-or-absent adapters', () => {
   it('decisionSettingsOf drops absent and invalid sections', () => {
     expect(decisionSettingsOf({ status: 'absent' })).toBeUndefined()
-    expect(decisionSettingsOf({ status: 'invalid' })).toBeUndefined()
+    expect(decisionSettingsOf({ status: 'invalid', reason: 'schema' })).toBeUndefined()
     expect(decisionSettingsOf({ status: 'valid', settings: DEFAULT_DECISION_SETTINGS })).toBe(DEFAULT_DECISION_SETTINGS)
   })
 

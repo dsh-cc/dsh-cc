@@ -299,3 +299,46 @@ export function installSectionSafe<T>(
   }, `settings-ns: settings/updated(${String(ns)})`)
   hooks.onChange()
 }
+
+/**
+ * Structure-preserving deep copy for values that must survive an in-place
+ * mutating pass (issue #373: schemastery re-admission of a deep-frozen
+ * cascade section — `z.dict` reassigns each entry and a frozen container
+ * turns that into a TypeError).
+ *
+ * Contract: a COPY, never a validator. Plain objects and arrays are copied
+ * into fresh, mutable containers with their enumerable string-keyed own
+ * properties — set, presence (an own `undefined`-valued key stays own), and
+ * insertion order — preserved exactly; every other value (functions, Dates,
+ * class instances, `null`) is passed through by reference — only the
+ * containers a mutating pass writes into need to be fresh. Cycle-safe via a
+ * seen-map. Never throws over its input domain: JSON-shaped values as
+ * served by the settings cascade (string keys, no getters/accessors) — the
+ * domain every call site in this incident class feeds it.
+ * @param value - the value to decouple from its (possibly frozen) owner.
+ * @returns the mutable deep copy.
+ */
+export function copyForMutation<T>(value: T): T {
+  const seen = new Map<unknown, unknown>()
+  const copy = (node: unknown): unknown => {
+    if (node === null || typeof node !== 'object') return node
+    const memo = seen.get(node)
+    if (memo !== undefined) return memo
+    if (Array.isArray(node)) {
+      const out: unknown[] = []
+      seen.set(node, out)
+      for (const entry of node) out.push(copy(entry))
+      return out
+    }
+    const proto = Object.getPrototypeOf(node)
+    if (proto !== Object.prototype && proto !== null) return node
+    const out: Record<string, unknown> = {}
+    seen.set(node, out)
+    for (const [key, entry] of Object.entries(node)) {
+      if (key === '__proto__') Object.defineProperty(out, key, { value: copy(entry), writable: true, enumerable: true, configurable: true })
+      else out[key] = copy(entry)
+    }
+    return out
+  }
+  return copy(value) as T
+}

@@ -133,7 +133,7 @@ leaves every field at its default.
 | Field | Default | Range and meaning |
 |---|---|---|
 | `mode` | `off` | `off` / `shadow` / `active` — see the modes below |
-| `timeout-ms` | `1500` | 100-5000; total deadline for the whole selection (every batch) |
+| `timeout-ms` | `1500` | 100-30000; total deadline for the whole selection (every batch) — size it to your pool: ~1.3 s per 24-candidate batch, and the default 96/24 planning runs four |
 | `max-input-tokens` | `6000` | 512-16000; per-batch limit for the complete request |
 | `max-candidates` | `96` | 1-256; a larger candidate pool falls back to the legacy selector |
 | `batch-size` | `24` | 1-32; also bounded by the question count the route advertises |

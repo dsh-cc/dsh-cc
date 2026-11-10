@@ -170,12 +170,22 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
   const apiKeyByProvider = new Map<string, string>()
   /** Warn-once route-configuration sink (folded-key collisions). */
   const warnRoute = createWarnOnce((message) => deps.warn?.(message))
+  /** Warn-once invalid-section sink (issue #373): a silently disarmed
+   *  decision route must be diagnosable from logs, not just from zero ledger. */
+  const warnInvalidSection = createWarnOnce((message) => deps.warn?.(message))
 
   const readParsed = (): DecisionSettingsParseResult => {
     try {
-      return parseDecisionSettings(deps.readSettings())
+      const parsed = parseDecisionSettings(deps.readSettings())
+      if (parsed.status === 'invalid') {
+        warnInvalidSection(`systemone-decisions: section invalid (${parsed.reason}) — no decision route is usable`)
+      }
+      return parsed
     } catch {
-      return { status: 'invalid' }
+      // A reader fault is indistinguishable from a parse fault downstream; the
+      // stable reason keeps the warn line greppable either way.
+      warnInvalidSection('systemone-decisions: section invalid (schema-throw) — no decision route is usable')
+      return { status: 'invalid', reason: 'schema-throw' }
     }
   }
 
