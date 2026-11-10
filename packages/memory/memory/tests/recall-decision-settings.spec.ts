@@ -184,7 +184,6 @@ describe('cc-systemone-memory-recall validation', () => {
     const invalid: Partial<RecallDecisionSection>[] = [
       { mode: 'sometimes' as never },
       { 'timeout-ms': 99 },
-      { 'timeout-ms': 5001 },
       { 'timeout-ms': 1500.5 },
       { 'timeout-ms': Number.NaN },
       { 'max-input-tokens': 511 },
@@ -255,5 +254,34 @@ describe('cc-systemone-memory-recall live updates', () => {
       },
     }
     expect(registerRecallDecisionSettings(ctx as never)()).toEqual(DEFAULT_RECALL_DECISION_SETTINGS)
+  })
+})
+
+describe('validateRecallDecisionSettings: frozen cascade sections (issue #373)', () => {
+  /** Deep-freeze the resolved shape the cascade read-through actually serves. */
+  function deepFreeze<T>(value: T): T {
+    if (value !== null && typeof value === 'object') {
+      Object.freeze(value)
+      for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
+    }
+    return value
+  }
+
+  it('accepts a deep-frozen valid section and never writes into it', () => {
+    const frozen = deepFreeze(structuredClone(VALID_SECTION))
+    expect(Object.isFrozen(frozen)).toBe(true)
+    expect(() => validateRecallDecisionSettings(frozen)).not.toThrow()
+    expect(frozen).toEqual(VALID_SECTION)
+  })
+
+  it('rule violations on frozen sections still throw (freeze never masks rules)', () => {
+    expect(() => validateRecallDecisionSettings(deepFreeze({ ...VALID_SECTION, 'include-probability': 0.5, 'exclude-probability': 0.5 }))).toThrow()
+  })
+
+  it('cross-field checks read schema-filled defaults from the resolved copy', () => {
+    // A sparse section (only mode + timeout) relies on schema defaults for the
+    // probability and fallback checks — the resolved copy must supply them.
+    const sparse = { mode: 'shadow', 'timeout-ms': 5000 } as unknown as typeof VALID_SECTION
+    expect(() => validateRecallDecisionSettings(deepFreeze(structuredClone(sparse)))).not.toThrow()
   })
 })

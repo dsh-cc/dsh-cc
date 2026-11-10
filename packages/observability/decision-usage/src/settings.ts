@@ -22,7 +22,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings-ns'
 
 /** The settings namespace carrying the SystemOne decision budget contract. */
 export const SETTINGS_NAMESPACE = 'systemone-decisions'
@@ -162,10 +162,21 @@ const QUOTA_KEYS = [
  * closed — no route is usable, so nothing can dispatch (quota admission may
  * still compute ship defaults, but nothing is dispatched without a route).
  */
+/** Stable machine reasons for an invalid section (fixed enums — never raw
+ *  exception text or input values, so a warn line is greppable and safe). */
+export type DecisionInvalidReason =
+  | 'not-an-object'
+  | 'quota-key-type'
+  | 'quota-bounds'
+  | 'legacy-capabilities'
+  | 'routes-shape'
+  | 'schema'
+  | 'schema-throw'
+
 export type DecisionSettingsParseResult =
   | { status: 'absent' }
   | { status: 'valid'; settings: SystemOneDecisionsSettings }
-  | { status: 'invalid' }
+  | { status: 'invalid'; reason: DecisionInvalidReason }
 
 /**
  * Strictly parse one merged `systemone-decisions` section into the tri-state
@@ -183,32 +194,36 @@ export type DecisionSettingsParseResult =
  */
 export function parseDecisionSettings(raw: unknown): DecisionSettingsParseResult {
   if (raw === undefined) return { status: 'absent' }
-  if (!isPlainObject(raw)) return { status: 'invalid' }
+  if (!isPlainObject(raw)) return { status: 'invalid', reason: 'not-an-object' }
   // A quota key spelled with a non-number (a JSON `null` included — schemastery
   // would silently restore the default) is an operator typo, never a reset.
   for (const key of QUOTA_KEYS) {
-    if (hasOwn(raw, key) && typeof raw[key] !== 'number') return { status: 'invalid' }
+    if (hasOwn(raw, key) && typeof raw[key] !== 'number') return { status: 'invalid', reason: 'quota-key-type' }
   }
   if (hasOwn(raw, 'capabilities')) {
     const legacy = raw.capabilities
-    if (!Array.isArray(legacy) || legacy.length > 0) return { status: 'invalid' }
+    if (!Array.isArray(legacy) || legacy.length > 0) return { status: 'invalid', reason: 'legacy-capabilities' }
   }
-  if (hasOwn(raw, 'routes') && !isPlainObject(raw.routes)) return { status: 'invalid' }
+  if (hasOwn(raw, 'routes') && !isPlainObject(raw.routes)) return { status: 'invalid', reason: 'routes-shape' }
   let resolved: Record<string, unknown>
   try {
-    resolved = SettingsObject(raw as Record<string, never>) as unknown as Record<string, unknown>
+    // Issue #373: the cascade read-through serves deep-frozen sections and
+    // schemastery's dict resolution reassigns entries in place — re-admit a
+    // mutable copy so a frozen `routes` dict can never throw the parse into
+    // `invalid`. The copy is structure-preserving: admission is unchanged.
+    resolved = SettingsObject(copyForMutation(raw) as Record<string, never>) as unknown as Record<string, unknown>
   } catch {
-    return { status: 'invalid' }
+    return { status: 'invalid', reason: 'schema' }
   }
   const attempts = resolved['max-attempts-per-session']
   const input = resolved['max-input-tokens-per-session']
   const output = resolved['max-output-tokens-per-session']
   const retries = resolved['max-retries']
   const ledgerBytes = resolved['ledger-max-bytes']
-  if (!isSafeNatural(attempts) || !isSafeNatural(input) || !isSafeNatural(output)) return { status: 'invalid' }
-  if (!isSafeNatural(retries) || retries > MAX_RETRIES_LIMIT) return { status: 'invalid' }
-  if (!isSafeNatural(ledgerBytes) || ledgerBytes < MIN_LEDGER_MAX_BYTES) return { status: 'invalid' }
-  if (!isPlainObject(resolved.routes)) return { status: 'invalid' }
+  if (!isSafeNatural(attempts) || !isSafeNatural(input) || !isSafeNatural(output)) return { status: 'invalid', reason: 'quota-bounds' }
+  if (!isSafeNatural(retries) || retries > MAX_RETRIES_LIMIT) return { status: 'invalid', reason: 'quota-bounds' }
+  if (!isSafeNatural(ledgerBytes) || ledgerBytes < MIN_LEDGER_MAX_BYTES) return { status: 'invalid', reason: 'quota-bounds' }
+  if (!isPlainObject(resolved.routes)) return { status: 'invalid', reason: 'routes-shape' }
   return { status: 'valid', settings: resolved as unknown as SystemOneDecisionsSettings }
 }
 

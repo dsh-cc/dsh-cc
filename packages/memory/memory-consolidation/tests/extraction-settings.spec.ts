@@ -217,3 +217,30 @@ describe('createExtractionSettingsReader (dynamic snapshot)', () => {
     expect(read()).toEqual(DEFAULT_EXTRACTION_DECISION_SETTINGS)
   })
 })
+
+describe('parseExtractionDecisionSettings: frozen cascade sections (issue #373)', () => {
+  /** Deep-freeze the resolved shape the cascade read-through actually serves. */
+  function deepFreeze<T>(value: T): T {
+    if (value !== null && typeof value === 'object') {
+      Object.freeze(value)
+      for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child)
+    }
+    return value
+  }
+
+  it('a deep-frozen valid section parses identically to its unfrozen copy', () => {
+    expect(parseExtractionDecisionSettings(deepFreeze(structuredClone(CUSTOM_SECTION))))
+      .toEqual(CUSTOM_SETTINGS)
+  })
+
+  it('a rule-invalid frozen section stays rejected (freeze never masks rules)', () => {
+    expect(parseExtractionDecisionSettings(deepFreeze({ 'skip-probability': 0.5 }))).toBeUndefined()
+  })
+
+  it('parse never writes into the caller object', () => {
+    const input = structuredClone(CUSTOM_SECTION) as Record<string, unknown>
+    const before = structuredClone(input)
+    parseExtractionDecisionSettings(input)
+    expect(input).toEqual(before)
+  })
+})

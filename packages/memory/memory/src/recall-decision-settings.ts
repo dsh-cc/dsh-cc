@@ -21,7 +21,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace } from '@dsh-cc/settings-provider'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings-ns'
 
 /** The settings namespace carrying the memory-recall decision contract. */
 export const SETTINGS_NAMESPACE = 'cc-systemone-memory-recall'
@@ -152,9 +152,14 @@ const isFiniteNumber = (value: unknown): value is number => typeof value === 'nu
  * @param value - the section to check.
  */
 export function validateRecallDecisionSettings(value: RecallDecisionSection): void {
-  SettingsObject(value as never)
-  const include = value['include-probability']
-  const exclude = value['exclude-probability']
+  // Issue #373 (latent here: the provider invokes validate pre-freeze): a
+  // cascade section may arrive deep-frozen, and schemastery re-admission
+  // mutates in place — re-admit a structure-preserving copy, then read every
+  // cross-field check from the RESOLVED copy so schema-filled defaults are the
+  // source of truth instead of the raw object's pre-schema holes.
+  const resolved = SettingsObject(copyForMutation(value) as never) as unknown as RecallDecisionSection
+  const include = resolved['include-probability']
+  const exclude = resolved['exclude-probability']
   if (!isFiniteNumber(include) || !isFiniteNumber(exclude)) {
     throw new TypeError(`${SETTINGS_NAMESPACE}: probabilities must be finite numbers`)
   }
@@ -162,7 +167,7 @@ export function validateRecallDecisionSettings(value: RecallDecisionSection): vo
   if (exclude >= include) {
     throw new TypeError(`${SETTINGS_NAMESPACE}: exclude-probability must be less than include-probability`)
   }
-  if (value['fallback-max-candidates'] < value['max-candidates']) {
+  if (resolved['fallback-max-candidates'] < resolved['max-candidates']) {
     throw new TypeError(`${SETTINGS_NAMESPACE}: fallback-max-candidates must not be below max-candidates`)
   }
 }
