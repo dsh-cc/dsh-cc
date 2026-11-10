@@ -99,7 +99,7 @@ model and `checks.json` are unchanged by this slice.
 
 | Model element | Implemented symbol |
 |---|---|
-| `Arrive` / ticket | `recall-coordinator.ts` `RecallCoordinator.run`; origin via `recall-query.ts` `resolveRecallTurn` (newest persisted genuine `user/message` matched BY TEXT, `Number(event.seq)`; `session.seq` is never used), then `recall-dispatch-key.ts` `recallLocalKey` |
+| `Arrive` / ticket | `recall-coordinator.ts` `RecallCoordinator.run`; origin via `recall-query.ts` `resolveRecallTurn` (the turn's own `turn/start` seq - the 2026-11-10 issue #359 redesign: a user-message seq is persisted only after the pre-step waterfall, so text matching could never resolve; `session.seq` is never used), then `recall-dispatch-key.ts` `recallLocalKey` |
 | `pend` (newest wins) | `RecallState.pending`, replaced on every new key |
 | `runGen`/`runKey`, `AbortOnArrive` | `RecallState.running` slot + `controller.abort()` in `run` |
 | `OldFinally` (own generation only) | `start()`'s `finally` clears the slot by IDENTITY (`state.running === slot`) and starts at most one newest pending ticket |

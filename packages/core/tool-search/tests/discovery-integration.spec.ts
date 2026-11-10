@@ -119,6 +119,13 @@ interface HostOptions {
   section?: Record<string, unknown> | undefined
   runner?: FakeRunner
   settings?: boolean
+  /**
+   * Which decision-service name the host publishes (default: the isolated
+   * name `systemoneDecisions`). `bridge` publishes only the root-realm
+   * `ccSystemoneDecisions` — the production shape for the bundle-layer
+   * mount, where the isolated name has no implementation (issue #359).
+   */
+  serviceName?: 'systemoneDecisions' | 'ccSystemoneDecisions'
 }
 
 /** A host plane with the tool registry, the ToolSearch service and the doubles. */
@@ -128,7 +135,7 @@ async function host(options: HostOptions = {}) {
   await ctx.plugin(ToolRuntime, {})
   await ctx.plugin(CcToolExecutor)
   if (options.settings !== false) ctx.provide('settings', fakeSettings(options.section))
-  if (options.runner !== undefined) ctx.provide('systemoneDecisions', { forAgent: () => options.runner })
+  if (options.runner !== undefined) ctx.provide(options.serviceName ?? 'systemoneDecisions', { forAgent: () => options.runner })
   await ctx.plugin(DeferredToolRegistry)
   return ctx
 }
@@ -249,6 +256,27 @@ describe('a query the lexical layer cannot score', () => {
     expect(shadowResult.value.message).toBe(await lexicalMessage(query, register))
     expect(shadowResult.value.results).toEqual([])
     expect(await visibleNames(shadow, shadowAgent)).not.toContain('paper_references')
+  })
+})
+
+describe('the root-realm bridge service name (issue #359)', () => {
+  it('reaches the runner when only ccSystemoneDecisions is published (the bundle-layer mount shape)', async () => {
+    const query = '这篇文章引用了哪些来源'
+    const register = (ctx: Context) => {
+      deferred(ctx, 'paper_references', 'List the references cited by a paper.')
+      deferred(ctx, 'bash_tool', 'Run shell commands.', 'shell terminal')
+    }
+    const runner = new FakeRunner()
+    runner.answer = request => ({ status: 'answered', answers: answerAll(request, { score: 4, noul: 0.9 }) as never, decisionId: 'd1' })
+    // The production shape: only the bridge name exists; the isolated name
+    // resolves nothing (an empty store under the isolate key — undefined).
+    const ctx = await host({ section: { mode: 'active' }, runner, serviceName: 'ccSystemoneDecisions' })
+    register(ctx)
+    const { agent } = await agentScope(ctx)
+    const result = await searchOk(ctx, query, { agent })
+    expect(runner.requests.length).toBe(1)
+    expect(result.value.results.map(entry => entry.name)).toContain('paper_references')
+    expect(await visibleNames(ctx, agent)).toContain('paper_references')
   })
 })
 

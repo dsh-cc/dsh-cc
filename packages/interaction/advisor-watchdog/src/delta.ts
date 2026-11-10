@@ -18,8 +18,10 @@ export const MAX_TOOL_ARGS_BYTES = 2_000
  * step 3). Mirrors the recall.ts / turn-rules matcher denylists rather than
  * importing them (no shared export exists across those packages).
  * KNOW YOUR INJECTOR: any new injected message source kind must be added to
- * ALL THREE copies (recall.ts, turn-rules/matcher.ts, here) or a
- * self-feeding phantom loop re-opens.
+ * BOTH operative copies (turn-rules/matcher.ts, here) or a self-feeding
+ * phantom loop re-opens. (Memory recall's third list became a non-operative
+ * inventory in the issue #359 fix — its genuine test is a structural
+ * allowlist in recall-query.ts — so it no longer carries this obligation.)
  */
 export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'memory',

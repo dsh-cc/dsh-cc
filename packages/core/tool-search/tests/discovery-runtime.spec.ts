@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest'
 import { DiscoveryCache } from '../src/discovery-cache.ts'
 import { createDiscoveryRuntime } from '../src/discovery-runtime.ts'
+import { hostRunnerResolver } from '../src/discovery-contract.ts'
 import type { DiscoveryDecisionRequest, DiscoveryDecisionRun, DiscoveryFallbackReason, DiscoveryRunner } from '../src/discovery-runtime.ts'
 import { DEFAULT_DISCOVERY_SETTINGS } from '../src/discovery-settings.ts'
 import type { DeferredEntry, DiscoveryRouteIdentity, DiscoverySettings } from '../src/discovery.ts'
@@ -148,5 +149,77 @@ describe('the discovery runtime on its own', () => {
     expect(await discovery.evaluate({ query: 'capability', maxResults: 3, actor: {}, lexicalNames: [] }))
       .toEqual({ kind: 'lexical', reason: 'unavailable' })
     expect(runner.requests.length).toBe(0)
+  })
+})
+
+describe('hostRunnerResolver (issue #359: the root-realm bridge)', () => {
+  /** A minimal runner the bound service returns. */
+  const runner = {} as DiscoveryRunner
+  const service = { forAgent: () => runner }
+  const actor = {} as never
+
+  it('resolves through the isolated name via get (in-group host)', () => {
+    const resolver = hostRunnerResolver({ get: (name: string) => (name === 'systemoneDecisions' ? service : undefined) })
+    expect(resolver(actor)).toBe(runner)
+  })
+
+  it('falls through to the bridge name when the isolated name is absent (root-realm host)', () => {
+    const resolver = hostRunnerResolver({ get: (name: string) => (name === 'ccSystemoneDecisions' ? service : undefined) })
+    expect(resolver(actor)).toBe(runner)
+  })
+
+  it('falls through to the bridge name when the isolated lookup returns undefined', () => {
+    const seen: string[] = []
+    const resolver = hostRunnerResolver({
+      get: (name: string) => {
+        seen.push(name)
+        return name === 'ccSystemoneDecisions' ? service : undefined
+      },
+    })
+    expect(resolver(actor)).toBe(runner)
+    expect(seen).toEqual(['systemoneDecisions', 'ccSystemoneDecisions'])
+  })
+
+  it('degrades to the next step when a get lookup throws (an isolate name crossing realms)', () => {
+    const resolver = hostRunnerResolver({
+      get: (name: string) => {
+        if (name === 'systemoneDecisions') throw new Error('cannot get property without inject')
+        return service
+      },
+    })
+    expect(resolver(actor)).toBe(runner)
+  })
+
+  it('skips a wrong-shaped bridge value and keeps resolving', () => {
+    const resolver = hostRunnerResolver({
+      get: (name: string) => (name === 'ccSystemoneDecisions' ? { forAgent: 'not-a-function' } : name === 'systemoneDecisions' ? service : undefined),
+    })
+    // The bridge value has no callable forAgent: the isolated name wins.
+    expect(resolver(actor)).toBe(runner)
+  })
+
+  it('keeps the property fallback for hosts without a get seam', () => {
+    expect(hostRunnerResolver({ systemoneDecisions: service })(actor)).toBe(runner)
+    expect(hostRunnerResolver({ ccSystemoneDecisions: service })(actor)).toBe(runner)
+  })
+
+  it('prefers the isolated name when both names are reachable (own-tree ownership)', () => {
+    const isolated = { forAgent: () => ({ isolated: true } as unknown as DiscoveryRunner) }
+    const bridged = { forAgent: () => ({ bridged: true } as unknown as DiscoveryRunner) }
+    const resolver = hostRunnerResolver({
+      get: (name: string) => (name === 'systemoneDecisions' ? isolated : bridged),
+    })
+    expect(resolver(actor)).toEqual({ isolated: true })
+  })
+
+  it('returns undefined when a binding service refuses to bind', () => {
+    const refusing = { forAgent: () => { throw new Error('binding refused') } }
+    const resolver = hostRunnerResolver({ get: () => refusing })
+    expect(resolver(actor)).toBeUndefined()
+  })
+
+  it('returns undefined when nothing resolves', () => {
+    expect(hostRunnerResolver({})(actor)).toBeUndefined()
+    expect(hostRunnerResolver({ get: () => undefined })(actor)).toBeUndefined()
   })
 })

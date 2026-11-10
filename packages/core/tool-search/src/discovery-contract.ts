@@ -93,21 +93,60 @@ export interface DiscoveryRunner {
  */
 export interface DiscoveryHostFace {
   readonly systemoneDecisions?: { forAgent(actor: DiscoveryActor): DiscoveryRunner }
+  readonly ccSystemoneDecisions?: { forAgent(actor: DiscoveryActor): DiscoveryRunner }
+  /** Optional guarded service getter (structurally cordis `ctx.get`). */
+  get?(name: string): unknown
+}
+
+/** The service shape both names must carry to be usable. */
+function isRunnerService(value: unknown): value is { forAgent(actor: DiscoveryActor): DiscoveryRunner } {
+  return typeof value === 'object' && value !== null
+    && typeof (value as { forAgent?: unknown }).forAgent === 'function'
 }
 
 /**
  * The default runner resolver: read the optional host service and bind it to
  * the calling actor. Never throws — a service that refuses to bind is
  * "unavailable", not a failed search.
+ *
+ * Resolution order (issue #359: tool-search is mounted at the bundle layer,
+ * the ROOT realm, where the isolate-scoped `systemoneDecisions` name has no
+ * implementation — the root-realm bridge `ccSystemoneDecisions`, published by
+ * `@dsh-cc/decision-usage` for exactly such out-of-group consumers, is the
+ * production landing):
+ *
+ * 1. `host.get('systemoneDecisions')` — the isolated name, so in-group hosts
+ *    bind their OWN tree's instance (a second preset tree can overwrite the
+ *    root bridge while each tree keeps its isolated service).
+ * 2. `host.get('ccSystemoneDecisions')` — the root-realm bridge.
+ * 3. Property fallbacks — the pre-bridge behavior, for structural hosts
+ *    without a `get` seam.
+ *
+ * Each step is individually guarded: a throw (an isolate name crossing
+ * realms), an `undefined` result (no implementation in this realm's store) or
+ * a wrong-shaped value degrades to the NEXT step, never aborts resolution.
  * @param host - the host context face (structurally the cordis context).
  * @returns the resolver handed to `createDiscoveryRuntime`.
  */
 export function hostRunnerResolver(
   host: DiscoveryHostFace,
 ): (actor: DiscoveryActor) => DiscoveryRunner | undefined {
-  return (actor) => {
+  const viaGet = (name: string): { forAgent(actor: DiscoveryActor): DiscoveryRunner } | undefined => {
     try {
-      return host.systemoneDecisions?.forAgent(actor)
+      const service = host.get?.(name)
+      return isRunnerService(service) ? service : undefined
+    } catch {
+      return undefined
+    }
+  }
+  return (actor) => {
+    const service = viaGet('systemoneDecisions')
+      ?? viaGet('ccSystemoneDecisions')
+      ?? (isRunnerService(host.systemoneDecisions) ? host.systemoneDecisions : undefined)
+      ?? (isRunnerService(host.ccSystemoneDecisions) ? host.ccSystemoneDecisions : undefined)
+    if (service === undefined) return undefined
+    try {
+      return service.forAgent(actor)
     } catch {
       return undefined
     }
