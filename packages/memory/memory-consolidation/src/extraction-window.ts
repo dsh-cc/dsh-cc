@@ -22,6 +22,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { SURFACE_EVENT_TYPES } from './extraction-evidence.ts'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 /**
@@ -111,8 +112,9 @@ export interface ExtractionWindowInput {
   readonly maxInputTokens: number
 }
 
-/** Surface event types whose content a single extraction batch reviews. */
-const SURFACE_EVENT_TYPES: ReadonlySet<string> = new Set(['user/message', 'assistant/message', 'tool/result'])
+// Surface event types whose content a single extraction batch reviews: the
+// evidence module owns the one truth (issue #362: the exemption below reads it
+// too, and a second copy would drift from `evidenceHeadOf`).
 
 /** Content blocks deliberately carried into the state as reviewable text. */
 const EVIDENCE_BLOCK_TYPE = 'text'
@@ -279,6 +281,27 @@ function intersectsWindow(range: { start: ExtractionSeq; end: ExtractionSeq }, f
   return compareSeq(range.start, throughInclusive) <= 0 && compareSeq(range.end, fromExclusive) > 0
 }
 
+/**
+ * Whether a replaced range is provably composed of known non-surface seqs
+ * (issue #362): the session log is append-only, so the raw events at the
+ * replaced seqs survive in the input — a replace that only rewrote non-surface
+ * rows (the harness system-prompt snapshot projection replacing its own
+ * predecessor `system/message`) destroyed no reviewable material and exempts
+ * the window. Every fail direction is destructive: string or non-numeric
+ * endpoints (never coerced), an inverted range, a log gap inside the range, a
+ * surface-typed member, or a range longer than the indexed non-surface count
+ * (the enumeration is bounded by that short-circuit).
+ */
+function isExemptReplace(range: { start: ExtractionSeq; end: ExtractionSeq }, nonSurfaceSeqs: ReadonlySet<number>): boolean {
+  if (typeof range.start !== 'number' || typeof range.end !== 'number') return false
+  if (range.start > range.end) return false
+  if (range.end - range.start + 1 > nonSurfaceSeqs.size) return false
+  for (let seq = range.start; seq <= range.end; seq += 1) {
+    if (!nonSurfaceSeqs.has(seq)) return false
+  }
+  return true
+}
+
 /** Cap the existing index exactly as the legacy prompt injection does. */
 function capIndexText(raw: string): { text: string; truncated: boolean } {
   const kept: string[] = []
@@ -358,15 +381,27 @@ export function buildExtractionWindow(input: ExtractionWindowInput): ExtractionW
   // An inverted range means the caller lost the watermark: never treat it as an
   // (empty, skippable) window.
   if (compareSeq(fromExclusive, throughInclusive) > 0) complete = false
+  // One pass first: which numeric seqs are non-surface rows (issue #362). The
+  // log is append-only, so this index sees the raw rows a later replace names —
+  // including rows a post-replace projection would have dropped.
+  const nonSurfaceSeqs = new Set<number>()
+  for (const event of events) {
+    if (SURFACE_EVENT_TYPES.has(event.type)) continue
+    const seq: unknown = (event as { seq?: unknown }).seq
+    if (typeof seq === 'number' && Number.isSafeInteger(seq) && seq >= 0) nonSurfaceSeqs.add(seq)
+  }
   const collected: ExtractionEvent[] = []
   let surfaceCount = 0
   for (const event of events) {
     const replacement = replacementRangeOf(event)
     if (replacement !== undefined) {
       // Compaction rule: the summary node is never evidence, and any replaced
-      // range overlapping the window leaves unreviewable material behind.
+      // range overlapping the window leaves unreviewable material behind —
+      // unless the replaced range is provably composed of non-surface rows
+      // (issue #362: such a replace destroyed nothing reviewable).
       if (replacement === null) complete = false
-      else if (intersectsWindow(replacement, fromExclusive, throughInclusive)) complete = false
+      else if (intersectsWindow(replacement, fromExclusive, throughInclusive)
+        && !isExemptReplace(replacement, nonSurfaceSeqs)) complete = false
       continue
     }
     if (!SURFACE_EVENT_TYPES.has(event.type)) continue
