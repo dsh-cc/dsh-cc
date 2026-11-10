@@ -9,7 +9,7 @@
  * the assertions cover the exact wire request, the whole-run degradations, the
  * single legacy fallback and the ID adaptation — no network, no subagents.
  */
-import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
+import { DECISION_LANE_ALIAS, estimateDecisionInputTokens } from '@dsh-cc/systemone'
 import type { DecisionRequest, DecisionRouteIdentity, DecisionRun, DecisionScope, SystemOneAnswer } from '@dsh-cc/systemone'
 import { describe, expect, it } from 'vitest'
 import { MAX_RECALL_MEMORIES } from '../src/recall.ts'
@@ -61,14 +61,60 @@ function input(count: number, overrides: Partial<RecallDecisionInput> = {}): Rec
   return { query: 'Why does this test fail randomly?', recentTools: ['bash'], topics: pool(count), ...overrides }
 }
 
-/** The fixed design-table route identity (overridable per call). */
+/**
+ * `count` scanned candidates carrying Chinese frontmatter (the live shape of
+ * issue #363): the estimate is CJK-weighted, so these batches are much smaller
+ * than an ASCII pool's.
+ */
+function chineseSeeds(count: number, filler: number): RecallTopicSeed[] {
+  return Array.from({ length: count }, (_, index) => ({
+    scope: 'workspace' as const,
+    path: `/repo/.dsh/memory/记忆-${String(index).padStart(4, '0')}.md`,
+    filename: `记忆-${index}.md`,
+    name: `记忆召回笔记 ${index}`,
+    description: `关于记忆召回与上下文注入的说明 ${'说明'.repeat(filler)}`,
+    contentHash: `sha256:${index}`,
+  }))
+}
+
+/** The candidate IDs one dispatched request carried (the wire 5-tuple). */
+function candidateIds(request: DecisionRequest): string[] {
+  return (request.state as { candidates: { id: string }[] }).candidates.map(candidate => candidate.id)
+}
+
+/**
+ * The runner's own admission check (`decision.ts:235-244`), cloned as a probe
+ * over the recorded request: question count against the route ceiling, the
+ * whole-request estimate against `min(maxInputTokens, perRequestTokens)` and
+ * every per-question estimate against `min(maxInputTokens, perQuestionTokens)`.
+ * A dispatched batch that fails this probe would have been rejected with
+ * `budget` by the real runner.
+ */
+function admitsBatch(request: DecisionRequest, identity: DecisionRouteIdentity, maxInputTokens: number): boolean {
+  const ids = Object.keys(request.questions)
+  if (ids.length > identity.maxQuestions) return false
+  const estimate = estimateDecisionInputTokens(request.state, request.questions)
+  if (estimate.requestTokens > Math.min(maxInputTokens, identity.perRequestTokens)) return false
+  const questionLimit = Math.min(maxInputTokens, identity.perQuestionTokens)
+  return ids.every(id => (estimate.questionTokens[id] ?? Number.POSITIVE_INFINITY) <= questionLimit)
+}
+
+/**
+ * The fixed design-table route identity (overridable per call).
+ *
+ * `per-question-tokens` is the measured model window a real pin resolves to
+ * (route.ts: an absent pin falls back to the model context window): the planner
+ * admits each candidate against `min(max-input-tokens, per-question-tokens)`
+ * and one question alone already carries the whole state, so a window narrower
+ * than a request would legitimately degrade every run with `budget`.
+ */
 function routeIdentity(overrides: Partial<DecisionRouteIdentity> = {}): DecisionRouteIdentity {
   return {
     provider: 'gauge',
     model: 'gauge-1',
     revision: 'rev-1',
     perRequestTokens: 8192,
-    perQuestionTokens: 128,
+    perQuestionTokens: 16384,
     maxQuestions: 32,
     maxOutputTokens: 2048,
     ...overrides,
@@ -166,7 +212,7 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
     const { runner, requests, identify } = harness()
     const selector = new SystemOneRecallDecisionSelector(runner, settings({ mode: 'off' }))
     const selection = await selector.select(input(3), scope, signal())
-    expect(selection).toEqual({ kind: 'fallback', reason: 'mode-off' })
+    expect(selection).toEqual({ kind: 'fallback', reason: 'mode-off', judged: 0 })
     expect(requests).toHaveLength(0)
     expect(identify.calls).toBe(0)
   })
@@ -188,6 +234,7 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
       kind: 'selected',
       ids: ['m0002', 'm0001'],
       probabilities: { m0000: 0.25, m0001: 0.75, m0002: 0.91 },
+      judged: 3,
     })
 
     expect(requests).toHaveLength(1)
@@ -248,7 +295,7 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
     const { runner, requests } = harness({ identity: () => undefined })
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
     const selection = await selector.select(input(3), scope, signal())
-    expect(selection).toEqual({ kind: 'fallback', reason: 'route-unavailable' })
+    expect(selection).toEqual({ kind: 'fallback', reason: 'route-unavailable', judged: 0 })
     expect(requests).toHaveLength(0)
   })
 
@@ -256,7 +303,7 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
     const { runner, requests, identify } = harness()
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
     const selection = await selector.select(input(0), scope, signal())
-    expect(selection).toEqual({ kind: 'selected', ids: [], probabilities: {} })
+    expect(selection).toEqual({ kind: 'selected', ids: [], probabilities: {}, judged: 0 })
     expect(requests).toHaveLength(0)
     expect(identify.calls).toBe(0)
   })
@@ -288,17 +335,20 @@ describe('SystemOneRecallDecisionSelector: batching', () => {
     const selection = await selector.select(input(25), scope, signal())
     // The first batch's answers were perfectly usable — a partial adoption is
     // still forbidden.
-    expect(selection).toEqual({ kind: 'fallback', reason: 'unavailable-budget' })
+    expect(selection).toEqual({ kind: 'fallback', reason: 'unavailable-budget', judged: 25 })
     expect(requests).toHaveLength(2)
   })
 
-  it('degrades before dispatching when the plan exceeds the run batch cap', async () => {
-    // 25 candidates at one question per batch = 25 batches > ceil(96 / 24) = 4.
+  it('trims the pool to the run batch cap when the route allows one question per batch', async () => {
+    // 25 candidates at one question per batch = 25 batches > ceil(96 / 24) = 4,
+    // so the trim loop drops the lowest-ranked candidates down to what four
+    // one-question batches can judge.
     const { runner, requests } = harness({ identity: () => routeIdentity({ maxQuestions: 1 }) })
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
     const selection = await selector.select(input(25), scope, signal())
-    expect(selection).toEqual({ kind: 'fallback', reason: 'batch-count-over-cap' })
-    expect(requests).toHaveLength(0)
+    expect(selection).toMatchObject({ kind: 'selected', judged: 4 })
+    expect(requests).toHaveLength(4)
+    expect(requests.map(request => Object.keys(request.questions).length)).toEqual([1, 1, 1, 1])
   })
 
   it('splits each batch down to the route question ceiling', async () => {
@@ -310,13 +360,22 @@ describe('SystemOneRecallDecisionSelector: batching', () => {
 })
 
 describe('SystemOneRecallDecisionSelector: candidate limits', () => {
-  it('dispatches nothing for 97 candidates at the default max-candidates of 96', async () => {
+  it('preselects a 97-candidate pool down to 96 and dispatches it', async () => {
+    // Issue #363: the old early return dispatched nothing above max-candidates.
+    // The judged pool is now a deterministic top-K of the SAME pool (IDs kept).
     const { runner, requests, identify } = harness()
+    const topics = pool(97)
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
-    const selection = await selector.select(input(97), scope, signal())
-    expect(selection).toEqual({ kind: 'fallback', reason: 'candidates-over-limit' })
-    expect(requests).toHaveLength(0)
-    expect(identify.calls).toBe(0)
+    const selection = await selector.select({ query: 'q', recentTools: [], topics }, scope, signal())
+    expect(selection.kind).toBe('selected')
+    expect(selection.kind === 'selected' ? selection.judged : 0).toBe(96)
+    expect(identify.calls).toBeGreaterThan(0)
+    const judgedIds = requests.flatMap(candidateIds)
+    expect(judgedIds).toHaveLength(96)
+    // Wire IDs are the caller's own pool IDs — sparse after the cut, never
+    // re-numbered.
+    const poolIds = new Set(topics.map(topic => topic.id))
+    for (const id of judgedIds) expect(poolIds.has(id)).toBe(true)
   })
 })
 
@@ -363,7 +422,7 @@ describe('SystemOneRecallDecisionSelector: answer validation', () => {
     const { runner, requests } = harness({ decide: () => answered(answers) })
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
     const selection = await selector.select(input(3), scope, signal())
-    expect(selection).toEqual({ kind: 'fallback', reason: 'malformed-answer' })
+    expect(selection).toEqual({ kind: 'fallback', reason: 'malformed-answer', judged: 3 })
     expect(requests).toHaveLength(1)
   })
 })
@@ -391,7 +450,7 @@ describe('SystemOneRecallDecisionSelector: cancellation, route change and deadli
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
     const selection = await selector.select(input(3), scope, signal())
     // All answers were 0.9 — adopting them would inject under a stale revision.
-    expect(selection).toEqual({ kind: 'fallback', reason: 'route-changed' })
+    expect(selection).toEqual({ kind: 'fallback', reason: 'route-changed', judged: 3 })
     expect(requests).toHaveLength(1)
   })
 
@@ -399,7 +458,7 @@ describe('SystemOneRecallDecisionSelector: cancellation, route change and deadli
     const { runner } = harness({ identity: call => (call === 1 ? routeIdentity() : undefined) })
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
     const selection = await selector.select(input(3), scope, signal())
-    expect(selection).toEqual({ kind: 'fallback', reason: 'route-changed' })
+    expect(selection).toEqual({ kind: 'fallback', reason: 'route-changed', judged: 3 })
   })
 
   it('degrades the whole run when fewer than 100ms of the total deadline remain before a batch', async () => {
@@ -416,7 +475,8 @@ describe('SystemOneRecallDecisionSelector: cancellation, route change and deadli
     const selection = await selector.select(input(2), scope, signal())
     // 50ms left of 1500: the second batch is never dispatched.
     expect(requests).toHaveLength(1)
-    expect(selection).toEqual({ kind: 'fallback', reason: 'deadline' })
+    // The plan existed, so the record carries the judged pool size, not 0.
+    expect(selection).toEqual({ kind: 'fallback', reason: 'deadline', judged: 2 })
   })
 
   it('hands each batch the remaining milliseconds of the total deadline', async () => {
@@ -442,7 +502,7 @@ describe('SystemOneRecallDecisionSelector: cancellation, route change and deadli
     })
     const selector = new SystemOneRecallDecisionSelector(runner, settings({ timeoutMs: 120 }))
     const selection = await selector.select(input(3), scope, signal())
-    expect(selection).toEqual({ kind: 'fallback', reason: 'deadline' })
+    expect(selection).toEqual({ kind: 'fallback', reason: 'deadline', judged: 3 })
   })
 
   it('maps a runner timeout/unconfigured/error to its fixed fallback reason', async () => {
@@ -454,7 +514,7 @@ describe('SystemOneRecallDecisionSelector: cancellation, route change and deadli
     ] as const) {
       const { runner } = harness({ decide: () => unavailable(reason) })
       const selector = new SystemOneRecallDecisionSelector(runner, settings())
-      expect(await selector.select(input(3), scope, signal())).toEqual({ kind: 'fallback', reason: expected })
+      expect(await selector.select(input(3), scope, signal())).toEqual({ kind: 'fallback', reason: expected, judged: 3 })
     }
   })
 })
@@ -551,7 +611,7 @@ describe('selectRecallWithFallback: composed dispatch', () => {
     })
     const legacy = fakeLegacy(['m0000'])
     const dispatch = await selectRecallWithFallback(input(3), scope, signal(), { runner, settings: settings(), legacy: legacy.selector })
-    expect(dispatch).toEqual({ kind: 'selected', ids: ['m0002', 'm0001'], probabilities })
+    expect(dispatch).toEqual({ kind: 'selected', ids: ['m0002', 'm0001'], probabilities, judged: 3 })
     expect(legacy.calls).toHaveLength(0)
   })
 
@@ -568,17 +628,22 @@ describe('selectRecallWithFallback: composed dispatch', () => {
     expect(legacy.calls[0]?.candidates.map(candidate => candidate.filename)).toEqual(['m0000', 'm0001', 'm0002'])
   })
 
-  it('runs the legacy adaptation over the complete pool on 97 candidates, dispatching nothing', async () => {
-    const { runner, requests, identify } = harness()
+  it('dispatches a 97-candidate pool on its top 96 without calling the legacy selector', async () => {
+    // Behavior change (design §4, band 97-256): a successful non-empty decision
+    // on the lexical top-K is terminal — the legacy branch does not run.
+    const { runner, requests } = harness()
     const legacy = fakeLegacy([])
     const dispatch = await selectRecallWithFallback(input(97), scope, signal(), { runner, settings: settings(), legacy: legacy.selector })
-    expect(requests).toHaveLength(0)
-    expect(identify.calls).toBe(0)
-    expect(legacy.calls[0]?.candidates).toHaveLength(97)
-    expect(dispatch).toEqual({ kind: 'fallback', reason: 'candidates-over-limit', legacy: { kind: 'selected', ids: [] } })
+    expect(dispatch.kind).toBe('selected')
+    expect(dispatch.kind === 'selected' ? dispatch.judged : 0).toBe(96)
+    expect(legacy.calls).toHaveLength(0)
+    expect(requests.flatMap(candidateIds)).toHaveLength(96)
   })
 
-  it('skips recall for 257 candidates: no request, no legacy adaptation', async () => {
+  it('judges the top 256 of a 257-candidate pool and skips no request', async () => {
+    // Above `fallback-max-candidates` (256) the legacy fallback still skips, but
+    // the decision arm now judges the top-K where it previously dispatched
+    // nothing at all.
     const { runner, requests } = harness()
     const legacy = fakeLegacy(['m0000'])
     const dispatch = await selectRecallWithFallback(input(257), scope, signal(), {
@@ -586,13 +651,10 @@ describe('selectRecallWithFallback: composed dispatch', () => {
       settings: settings({ maxCandidates: 256, fallbackMaxCandidates: 256 }),
       legacy: legacy.selector,
     })
-    expect(requests).toHaveLength(0)
+    expect(dispatch.kind).toBe('selected')
+    expect(dispatch.kind === 'selected' ? dispatch.judged : 0).toBe(256)
     expect(legacy.calls).toHaveLength(0)
-    expect(dispatch).toEqual({
-      kind: 'fallback',
-      reason: 'candidates-over-limit',
-      legacy: { kind: 'skipped', reason: 'candidates-over-fallback-limit' },
-    })
+    expect(requests.flatMap(candidateIds)).toHaveLength(256)
   })
 
   it('never falls back on cancellation', async () => {
@@ -601,5 +663,159 @@ describe('selectRecallWithFallback: composed dispatch', () => {
     const dispatch = await selectRecallWithFallback(input(3), scope, signal(), { runner, settings: settings(), legacy: legacy.selector })
     expect(dispatch).toEqual({ kind: 'cancelled' })
     expect(legacy.calls).toHaveLength(0)
+  })
+})
+
+describe('SystemOneRecallDecisionSelector: pre-selection and admission-exact planning', () => {
+  it('preselects 475 ASCII candidates to 96 and dispatches every batch inside the window', async () => {
+    const wide = routeIdentity({ perRequestTokens: 16384, perQuestionTokens: 16384 })
+    const { runner, requests } = harness({ identity: () => wide })
+    const topics = pool(475)
+    const selector = new SystemOneRecallDecisionSelector(runner, settings({ maxInputTokens: 16000 }))
+    const selection = await selector.select({ query: 'Why does this test fail randomly?', recentTools: ['bash'], topics }, scope, signal())
+
+    expect(selection).toMatchObject({ kind: 'selected', judged: 96 })
+    const judgedIds = requests.flatMap(candidateIds)
+    expect(judgedIds).toHaveLength(96)
+    expect(new Set(judgedIds).size).toBe(96)
+    for (const request of requests) expect(admitsBatch(request, wide, 16000)).toBe(true)
+
+    // IDs are the caller's own assignment: a sparse subset after the cut, never
+    // re-numbered, so the coordinator's byId lookups keep working.
+    const poolIds = new Set(topics.map(topic => topic.id))
+    for (const id of judgedIds) expect(poolIds.has(id)).toBe(true)
+    const selectedIds = selection.kind === 'selected' ? selection.ids : []
+    expect(selectedIds.length).toBeGreaterThan(0)
+    for (const id of selectedIds) expect(judgedIds).toContain(id)
+
+    // Privacy: nothing but the wire 5-tuple crosses the wire.
+    const serialized = JSON.stringify(requests.map(request => request.state))
+    expect(serialized).not.toContain('.dsh/memory')
+    expect(serialized).not.toContain('sha256:')
+  })
+
+  it('dispatches a 120-topic Chinese corpus under the 6000 default in admission-exact batches', async () => {
+    const wide = routeIdentity({ perRequestTokens: 16384, perQuestionTokens: 16384 })
+    const { runner, requests } = harness({ identity: () => wide })
+    const topics = assignRecallTopicIds(chineseSeeds(120, 60))
+    const selector = new SystemOneRecallDecisionSelector(runner, settings())
+    const selection = await selector.select({ query: '记忆召回 为什么随机失败', recentTools: [], topics }, scope, signal())
+
+    expect(selection.kind).toBe('selected')
+    const judged = selection.kind === 'selected' ? selection.judged : 0
+    expect(judged).toBeGreaterThan(0)
+    expect(judged).toBeLessThanOrEqual(DEFAULT_RECALL_DECISION_SETTINGS.maxCandidates)
+
+    for (const request of requests) {
+      expect(admitsBatch(request, wide, DEFAULT_RECALL_DECISION_SETTINGS.maxInputTokens)).toBe(true)
+    }
+    // Every judged candidate enters exactly one batch.
+    const judgedIds = requests.flatMap(candidateIds)
+    expect(judgedIds).toHaveLength(judged)
+    expect(requests.length).toBeLessThanOrEqual(
+      Math.ceil(DEFAULT_RECALL_DECISION_SETTINGS.maxCandidates / DEFAULT_RECALL_DECISION_SETTINGS.batchSize),
+    )
+    // CJK metadata is what forces the smaller batch: never a full 24.
+    const largest = Math.max(...requests.map(request => Object.keys(request.questions).length))
+    expect(largest).toBeLessThan(DEFAULT_RECALL_DECISION_SETTINGS.batchSize)
+  })
+
+  it('shrinks batches and trims the lowest-ranked candidates for a 4000-token window', async () => {
+    const narrow = routeIdentity({ perRequestTokens: 4000, perQuestionTokens: 4000 })
+    const { runner, requests } = harness({ identity: () => narrow })
+    // 40 fat topics at ~7 per 4000-token batch need six batches, more than the
+    // run's cap of ceil(96 / 24) = 4, so the trim loop has to run.
+    const fat: RecallTopicSeed[] = Array.from({ length: 40 }, (_, index) => ({
+      scope: 'workspace' as const,
+      path: `/repo/.dsh/memory/fat-${String(index).padStart(4, '0')}.md`,
+      filename: `fat-${index}.md`,
+      name: `Recall preselect ${index}`,
+      description: `recall preselect ${'lorem ipsum dolor '.repeat(120)}`,
+      contentHash: `sha256:fat-${index}`,
+    }))
+    const cheap: RecallTopicSeed[] = Array.from({ length: 12 }, (_, index) => ({
+      scope: 'workspace' as const,
+      path: `/repo/.dsh/memory/cheap-${String(index).padStart(4, '0')}.md`,
+      filename: `cheap-${index}.md`,
+      name: `Cooking ${index}`,
+      description: 'pasta',
+      contentHash: `sha256:cheap-${index}`,
+    }))
+    const topics = assignRecallTopicIds([...fat, ...cheap])
+    const selector = new SystemOneRecallDecisionSelector(runner, settings())
+    const selection = await selector.select({ query: 'recall preselect', recentTools: [], topics }, scope, signal())
+
+    expect(selection.kind).toBe('selected')
+    const judgedIds = requests.flatMap(candidateIds)
+    for (const request of requests) {
+      expect(admitsBatch(request, narrow, DEFAULT_RECALL_DECISION_SETTINGS.maxInputTokens)).toBe(true)
+    }
+    expect(requests.length).toBeLessThanOrEqual(
+      Math.ceil(DEFAULT_RECALL_DECISION_SETTINGS.maxCandidates / DEFAULT_RECALL_DECISION_SETTINGS.batchSize),
+    )
+    // Rank-aware: the zero-scoring cheap topics are what the trim loop drops.
+    const cheapIds = topics.filter(topic => topic.filename.startsWith('cheap-')).map(topic => topic.id)
+    for (const id of cheapIds) expect(judgedIds).not.toContain(id)
+    expect(judgedIds.length).toBeGreaterThan(0)
+    // The pool was cut: not every fat topic survived the trim.
+    expect(judgedIds.length).toBeLessThan(40)
+  })
+
+  it('degrades with reason budget when a single candidate cannot fit alone', async () => {
+    const narrow = routeIdentity({ perRequestTokens: 4000, perQuestionTokens: 4000 })
+    const { runner, requests } = harness({ identity: () => narrow })
+    const topics = assignRecallTopicIds([{
+      scope: 'workspace' as const,
+      path: '/repo/.dsh/memory/huge.md',
+      filename: 'huge.md',
+      name: 'Huge',
+      description: 'x'.repeat(200_000),
+      contentHash: 'sha256:huge',
+    }])
+    const selector = new SystemOneRecallDecisionSelector(runner, settings())
+    const selection = await selector.select({ query: 'q', recentTools: [], topics }, scope, signal())
+    // No plan existed, so the record carries judged 0 — and nothing is sent.
+    expect(selection).toEqual({ kind: 'fallback', reason: 'budget', judged: 0 })
+    expect(requests).toHaveLength(0)
+  })
+
+  it('hands the UNFILTERED pool to the legacy adaptation on a grey zone', async () => {
+    const { runner, requests } = harness({
+      decide: request => noul(Object.fromEntries(
+        Object.keys(request.questions).map((id, index) => [id, index === 0 ? 0.5 : 0.91]),
+      )),
+    })
+    const topics = pool(97)
+    const legacy = fakeLegacy([])
+    const dispatch = await selectRecallWithFallback(
+      { query: 'q', recentTools: [], topics },
+      scope,
+      signal(),
+      { runner, settings: settings(), legacy: legacy.selector },
+    )
+    expect(dispatch).toMatchObject({ kind: 'fallback', reason: 'grey-zone' })
+    // The decision arm judged its top 96; the legacy fallback still sees all 97.
+    expect(requests.flatMap(candidateIds)).toHaveLength(96)
+    expect(legacy.calls).toHaveLength(1)
+    expect(legacy.calls[0]?.candidates).toHaveLength(97)
+  })
+
+  it('degrades an empty decision selection to the legacy fallback', async () => {
+    const { runner } = harness({
+      decide: request => noul(Object.fromEntries(Object.keys(request.questions).map(id => [id, 0.1]))),
+    })
+    const topics = pool(5)
+    const legacy = fakeLegacy(['m0001'])
+    const dispatch = await selectRecallWithFallback(
+      { query: 'q', recentTools: [], topics },
+      scope,
+      signal(),
+      { runner, settings: settings(), legacy: legacy.selector },
+    )
+    // Delivering nothing where the legacy branch would deliver something is
+    // never acceptable in active mode.
+    expect(dispatch).toEqual({ kind: 'fallback', reason: 'empty-selection', legacy: { kind: 'selected', ids: ['m0001'] } })
+    expect(legacy.calls).toHaveLength(1)
+    expect(legacy.calls[0]?.candidates).toHaveLength(5)
   })
 })
