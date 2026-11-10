@@ -2,7 +2,7 @@
 
 > Implementation: use `superpowers:subagent-driven-development` or `superpowers:executing-plans`, implementing and verifying item by item. This file defines design only; this PR does not modify product code.
 
-**Feature ID:** S1-03. **Priority:** P1. **Status:** implemented — PR #352 (open, pending merge) 〔src:ws:specs/tla/memory-recall-dispatch/implementation.md#L87-L95〕.
+**Feature ID:** S1-03. **Priority:** P1. **Status:** **Implemented** — PR #352 (merged 2026-11-09) 〔src:ws:specs/tla/memory-recall-dispatch/implementation.md#L87-L95〕.
 
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 

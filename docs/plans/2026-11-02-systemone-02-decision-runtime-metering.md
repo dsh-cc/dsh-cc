@@ -1,6 +1,6 @@
 # SystemOne decision runtime, budget and metering
 
-Status: implemented (#351); amended 2026-11-10 — decision routes unified on the gauge alias (PR pending). Feature ID: S1-02. Priority: P0.
+Status: **Implemented** — PR #351 (merged 2026-11-09); amended 2026-11-10 — decision routes unified on the gauge alias (PR #358, open). Feature ID: S1-02. Priority: P0.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](2026-11-02-systemone-01-contract-validation.md), other features can be developed in parallel against test fakes of this interface. Entry point: [overview](2026-11-02-systemone-00-overview.md).
 
