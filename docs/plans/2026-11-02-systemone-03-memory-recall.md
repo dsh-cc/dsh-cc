@@ -57,7 +57,7 @@ Add `cc-systemone-memory-recall`, registered through `registerNamespaceSafe`. Ex
 | `mode` | `mode: 'off' \| 'shadow' \| 'active'` | `off` | off does not read the runner and sends no decision request |
 | `timeout-ms` | `timeoutMs: number` | `1500` | integer, 100-5000; total deadline for the whole selection  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `max-input-tokens` | `maxInputTokens: number` | `6000` | integer, 512-16000; per-batch limit for the complete request  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
-| `max-candidates` | `maxCandidates: number` | `96` | integer, 1-256; above this, switch to the old selector  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `max-candidates` | `maxCandidates: number` | `96` | integer, 1-256; above this, judge a deterministic lexical top-K of the pool (issue #363 amendment, §"Complete batching"; the old selector is no longer switched to for an oversized pool)  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `batch-size` | `batchSize: number` | `24` | integer, 1-32; also bounded by the route's question count  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `include-probability` | `includeProbability: number` | `0.75` | finite number, 0.5-1  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `exclude-probability` | `excludeProbability: number` | `0.25` | finite number, 0-0.5, and less than include  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
@@ -136,6 +136,16 @@ Batches are determined jointly by `batchSize`, the number of questions the route
 
 Do not truncate the query or the candidate descriptions. If a single-candidate request still exceeds the budget, if the candidate count exceeds the limit, or if the route does not advertise context capability, degrade directly. `maxInputTokens` covers state, all questions and protocol margin, checked uniformly by the S1-02 algorithm.
 
+### Amendment (issue #363): deterministic pre-selection and admission-exact planning
+
+The rule above collides with corpora that cannot be judged whole. Live workspace evidence (#363): 475 fresh topics with Chinese frontmatter, a request state of 97 kilobytes, 475 questions against the route's `maxQuestions` 32, and a 24-candidate CJK batch whose request state estimates at roughly 7.5k tokens — above the `6000` `max-input-tokens` default. The old arm therefore returned `candidates-over-limit` (or `budget` from the runner preflight) before any route resolution: no ledger row, no request, no log. The amendment makes the decision arm's judged pool a deterministic, recorded pre-selection instead.
+
+- **Pre-selection** (`recall-preselect.ts`, pure): when the caller's pool exceeds `max-candidates`, keep a lexical top-K. Query units are whitespace tokens (lowercased) plus Han bigrams (a run of two or more `\p{Script=Han}` codepoints contributes its bigrams, an isolated one its unigram) — single codepoints saturate on Chinese function words, bigrams carry the relevance signal. A candidate scores one point per unit contained in `name + ' ' + description` plus one per unit equal to a filename token; the total order is score desc, then the UTF-8-encoded byte order of filename, scope and path (the scope/path legs are local tie-breaks only, and scope order ranks `global` before `workspace`, the opposite of the ID-assignment sort). The function FILTERS the caller's pool: ids are preserved, the result keeps canonical order, and the caller's pool is never narrowed — the legacy fallback and the shadow comparison still see every candidate.
+- **Admission-exact planning**: for each candidate in canonical order a tentative batch is built with the exact wire state (`{query, recentTools, candidates}` over the 5-tuple `{id, scope, filename, name, description}` — never `path`, never the content hash) and its `noul` questions, then checked against the runner's own admission rules: question count against `maxQuestions`, `estimateDecisionInputTokens(...).requestTokens` against `min(maxInputTokens, perRequestTokens)`, and every per-question estimate against `min(maxInputTokens, perQuestionTokens)`; the batch size is also clamped to `min(batchSize, maxQuestions)`. A rejected add closes the batch before the candidate; a candidate that cannot fit a batch of its own degrades the run with the new selector-side reason `budget` (distinct from the runner's `unavailable-budget`).
+- **Trim loop**: `cap_batches = ceil(maxCandidates / batchSize)`. While the plan needs more batches, drop the lowest-ranked remaining candidate by the pre-selection total order and re-plan — deterministic, terminating, and it re-plans rather than one-shot re-cutting, because cheap low-rank topics are what made the early batches large. `candidates-over-limit` and `batch-count-over-cap` are therefore unreachable from the selector; `planRecallBatches` keeps its guard for direct callers.
+- **Observability**: `RecallSelection.selected` and `RecallSelection.fallback` carry `judged` (the post-pre-selection, post-trim judged pool size; 0 when no plan existed), and the shadow record carries `pool` (the caller's own post-shown-filter count) and `judged` instead of the retired `candidates` field. Fixed values and counts only.
+- **Behavior change, pools of 97-256**: a successful non-empty decision on the lexical top-K is now terminal — the old selector does not run for that turn, where previously the decision arm skipped entirely. Grey-zone, `budget` and runner-unavailable still degrade to the full-pool legacy fallback, and an EMPTY decision selection (e.g. all-low probabilities) is no longer terminal either: it degrades with reason `empty-selection` to the full-pool legacy fallback, because delivering nothing where the old branch would deliver something is a regression. Pools above 256 now judge the top-K where they previously dispatched nothing (the legacy fallback still skips above `fallback-max-candidates` 256). This band is not claimed as no-regression: its acceptance criterion is the S1-03 eval gate below — "active delivered recall no lower than the baseline". Mode `off` is untouched.
+
 ```ts
 function selectIds(
   rows: readonly { id: string; probability: number; scope: 'workspace' | 'global' }[],
@@ -190,6 +200,7 @@ Only after `agent.inject()` succeeds synchronously are the paths of the actually
 | off, or recallEnabled=false | no runner request | no shadow work exists |
 | no runner, no alias, insufficient budget, timeout, network error, invalid answer | old selector at most once | baseline as usual; comparison records unavailable |
 | probability in the grey zone, complete batching failure, single candidate over window | old selector at most once | baseline as usual; no fake comparison emitted |
+| a judged candidate cannot be admitted at all, or the plan cannot be trimmed into the batch cap (`budget`), or the decision selected nothing (`empty-selection`) | old selector at most once, over the complete unfiltered pool | baseline as usual; comparison records unavailable |
 | everything valid and no grey zone | deterministic selected/empty result | comparison only; injecting SystemOne results is forbidden |
 | user turn change, scope change, idle, Agent dispose | discard; fallback is forbidden | discard the stale comparison |
 | fallback over limit or itself failing | skip recall this round | baseline keeps its own behaviour as is |
@@ -233,7 +244,10 @@ When implementing, check whether `settings-provider` appears in the exported `.d
 | --- | --- |
 | probabilities `[0.25, 0.75, 0.91]` | select the third and the second; no fallback |
 | probabilities `[0.10, 0.50, 0.91]` | whole-pool fallback exactly once; partially adopting the third item is forbidden |
-| 97 candidates, default maxCandidates=96 | zero SystemOne requests, complete legacy adaptation; at 257 candidates both make zero requests  〔src:ws:specs/tla/memory-recall-dispatch/implementation.md#L114-L130〕|
+| 97 candidates, default `maxCandidates` 96 | preselect to the lexical top 96 and dispatch it (judged=96, original ids, every batch admitted); a pool of 257 judges the top 256 and still skips the legacy fallback. Amended by issue #363: the decision arm previously made zero requests 〔src:ws:specs/tla/memory-recall-dispatch/implementation.md#L114-L130〕|
+| 475 ASCII candidates, wide window | preselect to 96, dispatch four admitted batches, ids preserved |
+| 120 Chinese candidates, default 6000 `max-input-tokens` | dispatch with `judged` ≤ 96 in batches smaller than `batch-size`, each inside the runner's own admission checks |
+| a route window of `4000` tokens, fat high-rank plus cheap low-rank candidates | smaller batches and a rank-aware trim: the zero-scoring low-rank candidates are dropped first |
 | 25 candidates, batchSize=24 | two batches covering everything; a failed second batch discards it all |
 | workspace/global same-named `rules.md` | different IDs; selecting the workspace ID reads only the workspace path |
 | query B arrives while A is unfinished, then A returns first | A is not injected and not marked shown; B is finally sent exactly once |

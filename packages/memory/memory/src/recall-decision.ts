@@ -48,10 +48,17 @@ export interface RecallDecisionInput {
   topics: readonly RecallTopic[]
 }
 
-/** The outcome of one selection request. */
+/**
+ * The outcome of one selection request.
+ *
+ * `judged` is the size of the decision arm's judged pool: the post-preselection,
+ * post-trim candidate count. It is 0 when no plan existed (mode off, no route,
+ * a pool that cannot be admitted at all), so a caller can always record
+ * `pool` vs `judged` without re-deriving the pre-selection.
+ */
 export type RecallSelection =
-  | { kind: 'selected'; ids: string[]; probabilities: Record<string, number> }
-  | { kind: 'fallback'; reason: string }
+  | { kind: 'selected'; ids: string[]; probabilities: Record<string, number>; judged: number }
+  | { kind: 'fallback'; reason: string; judged: number }
   | { kind: 'cancelled' }
 
 /**
@@ -141,7 +148,11 @@ export type RecallBatchDegradeReason =
 export interface RecallBatchLimits {
   /** Configured `batch-size` (1-32). */
   batchSize: number
-  /** Configured `max-candidates` (1-256); above it the run degrades. */
+  /**
+   * Configured `max-candidates` (1-256); above it {@link planRecallBatches}
+   * degrades. The selector no longer calls it that way: it pre-selects a
+   * deterministic top-K first (issue #363), so this guard serves direct callers.
+   */
   maxCandidates: number
   /** The route identity's advertised per-request question ceiling. */
   maxQuestions: number

@@ -46,7 +46,10 @@ const ROUTE: DecisionRouteIdentity = {
   model: 'gauge-1',
   revision: 'rev-1',
   perRequestTokens: 8192,
-  perQuestionTokens: 128,
+  // The measured model window a real pin resolves to: one question carries the
+  // whole state, so a narrower per-question window would (correctly) degrade
+  // every run with `budget`.
+  perQuestionTokens: 16384,
   maxQuestions: 32,
   maxOutputTokens: 2048,
 }
@@ -569,6 +572,11 @@ describe('MemoryRecall mode dispatch', () => {
     expect(rig.legacy.calls).toHaveLength(1)
     const log = lines.join('\n')
     expect(log).toContain('"kind":"selected"')
+    // The record documents the decision arm's scope: the whole pool was judged.
+    expect(log).toContain('"pool":2')
+    expect(log).toContain('"judged":2')
+    expect(log).toContain('"selected":1')
+    expect(log).not.toContain('"candidates"')
     expect(log).not.toContain('why does this test fail randomly?')
     expect(log).not.toContain('bash.md')
     expect(log).not.toContain('git.md')
@@ -588,6 +596,9 @@ describe('MemoryRecall mode dispatch', () => {
     expect(rig.runner.requests).toHaveLength(0)
     expect(lines[0]).toContain('"kind":"unavailable"')
     expect(lines[0]).toContain('route-unavailable')
+    // No plan existed, so the judged scope is 0 while the pool is still 2.
+    expect(lines[0]).toContain('"pool":2')
+    expect(lines[0]).toContain('"judged":0')
     // The baseline still injects exactly once.
     await until(() => inject.mock.calls.length === 1, 'baseline injection')
     await rig.dispose()
