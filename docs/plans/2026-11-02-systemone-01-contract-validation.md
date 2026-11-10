@@ -96,15 +96,15 @@ Unknown top-level envelope fields are permitted to exist but are not propagated.
 - choice is a key in the request criteria.
 - The key set of probabilities must equal criteria exactly.
 - Each probability is a finite number with `0 <= p <= 1`; strings and null are rejected.
-- `abs(sum(probabilities) - 1) <= 1e-4`. Out-of-range values are not clipped and a wrong distribution is not renormalized.
-- The probability of choice may not fall more than `1e-4` below the maximum probability. On a tie for maximum the server may return any of the tied options; business ranking must not depend on which tied option the server picked.
+- `abs(sum(probabilities) - 1) <= options * 1e-4` — 2x the worst-case drift of an n-term sum of 4-decimal-quantized values (issue #361: the gateway rounds every emitted probability and score to 4 decimal places; the flat `1e-4` rejected honest envelopes). Out-of-range values are not clipped and a wrong distribution is not renormalized.
+- The probability of choice may not fall more than one quantization unit (`1e-4` plus a 1e-12 FP slack) below the maximum probability — a monotone quantizer cannot invert a true argmax, so only a single-unit disagreement between the choice head and the probability head is benign (issue #361). On a tie for maximum the server may return any of the tied options; business ranking must not depend on which tied option the server picked.
 - confidence must be a finite number in `[0,1]`. confidence and the top option probability are distinct concepts and do not substitute for each other.
 
 ### Score
 
 The current public type accepts only a probability map keyed by numeric index. If the rubric has n levels, probabilities must contain the string keys `"0"` through `String(n-1)` and no others. Per-value and sum rules are the same as Choice.
 
-score must be finite and in `[0,n-1]`, and differ from `sum(i * p[i])` by no more than `1e-4`. A non-integer score is allowed. confidence must be in `[0,1]`. The server may return a legend; the client neither depends on nor propagates it.
+score must be finite and in `[0,n-1]`, and differ from `sum(i * p[i])` by no more than `(1 + n*(n-1)/2) * 1e-4` — 2x the worst-case 4-decimal rounding drift of the score and its index-weighted probabilities (issue #361). A non-integer score is allowed. confidence must be in `[0,1]`. The server may return a legend; the client neither depends on nor propagates it.
 
 ### Noul and usage
 
@@ -153,6 +153,6 @@ Run `pnpm install --frozen-lockfile` as the repo requires before implementing. N
 
 ## Release and rollback
 
-Before release, run a contract test against one desensitized real envelope per deployment route, checking Score probability index shape in particular. A route that cannot meet the contract must not be used for new features; fix the gateway adapter first, do not loosen caller policy. This test validates protocol only and claims nothing about semantic reliability.
+Before release, run a contract test against one desensitized real envelope per deployment route, checking Score probability index shape in particular. A route that cannot meet the contract must not be used for new features; fix the gateway adapter first, do not loosen caller policy. 4-decimal independent rounding is the gateway's regime; the client tolerances are the 2x worst-case of that regime at the sum and score sites, and one quantization unit plus FP slack at the choice site — a tolerance change beyond that regime is a contract change, not a tuning knob. This test validates protocol only and claims nothing about semantic reliability.
 
 Roll back the client and its consumers as one commit unit. Even if compatibility forces a rollback of centralized validation, keep the independent gauge fix that turns a missing probability into ask; the behavior where a missing probability means allow must not be reintroduced.

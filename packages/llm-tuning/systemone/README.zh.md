@@ -53,9 +53,11 @@ docs/plans/2026-11-02-systemone-01-contract-validation.md）。请求在任何�
 state（拒绝环、BigInt、非有限数及 undefined/函数/symbol 值）、model 与
 timeout 边界——预检失败以 `malformed` 返回且 fetch 次数为零。响应必须
 精确回答所请求的问题集且类型匹配：choice 的 probabilities 键集与
-criteria 完全一致、每个值在 `[0,1]` 内有限、总和在 1 的 `1e-4` 容差内、
-被选项的概率不比最大值低超过 `1e-4`；score 答案携带完整
-`"0".."n-1"` 分布且 `score` 与期望值差不超过 `1e-4`；usage 的两个 token
+criteria 完全一致、每个值在 `[0,1]` 内有限、总和在 1 的 `选项数 * 1e-4`
+容差内（4 位小数量化的最坏漂移的 2 倍，issue #361）、被选项的概率不比
+最大值低超过一个量化单位加 FP 松量；score 答案携带完整
+`"0".."n-1"` 分布且 `score` 与期望值差不超过 `(1 + n*(n-1)/2) * 1e-4`
+（4 位小数量化的最坏舍入漂移的 2 倍，issue #361）；usage 的两个 token
 计数均为非负安全整数（缺失值绝不折算为零）。任何违规都会整体拒绝该响
 应——禁止部分消费——并返回固定原因 `systemone validation: <code>`。服
 务端 model 原样保留，绝不回填请求别名。在共享校验器之上，权限 gauge
