@@ -144,6 +144,24 @@ export function resolveSpec(config: Config, deps?: LocalRootDeps): ResolvedSpec 
 }
 
 /**
+ * Consumer-facing trusted-view seam: a provider that can reassemble one
+ * top-level settings key from its TRUSTED layers only — user settings, the
+ * explicit --settings flag layer, and managed/policy — skipping the project
+ * and local (repo-carried) layers. Consumers duck-type the API
+ * (`settings?.trustedSection?.(key)`) and fall back to the merged read when
+ * the provider lacks it.
+ * @see SettingsCascadeProvider.trustedSection
+ */
+export interface TrustedSectionReader {
+  /**
+   * Trusted-only reassembly of one top-level settings `key` under the
+   * {@link reassembleTrustedKey} rule — `undefined` when no trusted layer
+   * carries the key.
+   */
+  trustedSection(key: string): Record<string, unknown> | undefined
+}
+
+/**
  * Claude Code-style five-level settings cascade Provider. Reads the user,
  * project, local, flag, and policy sources in low-to-high priority, deep-merges
  * them (permission arrays union with `deny` precedence), resolves policy by
@@ -152,7 +170,7 @@ export function resolveSpec(config: Config, deps?: LocalRootDeps): ResolvedSpec 
  * to the user layer, keeping project/local/flag/policy contributions
  * read-side only.
  */
-export class SettingsCascadeProvider extends SettingsProvider {
+export class SettingsCascadeProvider extends SettingsProvider implements TrustedSectionReader {
   static Config: z<Config> = z.object({
     projectDir: z.string(),
     dshHome: z.string(),
@@ -177,6 +195,14 @@ export class SettingsCascadeProvider extends SettingsProvider {
   private readonly watch: WatchTuning
   /** The top-level `env` section split out of the merged document, string-valued. */
   private env: EnvSettings = {}
+  /**
+   * The trusted layers (user, flag, policy) exactly as last loaded, in merge
+   * order. Retained for {@link trustedSection}: the published merged document
+   * is provenance-lossy, so a trusted-only view can only be reassembled from
+   * the raw layers while they are still distinguishable. Moves only when the
+   * published document moves — set at the end of a successful `load()`.
+   */
+  private trustedLayerDocs: readonly Record<string, unknown>[] = []
   /**
    * Mirror of exactly what we last published to the seam via `load()`, and what
    * persist has durably stored. Invariant: shadow moves only when the seam's
@@ -395,6 +421,34 @@ export class SettingsCascadeProvider extends SettingsProvider {
   }
 
   /**
+   * Read one top-level settings `key` from the TRUSTED layers only — user
+   * settings, the flag layer (file + inline), and managed/policy — skipping
+   * the project and local (repo-carried) layers. Trusted values deep-merge in
+   * merge order (user → flag → policy) with ordinary merge semantics, the same
+   * rule as {@link reassembleTrustedKey}. `key` is deliberately NOT added to
+   * {@link TRUSTED_SOURCE_KEYS}: the merged document every other consumer sees
+   * keeps the full provenance-lossy merge, so this is a per-consumer view and
+   * not a global trusted-scope opt-in.
+   *
+   * Computed from the retained raw layers (never by mutating the merged
+   * document) and returned detached, so a caller cannot perturb the published
+   * view. Total by contract: no load yet, a key no trusted layer carries, a
+   * non-object reassembly result, or a junk layer shape all yield `undefined`.
+   * @param key - the top-level settings key to reassemble.
+   * @returns the trusted-only value of `key`, or `undefined`.
+   */
+  trustedSection(key: string): Record<string, unknown> | undefined {
+    try {
+      const scratch: Record<string, unknown> = {}
+      reassembleTrustedKey(scratch, this.trustedLayerDocs, key)
+      const value = Object.hasOwn(scratch, key) ? scratch[key] : undefined
+      return isPlainObject(value) ? structuredClone(value) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
    * Merge all five sources low-to-high and publish the per-namespace document,
    * splitting the top-level `env` section into {@link getEnv}. A present-but-
    * invalid source file fails load loud; absent sources contribute nothing.
@@ -432,6 +486,9 @@ export class SettingsCascadeProvider extends SettingsProvider {
     const { env, ...document } = applyCcKeyAliases(merged)
     this.env = this.coerceEnvSection(env)
     this.shadow = structuredClone(document)
+    // Retain the raw trusted layers for {@link trustedSection} — after the
+    // alias application, so the trusted view moves only with the document.
+    this.trustedLayerDocs = trustedLayers
     return document
   }
 

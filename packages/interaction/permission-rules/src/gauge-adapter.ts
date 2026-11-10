@@ -10,7 +10,16 @@
 
 import type { SystemOneAnswer, SystemOneFailure, SystemOneQuestion, SystemOneUsage } from '@dsh-cc/systemone'
 import { systemoneDecide } from '@dsh-cc/systemone'
-import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToTokenBudget, estimateSystemOneTokens } from '@dsh-cc/systemone'
+import {
+  DEFAULT_GAUGE_CONTEXT_WINDOW,
+  GAUGE_MODEL_CONTEXT_WINDOWS,
+  MIN_STATE_TOKENS,
+  S1_ENVELOPE_TOKENS,
+  S1_MARGIN_TOKENS,
+  capMiddleToTokenBudget,
+  estimateSystemOneTokens,
+  normalizeGaugeModelId,
+} from '@dsh-cc/systemone'
 
 /**
  * Corpus-derived default (scripts/gauge-corpus.json + eval-gauge.mjs; run
@@ -31,28 +40,13 @@ import { MIN_STATE_TOKENS, S1_ENVELOPE_TOKENS, S1_MARGIN_TOKENS, capMiddleToToke
  */
 export const DEFAULT_GAUGE_ALLOW_THRESHOLD = 0.5
 
-/** Checkpoint window of the probe-validated deployment (design doc §6.2). */
-export const DEFAULT_GAUGE_CONTEXT_WINDOW = 1024
-
 /**
- * Measured System One model context windows (2026-10-07 live probe, local
- * orchestrix gateway; design doc `docs/plans/2026-10-07-gauge-context-window-per-model.md`
- * §2): laya silently truncates at exactly 1024 tokens (HTTP 200,
- * `input_tokens` pinned — the sentinel's target hazard), while bjev shows no
- * pin up to 20,051 observed input tokens, fails loudly with HTTP 422 above
- * 65,536 tokens, and throws intermittent HTTP 500s from ~17.5k tokens — so
- * 16384 bounds flake exposure without risking silent truncation.
+ * The measured per-model decision-window registry now lives in
+ * `@dsh-cc/systemone/model-windows` (shared with the decision lane's route
+ * defaults); re-exported here so every existing gauge-lane consumer keeps
+ * importing it from this module unchanged.
  */
-export const GAUGE_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
-  laya: 1024, // silent-truncation pin, replicated 2026-10-07
-  bjev: 16384, // no pin ≤ 20,051 tok; 422 hard limit 65,536; 500-flakes ≳ 17.5k tok
-}
-
-/** Registry keys are bare ids: `llmbox_systemone/bjev` → `bjev`. */
-export function normalizeGaugeModelId(model: string): string {
-  const slash = model.lastIndexOf('/')
-  return slash === -1 ? model : model.slice(slash + 1)
-}
+export { DEFAULT_GAUGE_CONTEXT_WINDOW, GAUGE_MODEL_CONTEXT_WINDOWS, normalizeGaugeModelId } from '@dsh-cc/systemone'
 
 /** How the effective gauge context window was resolved (design doc §4.2). */
 export type GaugeWindowResolution = {

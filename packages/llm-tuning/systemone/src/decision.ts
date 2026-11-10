@@ -22,9 +22,10 @@
  * - valid usage settles actual even when answers are semantically
  *   malformed; invalid usage, timeout and unknown network state settle
  *   unknown and keep the full reservation;
- * - answered requires full S1-01 validation, the response model equal to
- *   the trusted actualModelId, usage within the capability bounds, a
- *   successful settle and a still-valid scope;
+ * - answered requires full S1-01 validation, the response model equal to the
+ *   trusted actualModelId WHEN the route pins one (an unpinned route accepts
+ *   any echoed model id and merely records it), usage within the capability
+ *   bounds, a successful settle and a still-valid scope;
  * - caller cancellation refunds a not-yet-dispatched attempt and keeps a
  *   dispatched one at full reservation (settled unknown);
  * - ledger rows record scope/feature/versions/ids/token counts only —
@@ -110,14 +111,16 @@ function isDecisionRequestShape(request: DecisionRequest): boolean {
 
 /**
  * A route is usable only with all three token bounds and maxQuestions as
- * positive safe integers and a non-empty trusted actualModelId — never
- * guessed from a model name. Anything less is unconfigured.
+ * positive safe integers, plus a well-formed optional version pin — never
+ * guessed from a model name. The pin is optional: absent disables version
+ * checking entirely, present must be a non-empty string ≤256 chars. Anything
+ * less is unconfigured.
  */
 function isUsableRoute(route: unknown): route is DecisionRouteResolution {
   if (typeof route !== 'object' || route === null) return false
   const r = route as Record<string, unknown>
   if (!isNonEmptyString(r.provider) || !isNonEmptyString(r.model) || r.model.length > 256) return false
-  if (!isNonEmptyString(r.actualModelId) || r.actualModelId.length > 256) return false
+  if (r.actualModelId !== undefined && (!isNonEmptyString(r.actualModelId) || r.actualModelId.length > 256)) return false
   if (!isNonEmptyString(r.revision) || !isNonEmptyString(r.baseURL)) return false
   if (r.apiKey !== undefined && typeof r.apiKey !== 'string') return false
   return (
@@ -346,11 +349,15 @@ export function createDecisionRunner(deps: DecisionRunnerDeps): DecisionRunner {
             })
             if (result.ok) {
               actualModel = result.model
-              if (result.model !== route.actualModelId) {
-                // Charged at actual usage, never acted on.
+              const pinnedModel = route.actualModelId
+              if (pinnedModel !== undefined && result.model !== pinnedModel) {
+                // Charged at actual usage, never acted on; stays exactly as
+                // before (no freeze, no overrun reclassification).
                 reasonCode = 'model-version-mismatch'
                 finalReason = 'malformed'
               } else if (result.usage.input_tokens > route.perRequestTokens || result.usage.output_tokens > route.maxOutputTokens) {
+                // Runs whenever the pin is absent or matches: the usage-bounds
+                // check does not depend on model identity being pinned.
                 reasonCode = 'accounting-overrun'
                 finalReason = 'malformed'
               } else if (settleFailed) {

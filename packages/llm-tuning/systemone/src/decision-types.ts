@@ -73,7 +73,15 @@ export interface DecisionRouteIdentity {
 export interface DecisionRouteResolution {
   provider: string
   model: string
-  actualModelId: string
+  /**
+   * Optional version pin (the trusted actual model id the response must
+   * echo). Present = the only response model accepted; a mismatch is a
+   * `model-version-mismatch` (answer not adopted, actual usage settled,
+   * never frozen). Absent = version pinning disabled: the envelope is still
+   * validated and the echoed model still recorded as the ledger
+   * `actualModel`, but an identity difference never rejects the answer.
+   */
+  actualModelId?: string
   baseURL: string
   apiKey?: string
   revision: string
