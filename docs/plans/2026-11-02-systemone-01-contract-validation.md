@@ -1,6 +1,6 @@
 # SystemOne request and response contract validation
 
-Status: Implemented — PR #350 (open, pending merge). Feature ID: S1-01. Priority: P0.
+Status: **Implemented** — PR #350 (merged 2026-11-09). Feature ID: S1-01. Priority: P0.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. This design is implementable on its own and depends on no other new feature. Design set entry point: [overview](2026-11-02-systemone-00-overview.md).
 

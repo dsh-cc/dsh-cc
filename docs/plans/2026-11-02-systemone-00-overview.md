@@ -1,6 +1,6 @@
 # SystemOne enhancement detailed design index
 
-Status: Proposed — not yet implemented. Date: 2026-11-02. Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`.
+Status: Proposal — design set. S1-01 through S1-05 are implemented (each feature doc records its PR); S1-06 through S1-12 are not yet implemented. Date: 2026-11-02. Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 
 This document set splits the SystemOne enhancements into twelve features that can be reviewed, developed, verified, and rolled back independently. This commit contains design only; it changes no product defaults, permission policy, model configuration, or VWA delivery tier. Where a file, interface, or command is marked "new", it refers to a later implementation deliverable and does not mean it exists in this commit.
 

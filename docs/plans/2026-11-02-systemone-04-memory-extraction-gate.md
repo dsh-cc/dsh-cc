@@ -2,7 +2,7 @@
 
 > How to execute: use `superpowers:subagent-driven-development` or `superpowers:executing-plans`, implementing and verifying item by item. This file defines the design only; this PR does not modify product code.
 
-**Feature ID:** S1-04. **Priority:** P1, after recall selection. **Status:** implemented (PR pending; amended 2026-11-10 after an adversarial review against the post-S1-01/S1-02 codebase: root-realm bridge for service reachability, guarded ctx.get access, compaction completeness rule, bounded takeover/teardown waits, per-pre-commit mode re-read, over-budget reason).
+**Feature ID:** S1-04. **Priority:** P1, after recall selection. **Status:** **Implemented** — PR #356 (merged 2026-11-09). The pre-merge adversarial review against the post-S1-01/S1-02 codebase folded these fixes into the same PR: root-realm bridge for service reachability, guarded ctx.get access, compaction completeness rule, bounded takeover/teardown waits, per-pre-commit mode re-read, over-budget reason.
 
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 
