@@ -159,7 +159,7 @@ describe('cc-systemone-memory-recall validation', () => {
   it('accepts the design-table boundary values', () => {
     const boundaries: RecallDecisionSection[] = [
       { ...VALID_SECTION, 'timeout-ms': 100, 'max-input-tokens': 512, 'max-candidates': 1, 'batch-size': 1 },
-      { ...VALID_SECTION, 'timeout-ms': 5000, 'max-input-tokens': 16000, 'max-candidates': 256, 'batch-size': 32, 'fallback-max-candidates': 256 },
+      { ...VALID_SECTION, 'timeout-ms': 30000, 'max-input-tokens': 16000, 'max-candidates': 256, 'batch-size': 32, 'fallback-max-candidates': 256 },
       { ...VALID_SECTION, 'include-probability': 1, 'exclude-probability': 0 },
       { ...VALID_SECTION, 'include-probability': 0.5, 'exclude-probability': 0.5 - 1e-9 },
       { ...VALID_SECTION, 'fallback-max-candidates': 64, 'fallback-max-bytes': 4096 },
@@ -184,6 +184,7 @@ describe('cc-systemone-memory-recall validation', () => {
     const invalid: Partial<RecallDecisionSection>[] = [
       { mode: 'sometimes' as never },
       { 'timeout-ms': 99 },
+      { 'timeout-ms': 30001 },
       { 'timeout-ms': 1500.5 },
       { 'timeout-ms': Number.NaN },
       { 'max-input-tokens': 511 },

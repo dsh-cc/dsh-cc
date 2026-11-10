@@ -87,6 +87,9 @@ never exercised. Third instance of the "fixture never walks the real wiring" cla
   service exposes no rejection status; follow-up, §6).
 - Auditing/hardening the eleven scalar-only re-admission sites (no dict ⇒ no reassignment ⇒ not
   affected; covered by rationale in §1, revisit only if a dict field is ever added to one of them).
+- The Claude-Code capability manifest: the touched surfaces are dsh-cc-internal SystemOne settings
+  namespaces, not a Claude-Code-compatible surface — no `capabilities.yaml` entry covers them, so
+  the manifest and the generated parity docs are unchanged by design (verified: both gates green).
 
 ## 3. Design
 

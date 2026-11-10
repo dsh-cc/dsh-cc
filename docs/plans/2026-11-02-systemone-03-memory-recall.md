@@ -55,7 +55,7 @@ Add `cc-systemone-memory-recall`, registered through `registerNamespaceSafe`. Ex
 | External field | Internal field and type | Default | Validation range and meaning |
 | --- | --- | --- | --- |
 | `mode` | `mode: 'off' \| 'shadow' \| 'active'` | `off` | off does not read the runner and sends no decision request |
-| `timeout-ms` | `timeoutMs: number` | `1500` | integer, 100-5000; total deadline for the whole selection  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
+| `timeout-ms` | `timeoutMs: number` | `1500` | integer, 100-30000 (raised in #373 fix: the old 5000 sat below the default planner's ~5.2 s whole-round need); total deadline for the whole selection  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `max-input-tokens` | `maxInputTokens: number` | `6000` | integer, 512-16000; per-batch limit for the complete request  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `max-candidates` | `maxCandidates: number` | `96` | integer, 1-256; above this, judge a deterministic lexical top-K of the pool (issue #363 amendment, §"Complete batching"; the old selector is no longer switched to for an oversized pool)  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `batch-size` | `batchSize: number` | `24` | integer, 1-32; also bounded by the route's question count  〔src:ws:packages/memory/memory/README.md#L136-L144〕|

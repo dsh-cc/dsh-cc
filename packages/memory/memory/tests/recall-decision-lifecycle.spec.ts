@@ -397,6 +397,38 @@ describe('RecallCoordinator: query generations', () => {
   })
 })
 
+describe('RecallCoordinator: long-deadline supersession (issue #373 raise)', () => {
+  it('a superseded result under the new 30000 ceiling still cannot inject or mark shown', async () => {
+    // The raised ceiling only lets a round live LONGER; the generation guard
+    // must keep discarding a superseded late answer exactly as before.
+    const rig = await mount({ files: TWO_TOPICS, mode: 'active' })
+    rig.settings.timeoutMs = 30_000
+    const { agent, inject, events } = makeAgent()
+    events.push(turnStart(1))
+    drivePreStep(rig.ctx, agent, ['slow query A'])
+    await until(() => rig.runner.requests.length === 1, 'slow A dispatched')
+
+    events.push(turnStart(2))
+    drivePreStep(rig.ctx, agent, ['query B'])
+    await settle()
+    expect(rig.runner.requests).toHaveLength(1)
+
+    // A's answer arrives after supersession — discarded, nothing injected.
+    rig.runner.answerNext(request => answerOnly(request, ['git.md']))
+    await until(() => rig.runner.requests.length === 2, 'query B dispatched')
+    expect(inject).not.toHaveBeenCalled()
+    rig.runner.answerNext(request => answerOnly(request, ['bash.md']))
+    await until(() => inject.mock.calls.length === 1, 'query B injected')
+    expect(injectedText(inject)).not.toContain('Git')
+    // A's git.md was never marked shown.
+    events.push(turnStart(3))
+    drivePreStep(rig.ctx, agent, ['query C'])
+    await until(() => rig.runner.requests.length === 3, 'query C dispatched')
+    expect(candidatesOf(rig.runner.requests[2]!).map(candidate => candidate.filename)).toEqual(['git.md'])
+    await rig.dispose()
+  })
+})
+
 describe('RecallCoordinator: recentTools isolation', () => {
   it('a tool executed for another agent never pollutes this agent set', async () => {
     const rig = await mount({ files: TWO_TOPICS })

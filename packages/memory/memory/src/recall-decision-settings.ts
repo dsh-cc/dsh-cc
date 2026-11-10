@@ -83,7 +83,13 @@ export const DEFAULT_RECALL_DECISION_SECTION: RecallDecisionSection = {
 
 /** Hard bounds of the design table. */
 export const MIN_TIMEOUT_MS = 100
-export const MAX_TIMEOUT_MS = 5000
+/**
+ * Opt-in ceiling for the whole-round deadline (issue #373: the old 5000 sat
+ * BELOW the default planner's realistic need — one 24-candidate batch measured
+ * ~1.3 s and the default 96/24 planning runs four batches ≈ 5.2 s). The DEFAULT
+ * stays 1500; the ceiling exists so operators can size the round to their pool.
+ */
+export const MAX_TIMEOUT_MS = 30000
 export const MIN_MAX_INPUT_TOKENS = 512
 export const MAX_MAX_INPUT_TOKENS = 16000
 export const MIN_MAX_CANDIDATES = 1
