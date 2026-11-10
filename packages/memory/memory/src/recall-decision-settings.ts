@@ -32,7 +32,6 @@ export type RecallDecisionMode = 'off' | 'shadow' | 'active'
 /** Design-table defaults (camelCase, internal shape). */
 export const DEFAULT_RECALL_DECISION_SETTINGS = {
   mode: 'off' as RecallDecisionMode,
-  routeAlias: 'gauge',
   timeoutMs: 1500,
   maxInputTokens: 6000,
   maxCandidates: 96,
@@ -46,7 +45,6 @@ export const DEFAULT_RECALL_DECISION_SETTINGS = {
 /** Internal camelCase settings shape consumed by the recall slices. */
 export interface RecallDecisionSettings {
   mode: RecallDecisionMode
-  routeAlias: string
   timeoutMs: number
   maxInputTokens: number
   maxCandidates: number
@@ -60,7 +58,6 @@ export interface RecallDecisionSettings {
 /** One resolved settings section (raw kebab-case keys, schema-resolved). */
 export interface RecallDecisionSection {
   mode: RecallDecisionMode
-  'route-alias': string
   'timeout-ms': number
   'max-input-tokens': number
   'max-candidates': number
@@ -74,7 +71,6 @@ export interface RecallDecisionSection {
 /** Design-table defaults (kebab-case, external shape). */
 export const DEFAULT_RECALL_DECISION_SECTION: RecallDecisionSection = {
   mode: DEFAULT_RECALL_DECISION_SETTINGS.mode,
-  'route-alias': DEFAULT_RECALL_DECISION_SETTINGS.routeAlias,
   'timeout-ms': DEFAULT_RECALL_DECISION_SETTINGS.timeoutMs,
   'max-input-tokens': DEFAULT_RECALL_DECISION_SETTINGS.maxInputTokens,
   'max-candidates': DEFAULT_RECALL_DECISION_SETTINGS.maxCandidates,
@@ -86,8 +82,6 @@ export const DEFAULT_RECALL_DECISION_SECTION: RecallDecisionSection = {
 }
 
 /** Hard bounds of the design table. */
-export const MIN_ROUTE_ALIAS_CHARS = 1
-export const MAX_ROUTE_ALIAS_CHARS = 128
 export const MIN_TIMEOUT_MS = 100
 export const MAX_TIMEOUT_MS = 5000
 export const MIN_MAX_INPUT_TOKENS = 512
@@ -114,8 +108,6 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
  */
 const SettingsObject = z.object({
   mode: z.union([z.const('off'), z.const('shadow'), z.const('active')]).default(DEFAULT_RECALL_DECISION_SETTINGS.mode),
-  'route-alias': z.string().min(MIN_ROUTE_ALIAS_CHARS).max(MAX_ROUTE_ALIAS_CHARS)
-    .default(DEFAULT_RECALL_DECISION_SETTINGS.routeAlias),
   'timeout-ms': z.number().step(1).min(MIN_TIMEOUT_MS).max(MAX_TIMEOUT_MS)
     .default(DEFAULT_RECALL_DECISION_SETTINGS.timeoutMs),
   'max-input-tokens': z.number().step(1).min(MIN_MAX_INPUT_TOKENS).max(MAX_MAX_INPUT_TOKENS)
@@ -186,7 +178,6 @@ export function recallDecisionSettings(section: RecallDecisionSection | undefine
   const s = section ?? DEFAULT_RECALL_DECISION_SECTION
   return {
     mode: s.mode ?? DEFAULT_RECALL_DECISION_SETTINGS.mode,
-    routeAlias: s['route-alias'] ?? DEFAULT_RECALL_DECISION_SETTINGS.routeAlias,
     timeoutMs: s['timeout-ms'] ?? DEFAULT_RECALL_DECISION_SETTINGS.timeoutMs,
     maxInputTokens: s['max-input-tokens'] ?? DEFAULT_RECALL_DECISION_SETTINGS.maxInputTokens,
     maxCandidates: s['max-candidates'] ?? DEFAULT_RECALL_DECISION_SETTINGS.maxCandidates,

@@ -101,7 +101,6 @@ await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
 | 字段 | 默认值 | 范围与含义 |
 |---|---|---|
 | `mode` | `off` | `off` / `shadow` / `active` —— 见下方模式说明 |
-| `route-alias` | `gauge` | 1-128 字符；必须已解析为配置好的 `protocol: "systemone"` 路由 |
 | `timeout-ms` | `1500` | 100-5000；单次选择（含所有批次）的总截止时间 |
 | `max-input-tokens` | `6000` | 512-16000；单批完整请求的上限 |
 | `max-candidates` | `96` | 1-256；候选池超过该值即回退到旧 selector |
@@ -124,8 +123,10 @@ await ctx.plugin(memory, { memoryHome: '/tmp/mem' })
 
 与既有开关和旧 selector 选项的关系：`recallEnabled` 仍是总开关——为 `false` 时三种
 模式都不运行。`recallProviderName`、`recallAgentOptions` 与 `recallUseSmallFast` 只
-配置旧 selector 及其 fallback，不参与 SystemOne 路由；后者通过 `route-alias` 解析
-自己的路由。`sectionEnabled` 与 `teamEnabled` 语义不变。
+配置旧 selector 及其 fallback，不参与 SystemOne 路由；后者固定使用导出的决策通道别名
+（`DECISION_LANE_ALIAS`，即 `gauge`）——没有任何按消费者配置的别名字段，可选的
+`systemone-decisions` `routes` 钉住行只能收窄该通道的 revision 与各类上限。
+`sectionEnabled` 与 `teamEnabled` 语义不变。
 
 私有输入：决策路由只收到本轮查询加上元数据——每个候选的 scope、filename、name 与
 description，以及本轮已使用过的工具名；记忆文件正文、绝对路径、内容哈希与工具参数
@@ -142,7 +143,7 @@ selector）。**没有任何 profile 默认启用该特性**：`cc` preset 会�
 
 ```jsonc
 // settings 级联
-{ "cc-systemone-memory-recall": { "mode": "shadow", "route-alias": "gauge" } }
+{ "cc-systemone-memory-recall": { "mode": "shadow" } }
 ```
 
 ## Model Experience

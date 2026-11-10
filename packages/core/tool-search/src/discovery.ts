@@ -44,8 +44,6 @@ const CANDIDATE_ID = /^c(\d+)$/
 export interface DiscoverySettings {
   /** `off` preserves the lexical path with zero runner calls. */
   readonly mode: 'off' | 'shadow' | 'active'
-  /** Configured route alias handed to `identifyRoute`. */
-  readonly routeAlias: string
   /** Time ceiling for the whole discovery transaction. */
   readonly timeoutMs: number
   /** Per runner request, including questions and headroom. */

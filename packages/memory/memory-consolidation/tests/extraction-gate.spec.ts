@@ -10,6 +10,7 @@
  * scope identity, the exact single question key and the single-attempt rule.
  */
 
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import { describe, expect, it } from 'vitest'
 import type {
   BoundDecisionRunner,
@@ -188,7 +189,8 @@ describe('request contract', () => {
     expect(request.feature).toBe(EXTRACTION_DECISION_FEATURE)
     expect(request.feature).toBe('memory-extraction')
     expect(request.mode).toBe('active')
-    expect(request.routeAlias).toBe('gauge')
+    // The alias is the exported lane constant, never a consumer setting.
+    expect(request.routeAlias).toBe(DECISION_LANE_ALIAS)
     expect(request.questionVersion).toBe(EXTRACTION_QUESTION_VERSION)
     expect(request.questionVersion).toBe('memory-extraction-worth-v1')
     expect(request.policyVersion).toBe(EXTRACTION_POLICY_VERSION)

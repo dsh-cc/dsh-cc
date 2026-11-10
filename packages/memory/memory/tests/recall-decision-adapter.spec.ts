@@ -9,6 +9,7 @@
  * the assertions cover the exact wire request, the whole-run degradations, the
  * single legacy fallback and the ID adaptation — no network, no subagents.
  */
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import type { DecisionRequest, DecisionRouteIdentity, DecisionRun, DecisionScope, SystemOneAnswer } from '@dsh-cc/systemone'
 import { describe, expect, it } from 'vitest'
 import { MAX_RECALL_MEMORIES } from '../src/recall.ts'
@@ -193,7 +194,7 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
     const request = requests[0]!
     expect(request.feature).toBe('memory-recall')
     expect(request.mode).toBe('active')
-    expect(request.routeAlias).toBe('gauge')
+    expect(request.routeAlias).toBe(DECISION_LANE_ALIAS)
     expect(request.questionVersion).toBe(RECALL_QUESTION_VERSION)
     expect(request.questionVersion).toBe('memory-recall-noul-v1')
     expect(request.policyVersion).toBe(RECALL_POLICY_VERSION)
@@ -233,12 +234,14 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
     expect(request.questions.m0002?.instructions).toContain('candidate m0002')
   })
 
-  it('passes mode=shadow and the configured route alias straight through', async () => {
+  it('passes mode=shadow and the pinned decision lane alias straight through', async () => {
     const { runner, requests } = harness()
-    const selector = new SystemOneRecallDecisionSelector(runner, settings({ mode: 'shadow', routeAlias: 'gauge-alt' }))
+    const selector = new SystemOneRecallDecisionSelector(runner, settings({ mode: 'shadow' }))
     await selector.select(input(1), scope, signal())
     expect(requests[0]?.mode).toBe('shadow')
-    expect(requests[0]?.routeAlias).toBe('gauge-alt')
+    // The alias is not a consumer setting: every decision request names the one
+    // exported lane, so a host cannot route a decision to another alias.
+    expect(requests[0]?.routeAlias).toBe(DECISION_LANE_ALIAS)
   })
 
   it('degrades without dispatching when the route cannot be identified', async () => {

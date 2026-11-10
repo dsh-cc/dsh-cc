@@ -1,7 +1,7 @@
 /**
  * The `cc-tool-discovery` settings contract (design
  * `docs/plans/2026-11-02-systemone-05-tool-discovery.md` § "Settings"): the
- * thirteen rows of the table, `off` by default, every range rejected rather
+ * twelve rows of the table, `off` by default, every range rejected rather
  * than clamped, unknown keys ignored, and the fail-soft gate — invalid settings
  * mean the runner is never called, the lexical path runs, and the failure is
  * reported exactly once.
@@ -42,7 +42,6 @@ describe('cc-tool-discovery settings table', () => {
     expect(parseDiscoverySettings({})).toEqual({ ok: true, settings: DEFAULT_DISCOVERY_SETTINGS })
     expect(DEFAULT_DISCOVERY_SETTINGS).toEqual({
       mode: 'off',
-      routeAlias: 'gauge',
       timeoutMs: 1200,
       maxInputTokens: 4096,
       maxCandidates: 64,
@@ -60,7 +59,6 @@ describe('cc-tool-discovery settings table', () => {
   it('maps kebab-case raw keys onto the camelCase internal shape', () => {
     const settings = settingsOf({
       mode: 'shadow',
-      'route-alias': 'gauge-alt',
       'timeout-ms': 900,
       'max-input-tokens': 2048,
       'max-candidates': 12,
@@ -75,7 +73,6 @@ describe('cc-tool-discovery settings table', () => {
     })
     expect(settings).toEqual({
       mode: 'shadow',
-      routeAlias: 'gauge-alt',
       timeoutMs: 900,
       maxInputTokens: 2048,
       maxCandidates: 12,
@@ -100,17 +97,17 @@ describe('cc-tool-discovery settings table', () => {
   })
 })
 
-describe('mode and route-alias rows', () => {
+describe('mode row', () => {
   it('rejects a mode outside off|shadow|active', () => {
     expect(rejectedKeys({ mode: 'on' })).toEqual(['mode'])
     expect(rejectedKeys({ mode: 1 })).toEqual(['mode'])
   })
 
-  it('rejects an empty or non-string route-alias, and trims a valid one', () => {
-    expect(rejectedKeys({ 'route-alias': '' })).toEqual(['route-alias'])
-    expect(rejectedKeys({ 'route-alias': '   ' })).toEqual(['route-alias'])
-    expect(rejectedKeys({ 'route-alias': 7 })).toEqual(['route-alias'])
-    expect(settingsOf({ 'route-alias': ' gauge ' }).routeAlias).toBe('gauge')
+  it('ignores a stale route-alias key: the route is the exported lane alias', () => {
+    // The consumer-facing key is retired. The section keeps parsing (unknown
+    // keys are ignored by repo convention) and the runtime pins
+    // `DECISION_LANE_ALIAS` regardless of what the old key says.
+    expect(settingsOf({ mode: 'active', 'route-alias': 'gauge-alt' }).mode).toBe('active')
   })
 })
 

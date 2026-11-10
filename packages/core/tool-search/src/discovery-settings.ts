@@ -3,7 +3,8 @@
  * raw keys are kebab-case and whose internal shape is camelCase.
  *
  * Design: `docs/plans/2026-11-02-systemone-05-tool-discovery.md` § "Settings"
- * (the thirteen-row table of keys, types, ranges and defaults) and § "Lifecycle,
+ * (the twelve-row table of keys, types, ranges and defaults; the decision route
+ * is not a knob — it is the exported `DECISION_LANE_ALIAS`) and § "Lifecycle,
  * cache, and failure handling" (the fail-soft gate): when ANY setting is
  * invalid the decision runner is NOT called, the original lexical path runs,
  * and the failure is reported ONCE through the settings-namespace error path.
@@ -46,13 +47,12 @@ export type DiscoveryMode = (typeof DISCOVERY_MODES)[number]
 
 /**
  * The design's § "Settings" table, exactly: `off` by default (a dark launch),
- * `gauge` as the route alias, a 1200 ms transaction ceiling, and the first-round
- * evaluation thresholds. These are evaluation parameters, not measured quality
- * guarantees.
+ * a 1200 ms transaction ceiling, and the first-round evaluation thresholds.
+ * These are evaluation parameters, not measured quality guarantees. The route
+ * alias is deliberately absent: every consumer pins `DECISION_LANE_ALIAS`.
  */
 export const DEFAULT_DISCOVERY_SETTINGS: DiscoverySettings = {
   mode: 'off',
-  routeAlias: 'gauge',
   timeoutMs: 1200,
   maxInputTokens: 4096,
   maxCandidates: 64,
@@ -94,7 +94,6 @@ export type DiscoverySettingsParseResult = DiscoverySettingsValid | DiscoverySet
 /** Raw kebab-case key → camelCase field, purely for problem reporting and tests. */
 const RAW_KEYS = {
   mode: 'mode',
-  routeAlias: 'route-alias',
   timeoutMs: 'timeout-ms',
   maxInputTokens: 'max-input-tokens',
   maxCandidates: 'max-candidates',
@@ -179,21 +178,8 @@ export function parseDiscoverySettings(raw: unknown): DiscoverySettingsParseResu
     problems.push({ key: RAW_KEYS.mode, value: rawMode, expected: DISCOVERY_MODES.join(' | ') })
   }
 
-  // `route-alias` — a non-empty configured alias. Whether the alias is actually
-  // configured (and therefore not a model literal, which the design rejects)
-  // is decided by `identifyRoute`: only the route resolver knows the configured
-  // alias set, and a literal simply fails to resolve to a route, which falls
-  // back to the lexical path without a model call.
-  const rawAlias = section[RAW_KEYS.routeAlias]
-  const aliasIsValid = typeof rawAlias === 'string' && rawAlias.trim().length > 0
-  const routeAlias = aliasIsValid ? (rawAlias as string).trim() : defaults.routeAlias
-  if (rawAlias !== undefined && !aliasIsValid) {
-    problems.push({ key: RAW_KEYS.routeAlias, value: rawAlias, expected: 'non-empty string' })
-  }
-
   const settings: DiscoverySettings = {
     mode,
-    routeAlias,
     // `timeout-ms` is the ceiling for the whole transaction.
     timeoutMs: readInt(section, 'timeoutMs', 100, 5000, defaults.timeoutMs, problems),
     maxInputTokens: readInt(section, 'maxInputTokens', 512, 16384, defaults.maxInputTokens, problems),
@@ -289,7 +275,6 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
  */
 const DiscoverySettingsObject = z.object({
   mode: z.union([z.const('off'), z.const('shadow'), z.const('active')]).default(DEFAULT_DISCOVERY_SETTINGS.mode),
-  'route-alias': z.string().min(1).default(DEFAULT_DISCOVERY_SETTINGS.routeAlias),
   'timeout-ms': z.number().min(100).max(5000).default(DEFAULT_DISCOVERY_SETTINGS.timeoutMs),
   'max-input-tokens': z.number().min(512).max(16384).default(DEFAULT_DISCOVERY_SETTINGS.maxInputTokens),
   'max-candidates': z.number().min(1).max(128).default(DEFAULT_DISCOVERY_SETTINGS.maxCandidates),

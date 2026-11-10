@@ -15,7 +15,8 @@
  * A REAL decision route is required — mocks cannot serve as release evidence.
  * The arm therefore rewrites no model response: it drives the production wire
  * stack (`createDecisionRunner` → `systemoneDecide` → real `fetch`) with real
- * route resolution (`resolveDetailedAlias`), a trusted capability row and the
+ * route resolution (`resolveDetailedAlias`) over the single decision lane alias
+ * (`DECISION_LANE_ALIAS`), its optional `systemone-decisions` pin row and the
  * provider connection facts of the existing route configuration. Credentials
  * are read only from the route configuration's `apiKeyEnv` (the same env
  * spelling fallback the host service uses) and never enter the report.
@@ -23,10 +24,12 @@
  * Skips cleanly (never fails the suite) when `DSH_RECALL_EVAL !== '1'` or when
  * no real decision route is configured:
  *   DSH_RECALL_SYSTEMONE_ROUTE='{"provider":"…","model":"…","protocol":"systemone"}'
- *   DSH_RECALL_SYSTEMONE_CAPABILITIES='[{…capability row…}]'
+ *   DSH_RECALL_SYSTEMONE_ROUTES='{"gauge":{"revision":"…","actual-model-id":"…"}}'
  *   DSH_RECALL_SYSTEMONE_CONNECTION='{"baseURL":"https://…","apiKeyEnv":"…"}'
- * Optional `DSH_RECALL_SYSTEMONE_SETTINGS` overrides the kebab-case
- * `cc-systemone-memory-recall` section (alias, thresholds, batch/limits).
+ * `DSH_RECALL_SYSTEMONE_ROUTES` carries the `systemone-decisions` `routes` dict
+ * and is OPTIONAL: an absent row runs the registry defaults. Optional
+ * `DSH_RECALL_SYSTEMONE_SETTINGS` overrides the kebab-case
+ * `cc-systemone-memory-recall` section (thresholds, batch and size limits).
  */
 import { describe, expect, it } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -36,7 +39,13 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { apply as applyRoutes, resolveDetailedAlias } from '@dsh-cc/model-aliases'
-import { createDecisionRunner } from '@dsh-cc/systemone'
+import {
+  DEFAULT_GAUGE_CONTEXT_WINDOW,
+  DECISION_LANE_ALIAS,
+  GAUGE_MODEL_CONTEXT_WINDOWS,
+  createDecisionRunner,
+  normalizeGaugeModelId,
+} from '@dsh-cc/systemone'
 import type {
   DecisionBudgetPermitProvider,
   DecisionRouteResolution,
@@ -67,16 +76,15 @@ interface GoldenQuery {
   tolerated: string[]
 }
 
-/** One trusted capability row of the `systemone-decisions` table (kebab keys). */
-interface CapabilityRow {
-  provider: string
-  model: string
+/** One resolved `systemone-decisions` pin row (camelCase, defaults applied). */
+interface PinRow {
   revision: string
-  'actual-model-id': string
-  'per-request-tokens': number
-  'per-question-tokens': number
-  'max-output-tokens': number
-  'max-questions': number
+  /** Absent means "no version pin": any echoed model id is accepted (S1-01). */
+  actualModelId?: string
+  perRequestTokens: number
+  perQuestionTokens: number
+  maxOutputTokens: number
+  maxQuestions: number
 }
 
 /** The provider connection facts of the trusted provider record. */
@@ -89,7 +97,7 @@ interface ConnectionRow {
 interface EvalConfig {
   settings: RecallDecisionSettings
   route: { provider: string; model: string; protocol: string }
-  capability: CapabilityRow
+  pin: PinRow
   connection: ConnectionRow
   apiKey?: string
 }
@@ -103,48 +111,89 @@ function envJson<T>(name: string): T | undefined {
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0
 const isSafePositive = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 1
 
-/** Validate one capability row exactly as the host's trusted table does. */
-function capabilityOf(raw: unknown): CapabilityRow | undefined {
-  if (typeof raw !== 'object' || raw === null) return undefined
-  const row = raw as Record<string, unknown>
-  if (!isNonEmptyString(row.provider) || !isNonEmptyString(row.model) || !isNonEmptyString(row.revision)) return undefined
-  if (!isNonEmptyString(row['actual-model-id'])) return undefined
-  const bounds = ['per-request-tokens', 'per-question-tokens', 'max-output-tokens', 'max-questions'] as const
-  if (!bounds.every(key => isSafePositive(row[key]))) return undefined
-  return row as unknown as CapabilityRow
+/**
+ * The lane alias's raw pin row from a `routes` dict, or `{}` when no row pins
+ * it. Keys fold to lowercase (the host's `lookupRoutePin`), and the last
+ * matching key wins; a non-object dict is a configuration error.
+ */
+function laneRow(routes: unknown): unknown {
+  if (routes === undefined) return {}
+  if (typeof routes !== 'object' || routes === null || Array.isArray(routes)) return undefined
+  const folded = DECISION_LANE_ALIAS.toLowerCase()
+  let row: unknown = {}
+  for (const [key, value] of Object.entries(routes as Record<string, unknown>)) {
+    if (key.toLowerCase() === folded) row = value
+  }
+  return row
+}
+
+/**
+ * Resolve one pin row exactly as `@dsh-cc/decision-usage` does: absent fields
+ * take the registry defaults (measured per-model window for the input bounds,
+ * 32768 output, 32 questions, revision = the wire model id), while a PRESENT
+ * but invalid field makes the alias unusable.
+ */
+function pinOf(row: unknown, wireModel: string): PinRow | undefined {
+  if (typeof row !== 'object' || row === null || Array.isArray(row)) return undefined
+  const record = row as Record<string, unknown>
+  const has = (key: string): boolean => Object.prototype.hasOwnProperty.call(record, key)
+  const revision = has('revision') ? record.revision : wireModel
+  if (!isNonEmptyString(revision)) return undefined
+  const actualModelId = has('actual-model-id') ? record['actual-model-id'] : undefined
+  if (actualModelId !== undefined && !isNonEmptyString(actualModelId)) return undefined
+  const window = GAUGE_MODEL_CONTEXT_WINDOWS[normalizeGaugeModelId(wireModel)] ?? DEFAULT_GAUGE_CONTEXT_WINDOW
+  const perRequestTokens = has('per-request-tokens') ? record['per-request-tokens'] : window
+  const perQuestionTokens = has('per-question-tokens') ? record['per-question-tokens'] : window
+  const maxOutputTokens = has('max-output-tokens') ? record['max-output-tokens'] : 32768
+  const maxQuestions = has('max-questions') ? record['max-questions'] : 32
+  if (!isSafePositive(perRequestTokens) || !isSafePositive(perQuestionTokens)) return undefined
+  if (!isSafePositive(maxOutputTokens) || !isSafePositive(maxQuestions)) return undefined
+  return {
+    revision,
+    ...(actualModelId !== undefined ? { actualModelId } : {}),
+    perRequestTokens,
+    perQuestionTokens,
+    maxOutputTokens,
+    maxQuestions,
+  }
 }
 
 /**
  * Resolve the eval configuration from the environment, or the reason the arm
- * must skip. A route is usable only when the alias carries the `systemone`
- * protocol, EXACTLY one capability row matches `(provider, model)` (never
- * first-wins) and the connection facts plus the credential resolve.
+ * must skip. A route is usable only when the lane alias carries the `systemone`
+ * protocol and the connection facts plus the credential resolve; the pin row is
+ * optional (an absent row runs the registry defaults) but a PRESENT row with an
+ * invalid field resolves to unconfigured, exactly like the host service.
  */
 function resolveConfig(): { ok: true; config: EvalConfig } | { ok: false; reason: string } {
   let route: EvalConfig['route'] | undefined
-  let capabilities: unknown
+  let routes: unknown
   let connection: ConnectionRow | undefined
   let section: RecallDecisionSection | undefined
   try {
     route = envJson<EvalConfig['route']>('DSH_RECALL_SYSTEMONE_ROUTE')
-    capabilities = envJson<unknown>('DSH_RECALL_SYSTEMONE_CAPABILITIES')
+    routes = envJson<unknown>('DSH_RECALL_SYSTEMONE_ROUTES')
     connection = envJson<ConnectionRow>('DSH_RECALL_SYSTEMONE_CONNECTION')
     section = envJson<RecallDecisionSection>('DSH_RECALL_SYSTEMONE_SETTINGS')
   } catch {
     return { ok: false, reason: 'a DSH_RECALL_SYSTEMONE_* variable is not valid JSON' }
   }
-  if (route === undefined || capabilities === undefined || connection === undefined) {
-    return { ok: false, reason: 'no real decision route configured (set DSH_RECALL_SYSTEMONE_ROUTE/_CAPABILITIES/_CONNECTION)' }
+  if (route === undefined || connection === undefined) {
+    return { ok: false, reason: 'no real decision route configured (set DSH_RECALL_SYSTEMONE_ROUTE/_CONNECTION)' }
   }
   if (route.protocol !== 'systemone') {
     return { ok: false, reason: 'the configured alias is not a protocol:"systemone" route' }
   }
-  const rows = Array.isArray(capabilities) ? capabilities : [capabilities]
-  const matches = rows.map(capabilityOf)
-    .filter((row): row is CapabilityRow => row !== undefined)
-    .filter(row => row.provider === route!.provider && row.model === route!.model)
-  if (matches.length !== 1) {
-    return { ok: false, reason: `expected exactly one capability row for (${route.provider}, ${route.model}), found ${matches.length}` }
+  if (!isNonEmptyString(route.provider) || !isNonEmptyString(route.model)) {
+    return { ok: false, reason: 'the configured route needs a non-empty provider and model' }
+  }
+  const row = laneRow(routes)
+  if (row === undefined) {
+    return { ok: false, reason: 'DSH_RECALL_SYSTEMONE_ROUTES must be a routes dict keyed by alias' }
+  }
+  const pin = pinOf(row, route.model)
+  if (pin === undefined) {
+    return { ok: false, reason: `the ${DECISION_LANE_ALIAS} pin row is present but invalid` }
   }
   if (!isNonEmptyString(connection.baseURL)) {
     return { ok: false, reason: 'the provider connection record has no baseURL' }
@@ -161,7 +210,7 @@ function resolveConfig(): { ok: true; config: EvalConfig } | { ok: false; reason
     config: {
       settings,
       route,
-      capability: matches[0]!,
+      pin,
       connection,
       ...(apiKey !== undefined ? { apiKey } : {}),
     },
@@ -224,23 +273,25 @@ const HOST = { projectKey: 'systemone-recall-eval', sessionId: 'recall-eval-sess
  */
 function bindRunner(ctx: Context, config: EvalConfig, recorded: RunRecord[]): RecallDecisionBinding {
   const resolution = (alias: string): DecisionRouteResolution | undefined => {
-    // Production semantics: a concrete protocol:"systemone" route for THIS
-    // alias, matched to exactly one trusted capability row, plus the provider
-    // connection facts — anything less is unconfigured, never a guess.
+    // Production semantics: the ONE lane alias must resolve to a concrete
+    // protocol:"systemone" route — the eval's configured alias route — and its
+    // optional pin row narrows that route. Anything less is unconfigured, never
+    // a guess.
+    if (alias !== DECISION_LANE_ALIAS) return undefined
     const detailed = resolveDetailedAlias(ctx, alias).route
     if (detailed === undefined || detailed.protocol !== 'systemone') return undefined
     if (detailed.provider !== config.route.provider || detailed.model !== config.route.model) return undefined
-    const cap = config.capability
+    const pin = config.pin
     const route: DecisionRouteResolution = {
-      provider: cap.provider,
-      model: cap.model,
-      actualModelId: cap['actual-model-id'],
+      provider: config.route.provider,
+      model: config.route.model,
+      ...(pin.actualModelId !== undefined ? { actualModelId: pin.actualModelId } : {}),
       baseURL: config.connection.baseURL,
-      revision: cap.revision,
-      perRequestTokens: cap['per-request-tokens'],
-      perQuestionTokens: cap['per-question-tokens'],
-      maxOutputTokens: cap['max-output-tokens'],
-      maxQuestions: cap['max-questions'],
+      revision: pin.revision,
+      perRequestTokens: pin.perRequestTokens,
+      perQuestionTokens: pin.perQuestionTokens,
+      maxOutputTokens: pin.maxOutputTokens,
+      maxQuestions: pin.maxQuestions,
       ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
     }
     return route
@@ -306,7 +357,7 @@ describe('W4 recall-selection eval — SystemOne arm', () => {
     // SAME fixture tree the baseline arms select from.
     const ctx = new Context()
     await ctx.plugin(applyRoutes, {
-      modelAliases: { [config.settings.routeAlias]: config.route },
+      modelAliases: { [DECISION_LANE_ALIAS]: config.route },
     })
     await ctx.plugin(LocalFileSystem, { cwd: FIXTURES })
     // The global layer is an empty temp dir: the arm's pool is exactly the
@@ -376,10 +427,10 @@ describe('W4 recall-selection eval — SystemOne arm', () => {
         generatedAt: new Date().toISOString(),
         arm: 'systemone',
         route: {
-          alias: config.settings.routeAlias,
-          provider: config.capability.provider,
-          model: config.capability.model,
-          revision: config.capability.revision,
+          alias: DECISION_LANE_ALIAS,
+          provider: config.route.provider,
+          model: config.route.model,
+          revision: config.pin.revision,
         },
         settings: config.settings,
         queries: records,

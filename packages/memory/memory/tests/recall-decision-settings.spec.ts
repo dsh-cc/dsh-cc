@@ -24,7 +24,6 @@ import type { RecallDecisionSection } from '../src/recall-decision-settings.ts'
 /** A full valid user section (kebab-case, every field explicit). */
 const VALID_SECTION: RecallDecisionSection = {
   mode: 'active',
-  'route-alias': 'gauge',
   'timeout-ms': 2000,
   'max-input-tokens': 8000,
   'max-candidates': 64,
@@ -107,7 +106,6 @@ describe('cc-systemone-memory-recall defaults', () => {
     const read = registerRecallDecisionSettings(fakeCtx(undefined) as never)
     expect(read()).toEqual({
       mode: 'off',
-      routeAlias: 'gauge',
       timeoutMs: 1500,
       maxInputTokens: 6000,
       maxCandidates: 96,
@@ -131,7 +129,6 @@ describe('cc-systemone-memory-recall defaults', () => {
   it('maps every kebab-case external field onto the camelCase internal shape', () => {
     expect(recallDecisionSettings(VALID_SECTION)).toEqual({
       mode: 'active',
-      routeAlias: 'gauge',
       timeoutMs: 2000,
       maxInputTokens: 8000,
       maxCandidates: 64,
@@ -141,6 +138,15 @@ describe('cc-systemone-memory-recall defaults', () => {
       fallbackMaxCandidates: 128,
       fallbackMaxBytes: 32768,
     })
+  })
+
+  it('ignores the retired route-alias key: the lane alias is a constant', () => {
+    // `route-alias` is no longer a consumer setting. A stale key in a user
+    // section does not reject the section and never reaches the internal shape:
+    // every decision request names `DECISION_LANE_ALIAS` instead.
+    const stale = (SettingsSchema as Schema)({ ...VALID_SECTION, 'route-alias': 'gauge-alt' }) as RecallDecisionSection
+    expect(recallDecisionSettings(stale).mode).toBe('active')
+    expect(Object.keys(recallDecisionSettings(stale))).not.toContain('routeAlias')
   })
 
   it('falls back to the defaults through the schema when only some fields are set', () => {
@@ -177,8 +183,6 @@ describe('cc-systemone-memory-recall validation', () => {
   it('rejects out-of-range and non-integer values without clamping them', () => {
     const invalid: Partial<RecallDecisionSection>[] = [
       { mode: 'sometimes' as never },
-      { 'route-alias': '' },
-      { 'route-alias': 'a'.repeat(129) },
       { 'timeout-ms': 99 },
       { 'timeout-ms': 5001 },
       { 'timeout-ms': 1500.5 },

@@ -82,7 +82,6 @@ kebab-case；任何非法值都会整段拒绝并保留上一份快照）：
 | Key | 默认值 | 含义 |
 |---|---|---|
 | `mode` | `off` | `off` 保留原有的监听器且不发任何决策请求；`shadow` 用新协调器串行化 job，但仍照常抽取，只记录「本可跳过」；`active` 允许合格的低概率结论真正省略 fork |
-| `route-alias` | `gauge` | 已配置的决策路由别名——它只选择 System One 决策模型，绝不选择生成式的抽取模型 |
 | `timeout-ms` | `1500` | 单次决策的线上超时（整数，100–5000） |
 | `max-input-tokens` | `6000` | 单份决策状态的估算 token 预算（整数，512–16000） |
 | `max-surface-events` | `64` | 被复查事件超过此数时窗口直接抽取（整数，1–256） |
@@ -93,9 +92,11 @@ kebab-case；任何非法值都会整段拒绝并保留上一份快照）：
 | `session-state-cap` | `200` | 无在飞工作的空闲会话状态的 LRU 上限（整数，1–2000） |
 
 这些概率是实验性设置：不承诺任何准确率或收益。只有在挂载了 `@dsh-cc/decision-usage`
-（或其它提供根领域 `ccSystemoneDecisions` 服务的插件）、且其 `systemone-decisions`
-能力行配置了所请求的路由时，这道门才真正生效；缺少该服务时每个合格窗口都只是照常抽取
-（原因 `unavailable`）。在任何模式下，抽取模型、`memoryHome` 与
+（或其它提供根领域 `ccSystemoneDecisions` 服务的插件）时，这道门才真正生效。没有任何
+按消费者配置的别名字段：决策路由就是导出的通道别名（`DECISION_LANE_ALIAS`，即
+`gauge`），由模型别名注册表解析，而该服务的 `systemone-decisions` `routes` 钉住行只能
+收窄该通道（revision、可选的版本钉、token 上限）。缺少该服务时每个合格窗口都只是照常
+抽取（原因 `unavailable`）。在任何模式下，抽取模型、`memoryHome` 与
 `subagentProviderName` 都仍按原有配置工作。
 
 **`shadow` 与原有调度并非逐事件完全一致。** `shadow` 与 `off` 的预期记忆内容相同，

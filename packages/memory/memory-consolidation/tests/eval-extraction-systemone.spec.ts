@@ -34,6 +34,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import type {
   BoundDecisionRunner,
   DecisionRequest,
@@ -428,7 +429,8 @@ describe('extraction-gate golden evaluation (env-gated)', () => {
         stubProbabilities: STUB_POLICY,
         skipProbability: STUB_SKIP_THRESHOLD,
         auditEveryNSkips: DEFAULT_EXTRACTION_DECISION_SETTINGS.auditEveryNSkips,
-        routeAlias: DEFAULT_EXTRACTION_DECISION_SETTINGS.routeAlias,
+        // The harness records the one lane alias every decision request names.
+        routeAlias: DECISION_LANE_ALIAS,
         identity: IDENTITY,
       },
       releaseConclusion: 'invalid-for-release',

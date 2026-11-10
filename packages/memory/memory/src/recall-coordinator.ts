@@ -27,6 +27,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import type { DecisionRouteIdentity, DecisionScope } from '@dsh-cc/systemone'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 import type { MemorySelector } from './recall-selector.ts'
@@ -314,7 +315,7 @@ export class RecallCoordinator {
     const scope: DecisionScope | undefined = binding?.scope(ticket.originSeq)
     const identity: DecisionRouteIdentity | undefined = binding === undefined || scope === undefined
       ? undefined
-      : binding.identifyRoute(settings.routeAlias, scope)
+      : binding.identifyRoute(DECISION_LANE_ALIAS, scope)
     const dispatchKey = recallDispatchKey({
       localKey: ticket.key,
       manifestHash: recallManifestHash(seeds),

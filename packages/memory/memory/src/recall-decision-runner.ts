@@ -17,6 +17,7 @@
  * @module @dsh-cc/memory/recall-decision-runner
  */
 
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import type {
   DecisionFeature,
   DecisionRequest,
@@ -186,7 +187,7 @@ export class SystemOneRecallDecisionSelector implements RecallDecisionSelector {
 
     // The consumer never resolves a provider itself: an unidentified route
     // degrades before the first request.
-    const identity = this.runner.identifyRoute(settings.routeAlias, scope)
+    const identity = this.runner.identifyRoute(DECISION_LANE_ALIAS, scope)
     if (identity === undefined) return { kind: 'fallback', reason: 'route-unavailable' }
 
     const topicsById = new Map(input.topics.map(topic => [topic.id, topic]))
@@ -219,7 +220,7 @@ export class SystemOneRecallDecisionSelector implements RecallDecisionSelector {
       const request: DecisionRequest = {
         feature: RECALL_DECISION_FEATURE,
         mode,
-        routeAlias: settings.routeAlias,
+        routeAlias: DECISION_LANE_ALIAS,
         questionVersion: RECALL_QUESTION_VERSION,
         policyVersion: RECALL_POLICY_VERSION,
         scope,
@@ -248,7 +249,7 @@ export class SystemOneRecallDecisionSelector implements RecallDecisionSelector {
       // Re-identify after the await: a provider/model/revision that moved
       // mid-run invalidates these answers, and injecting them would pin a stale
       // checkpoint.
-      const after = this.runner.identifyRoute(settings.routeAlias, scope)
+      const after = this.runner.identifyRoute(DECISION_LANE_ALIAS, scope)
       if (after === undefined
         || after.provider !== identity.provider
         || after.model !== identity.model
