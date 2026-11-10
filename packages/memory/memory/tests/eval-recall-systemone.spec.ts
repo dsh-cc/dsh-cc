@@ -63,7 +63,10 @@ import type { RecallDecisionBinding } from '../src/recall-coordinator-support.ts
 import { macroAverage, perQueryScore } from '../eval/lib.ts'
 
 const PKG = join(import.meta.dirname, '..')
-const FIXTURES = join(PKG, 'eval', 'fixture-memory')
+/** The fixture set under eval: the small default pool or the Chinese large pool. */
+const FIXTURE_DIR = process.env.DSH_RECALL_EVAL_FIXTURE === 'zh' ? 'fixture-memory-zh' : 'fixture-memory'
+const GOLDEN_NAME = process.env.DSH_RECALL_EVAL_FIXTURE === 'zh' ? 'golden-zh.json' : 'golden.json'
+const FIXTURES = join(PKG, 'eval', FIXTURE_DIR)
 
 /** The golden classes (kept in the order `eval/lib.ts` documents). */
 const CLASSES = ['direct-topic', 'compositional', 'no-relevant-memory', 'ambiguous-phrasing'] as const
@@ -351,7 +354,7 @@ describe('W4 recall-selection eval — SystemOne arm', () => {
     const parsed = resolveConfig()
     if (!parsed.ok) throw new Error(parsed.reason)
     const config = parsed.config
-    const golden = JSON.parse(readFileSync(join(PKG, 'eval', 'golden.json'), 'utf8')) as { queries: GoldenQuery[] }
+    const golden = JSON.parse(readFileSync(join(PKG, 'eval', GOLDEN_NAME), 'utf8')) as { queries: GoldenQuery[] }
 
     // The real route layer (ccModelRoutes) and a real local filesystem over the
     // SAME fixture tree the baseline arms select from.

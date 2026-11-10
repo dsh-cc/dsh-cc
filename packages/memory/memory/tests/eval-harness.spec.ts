@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  fixtureFilenames,
   jaccardAgreement,
   macroAverage,
   perQueryScore,
@@ -123,5 +124,14 @@ describe('metric math', () => {
 describe('fixture tree sanity', () => {
   it('fixture-memory and MEMORY.md exist', () => {
     expect(existsSync(join(FIXTURES, 'MEMORY.md'))).toBe(true)
+  })
+})
+
+describe('W4 Chinese large-pool fixture (zh variant)', () => {
+  const ZH = join(PKG, 'eval', 'fixture-memory-zh')
+  it('validates the fixture and golden set (104 topics, >96 so the pre-selection path is exercised)', () => {
+    expect(validateFixtures(ZH, undefined, { countBounds: [97, 256], goldenName: 'golden-zh.json' })).toEqual([])
+    const golden = JSON.parse(readFileSync(join(PKG, 'eval', 'golden-zh.json'), 'utf8'))
+    expect(validateGolden(golden, fixtureFilenames(ZH))).toEqual([])
   })
 })

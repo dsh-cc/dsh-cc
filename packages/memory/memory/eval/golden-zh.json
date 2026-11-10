@@ -1,0 +1,445 @@
+{
+  "description": "Chinese large-pool golden set (104 topics, >96 default max-candidates so the pre-selection path is exercised). The corpus is synthetic but CJK; the mid-band probability behavior it produces is an empirical property of each run's report, not a baked-in guarantee.",
+  "clusters": [
+    {
+      "id": "flink",
+      "members": [
+        "flink-backpressure-diagnosis.md",
+        "flink-checkpoint-tuning.md",
+        "flink-window-semantics.md",
+        "flink-connector-mysql.md"
+      ],
+      "relevant": [
+        "flink-backpressure-diagnosis.md"
+      ]
+    },
+    {
+      "id": "kafka",
+      "members": [
+        "kafka-consumer-lag-runbook.md",
+        "kafka-rebalance-storm.md",
+        "kafka-partition-assignment.md",
+        "kafka-exactly-once-semantics.md"
+      ],
+      "relevant": [
+        "kafka-consumer-lag-runbook.md"
+      ]
+    },
+    {
+      "id": "alert",
+      "members": [
+        "alert-rule-governance.md",
+        "alert-fatigue-reduction.md",
+        "alert-severity-matrix.md",
+        "alert-routing-oncall.md"
+      ],
+      "relevant": [
+        "alert-rule-governance.md"
+      ]
+    },
+    {
+      "id": "quality",
+      "members": [
+        "data-quality-validation.md",
+        "data-lineage-tracking.md",
+        "data-freshness-monitoring.md",
+        "data-schema-evolution.md"
+      ],
+      "relevant": [
+        "data-quality-validation.md"
+      ]
+    },
+    {
+      "id": "release",
+      "members": [
+        "release-rollback-playbook.md",
+        "release-canary-strategy.md",
+        "release-freeze-window.md",
+        "release-hotfix-policy.md"
+      ],
+      "relevant": [
+        "release-rollback-playbook.md"
+      ]
+    },
+    {
+      "id": "capacity",
+      "members": [
+        "capacity-planning-quarterly.md",
+        "capacity-quota-allocation.md",
+        "capacity-cost-attribution.md",
+        "capacity-drill-report.md"
+      ],
+      "relevant": [
+        "capacity-planning-quarterly.md"
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "class": "direct-topic",
+      "query": "Flink 任务出现反压应该怎么排查？",
+      "required": [
+        "flink-backpressure-diagnosis.md"
+      ],
+      "tolerated": [
+        "flink-checkpoint-tuning.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "消费组积压严重，怎么应急处理？",
+      "required": [
+        "kafka-consumer-lag-runbook.md"
+      ],
+      "tolerated": [
+        "kafka-rebalance-storm.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "告警规则太多了想治理一下，从哪里入手？",
+      "required": [
+        "alert-rule-governance.md"
+      ],
+      "tolerated": [
+        "alert-fatigue-reduction.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "数据质量校验体系是怎么设计的？",
+      "required": [
+        "data-quality-validation.md"
+      ],
+      "tolerated": [
+        "data-freshness-monitoring.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "发布出了问题怎么回滚？",
+      "required": [
+        "release-rollback-playbook.md"
+      ],
+      "tolerated": [
+        "release-canary-strategy.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "季度容量规划怎么做？",
+      "required": [
+        "capacity-planning-quarterly.md"
+      ],
+      "tolerated": [
+        "capacity-quota-allocation.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "Flink 作业反压定位瓶颈算子的方法",
+      "required": [
+        "flink-backpressure-diagnosis.md"
+      ],
+      "tolerated": [
+        "flink-window-semantics.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "Kafka 消费能力下降导致积压时的处置",
+      "required": [
+        "kafka-consumer-lag-runbook.md"
+      ],
+      "tolerated": [
+        "kafka-partition-assignment.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "重复告警规则合并的治理机制",
+      "required": [
+        "alert-rule-governance.md"
+      ],
+      "tolerated": [
+        "alert-severity-matrix.md"
+      ]
+    },
+    {
+      "class": "direct-topic",
+      "query": "回滚决策的黄金十分钟指什么？",
+      "required": [
+        "release-rollback-playbook.md"
+      ],
+      "tolerated": [
+        "release-hotfix-policy.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "上线以后数据质量出问题，同时消费也在积压，怎么一起排查？",
+      "required": [
+        "data-quality-validation.md",
+        "kafka-consumer-lag-runbook.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "Flink 反压导致 checkpoint 超时，消费组跟着积压，先处理哪个？",
+      "required": [
+        "flink-backpressure-diagnosis.md",
+        "kafka-consumer-lag-runbook.md"
+      ],
+      "tolerated": [
+        "flink-checkpoint-tuning.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "要做季度容量规划，同时把告警治理一起做进评审",
+      "required": [
+        "capacity-planning-quarterly.md",
+        "alert-rule-governance.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "发布回滚之后需要重跑数据质量校验吗？",
+      "required": [
+        "release-rollback-playbook.md",
+        "data-quality-validation.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "灰度发布观察窗口的核心指标和告警分级怎么配合？",
+      "required": [
+        "release-canary-strategy.md",
+        "alert-severity-matrix.md"
+      ],
+      "tolerated": [
+        "alert-routing-oncall.md"
+      ]
+    },
+    {
+      "class": "compositional",
+      "query": "血缘追踪能不能帮助定位数据质量问题的上游？",
+      "required": [
+        "data-lineage-tracking.md",
+        "data-quality-validation.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "扩容消费者之前要先看分区分配策略吗？",
+      "required": [
+        "kafka-partition-assignment.md",
+        "kafka-consumer-lag-runbook.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "容量演练的结论怎么落进下季度的容量规划？",
+      "required": [
+        "capacity-drill-report.md",
+        "capacity-planning-quarterly.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "数据时效监控告警和数据质量规则怎么区分职责？",
+      "required": [
+        "data-freshness-monitoring.md",
+        "data-quality-validation.md"
+      ],
+      "tolerated": []
+    },
+    {
+      "class": "compositional",
+      "query": "冻结期内的紧急发布要走什么流程，出问题怎么回滚？",
+      "required": [
+        "release-freeze-window.md",
+        "release-rollback-playbook.md"
+      ],
+      "tolerated": [
+        "release-hotfix-policy.md"
+      ]
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "下周五的会议室还有空位吗？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "报销发票抬头写什么？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "我下周一入职的新同事今天到了，我该先带他去哪？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "VPN 又断了，现在是不是机房网络的问题？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "食堂这周有什么菜？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "我年假够不够下个月连休一周去旅行？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "打印机又卡纸了，要不要直接换一台新的？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "门禁卡丢了，今天能临时刷进去吗？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "这次团建我们组想住好一点的酒店，超出来的钱怎么办？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "no-relevant-memory",
+      "query": "访客来访需要提前预约吗？",
+      "required": [],
+      "tolerated": []
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "任务跑得慢怎么排查？",
+      "required": [
+        "flink-backpressure-diagnosis.md"
+      ],
+      "tolerated": [
+        "flink-checkpoint-tuning.md",
+        "spark-shuffle-tuning.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "延迟一直下不来，有什么办法？",
+      "required": [
+        "kafka-consumer-lag-runbook.md"
+      ],
+      "tolerated": [
+        "data-freshness-monitoring.md",
+        "kafka-rebalance-storm.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "告警太多看不过来了",
+      "required": [
+        "alert-fatigue-reduction.md"
+      ],
+      "tolerated": [
+        "alert-rule-governance.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "数据好像不太对，怎么确认？",
+      "required": [
+        "data-quality-validation.md"
+      ],
+      "tolerated": [
+        "data-freshness-monitoring.md",
+        "data-lineage-tracking.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "这次发布能不能直接上？",
+      "required": [
+        "release-canary-strategy.md"
+      ],
+      "tolerated": [
+        "release-rollback-playbook.md",
+        "release-freeze-window.md",
+        "release-hotfix-policy.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "机器不够用了怎么办？",
+      "required": [
+        "capacity-planning-quarterly.md"
+      ],
+      "tolerated": [
+        "capacity-quota-allocation.md",
+        "capacity-cost-attribution.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "作业又卡住了",
+      "required": [
+        "flink-backpressure-diagnosis.md"
+      ],
+      "tolerated": [
+        "flink-checkpoint-tuning.md",
+        "batch-scheduler-queue.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "群里告警刷屏了",
+      "required": [
+        "alert-fatigue-reduction.md"
+      ],
+      "tolerated": [
+        "alert-routing-oncall.md",
+        "alert-rule-governance.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "表结构要改，会不会出事？",
+      "required": [
+        "data-schema-evolution.md"
+      ],
+      "tolerated": [
+        "data-quality-validation.md",
+        "data-lineage-tracking.md"
+      ]
+    },
+    {
+      "class": "ambiguous-phrasing",
+      "query": "成本有点高，哪里能省？",
+      "required": [
+        "cost-optimization-scan.md"
+      ],
+      "tolerated": [
+        "capacity-cost-attribution.md",
+        "green-compute-initiative.md"
+      ]
+    }
+  ]
+}

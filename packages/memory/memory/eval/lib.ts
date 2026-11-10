@@ -89,11 +89,20 @@ export function fixtureFilenames(dir: string): string[] {
  * @param dir - the fixture-memory directory.
  * @param injectedIndex - test seam: per-dir MEMORY.md overrides.
  */
-export function validateFixtures(dir: string, injectedIndex?: Map<string, string>): string[] {
+/** Options for {@link validateFixtures}: the small default pool is [25, 30]. */
+export interface FixtureValidationOptions {
+  /** Allowed topic-count range (inclusive). */
+  countBounds?: readonly [number, number]
+  /** The golden file name next to the fixture directory. */
+  goldenName?: string
+}
+
+export function validateFixtures(dir: string, injectedIndex?: Map<string, string>, options?: FixtureValidationOptions): string[] {
   const problems: string[] = []
   const files = fixtureFilenames(dir)
-  if (files.length < 25 || files.length > 30) {
-    problems.push(`fixture count ${files.length} outside [25, 30]`)
+  const [min, max] = options?.countBounds ?? [25, 30]
+  if (files.length < min || files.length > max) {
+    problems.push(`fixture count ${files.length} outside [${min}, ${max}]`)
   }
   const indexText = injectedIndex?.get('MEMORY.md') ?? readFileSync(join(dir, 'MEMORY.md'), 'utf8')
   for (const file of files) {
@@ -106,7 +115,7 @@ export function validateFixtures(dir: string, injectedIndex?: Map<string, string
       problems.push(`${file} has an empty description line in MEMORY.md`)
     }
   }
-  const goldenPath = join(dir, '..', 'golden.json')
+  const goldenPath = join(dir, '..', options?.goldenName ?? 'golden.json')
   const golden = JSON.parse(readFileSync(goldenPath, 'utf8')) as GoldenFile
   const distractorClusters = golden.clusters.filter(
     cluster =>

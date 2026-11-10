@@ -12,6 +12,15 @@ W4 gate can compare three arms from the same inputs.
 
 ## Layout
 
+- `fixture-memory-zh/` + `golden-zh.json` — the Chinese LARGE-POOL variant:
+  104 synthetic CJK topics (>96, so the default `max-candidates`
+  pre-selection path is exercised) with 6 distractor clusters
+  (flink/kafka/alert/quality/release/capacity) plus 80 admin/office noise
+  topics, and a 40-query Chinese golden set (10 per class). Select it with
+  `DSH_RECALL_EVAL_FIXTURE=zh` on any arm. This is the instrument that
+  reproduces the mid-band probability distribution measured on a real
+  workspace corpus — the small English fixture's bimodal 0.02/0.99
+  distribution does not transfer.
 - `fixture-memory/` — 28 synthetic topic files (3 declared distractor
   clusters: `model-aliases`, `vitest`, `sandbox` — each mixes relevant topics
   with lookalikes) + `MEMORY.md` index.
@@ -116,6 +125,18 @@ Reports store **no credentials**: the route is identified by
 alias/provider/model/revision only — `baseURL`, `apiKey` and the credential
 variable never enter the file. Golden queries and fixture names are synthetic,
 which is the design's explicit offline-evaluation allowance.
+
+## Baseline-arm adapter requirement
+
+`eval-recall-run.spec.ts` boots the real subagent stack, so its baseline
+arms need a REAL chat adapter via `DSH_RECALL_EVAL_ADAPTER_MODULE` whose
+default export is an `LlmAdapter`. A minimal text-only adapter makes the
+suite RUN but produces degenerate empty selections (the legacy selector
+needs structured output the adapter must support); a meaningful baseline
+number requires an adapter that serves the selector's structured-output
+protocol. The import shapes are pinned for harness 0.2.2-rc.1:
+`dsh-session-persistence-jsonl` and `dsh-subagent-spawn-in-process`
+export `{ apply, ... }` with NO default.
 
 ## PRE-REGISTERED GATE
 
