@@ -1,0 +1,106 @@
+# Memory index
+
+- [Flink 任务反压诊断](flink-backpressure-diagnosis.md) — Flink 作业出现反压时的排查手册：定位瓶颈算子、分析 checkpoint 超时与 Kafka 消费速率的关系、busyOperatorMetrics 解读与扩容建议。
+- [Flink checkpoint 调优](flink-checkpoint-tuning.md) — checkpoint 间隔与最小间隔之间的权衡、unaligned checkpoint 的启用条件、状态后端 RocksDB 参数对快照耗时的影响。
+- [Flink 窗口语义](flink-window-semantics.md) — 事件时间与处理时间窗口的差异、watermark 迟到数据的 allowedLateness 处理、会话窗口的 gap 选择。
+- [Flink MySQL 连接器](flink-connector-mysql.md) — CDC source 的 exactly-once 语义、binlog 位点重启恢复、批量 sink 的写入幂等性要求。
+- [Kafka 消费组积压处理](kafka-consumer-lag-runbook.md) — 消费组积压的应急处置手册：区分生产突增与消费能力下降、扩容消费者数量受分区数上限的约束、跳读与重置 offset 的风险边界。
+- [Kafka rebalance 风暴](kafka-rebalance-storm.md) — 频繁触发的消费者组重平衡：session timeout 与 max.poll 的调参、静态成员资格、粘性分区分配器的收益。
+- [Kafka 分区分配策略](kafka-partition-assignment.md) — range 与 roundrobin 分配器的差异、跨机架感知分配、分区数规划对并行度与乱序窗口的影响。
+- [Kafka exactly-once 语义](kafka-exactly-once-semantics.md) — 幂等生产者与事务边界的配合、read_committed 隔离级别的可见性延迟、跨系统一致性的补偿设计。
+- [告警规则治理](alert-rule-governance.md) — 告警规则的准入与生命周期治理：重复规则合并、阈值与持续时间的双维度收敛、按责任域归属的定期清理机制。
+- [告警疲劳治理](alert-fatigue-reduction.md) — 值班人员被淹没在低价值告警里的应对：分级订阅、静默窗口、聚合降噪与告警信噪比度量。
+- [告警分级矩阵](alert-severity-matrix.md) — P0-P3 分级的定义矩阵：影响面与恢复紧急度的交叉判定、越级升级路径与自动降级条件。
+- [告警路由与值班](alert-routing-oncall.md) — 告警按服务归属路由到值班组的拓扑、升级策略（无人响应时逐级电话）、跨时区的轮换交接。
+- [数据质量校验体系](data-quality-validation.md) — 数据质量的核心校验体系：完整性、唯一性、一致性、及时性四类规则的定义与落地、失败任务的重跑与阻断策略。
+- [数据血缘追踪](data-lineage-tracking.md) — 表级与字段级血缘的采集方式、跨任务的影响分析、下游消费方的变更通知机制。
+- [数据时效监控](data-freshness-monitoring.md) — 分区产出延迟的监控口径、SLA 承诺与基线的偏差告警、补数任务对时效指标的影响。
+- [数据模式演进](data-schema-evolution.md) — schema 演进的兼容性分级、破坏性变更的评审门、下游消费者的灰度适配窗口。
+- [发布回滚手册](release-rollback-playbook.md) — 发布出问题时的回滚手册：回滚决策的黄金十分钟、数据库变更的可逆性前提、回滚后的数据修复与重放。
+- [灰度发布策略](release-canary-strategy.md) — 金丝雀发布的流量切分梯度、观察窗口的核心指标、自动化放量与熔断回切的阈值。
+- [发布冻结期](release-freeze-window.md) — 大促与节假日的发布冻结窗口管理、紧急修复的豁免审批流、冻结期的变更盘点。
+- [热修复政策](release-hotfix-policy.md) — hotfix 直通发布的准入条件、事后补齐的评审与测试义务、热修复的技术债登记。
+- [季度容量规划](capacity-planning-quarterly.md) — 季度容量规划的方法：业务量预测模型、水位红线与采购提前期、扩容需求的滚动评审。
+- [配额分配管理](capacity-quota-allocation.md) — 团队间的计算与存储配额分配、超配的回收机制、配额变更的审批链。
+- [成本分摊核算](capacity-cost-attribution.md) — 资源成本按业务线的分摊口径、空闲资源的识别与回收、单位成本的月度复盘。
+- [容量演练报告](capacity-drill-report.md) — 年度容量压测演练的结论：瓶颈组件清单、演练流量模型与真实峰值的差距、整改项跟踪。
+- [会议室预订规范](meeting-room-booking.md) — 会议室的预订与释放规则、投影与视频设备的报修入口、长时间占用的自动释放策略。
+- [报销流程指引](expense-reimbursement-flow.md) — 差旅与办公报销的票据要求、审批链路与到账周期、跨部门分摊的填报方式。
+- [新员工入职清单](onboarding-checklist.md) — 入职首周的账号开通、设备领取、权限申请与导师分配的完整清单。
+- [VPN 接入指引](vpn-access-guide.md) — 远程办公的 VPN 客户端安装、双因素认证的绑定、异常断连的自助排查。
+- [停车场使用规定](parking-lot-policy.md) — 工区停车位的申请与摇号、访客车位的临时授权、充电桩的使用费用。
+- [食堂每周菜单](canteen-weekly-menu.md) — 食堂一周菜单的发布渠道、清真与素食窗口的位置、月度满意度反馈。
+- [团建经费使用](team-building-budget.md) — 团建活动的人均标准、经费申请的流程与票据、跨季度结余的清零规则。
+- [年假规划建议](annual-leave-planning.md) — 年假余额的查询方式、节假日前后请假的审批口径、跨年清零的政策。
+- [打印机耗材申领](printer-supplies.md) — 打印机耗材的申领入口、彩色打印的审批、卡纸与故障的报修路径。
+- [门禁卡补办](badge-replacement.md) — 门禁卡丢失的挂失与补办、临时访客权限的申请时限、离职回收的要求。
+- [服务网格迁移](service-mesh-migration.md) — sidecar 模式的灰度接入、流量劫持的性能损耗评估、传统 SDK 的下线路径。
+- [网关限流配置](api-gateway-ratelimit.md) — 网关的令牌桶与漏桶限流配置、按租户与按接口的双维度配额、突发流量的熔断顺序。
+- [注册中心摘除](service-registry-eviction.md) — 实例健康检查失败的自动摘除、保护阈值的触发条件、脑裂场景的应对。
+- [配置中心热推](config-center-hotpush.md) — 配置热推送的灰度与回滚、监听器的幂等消费、敏感配置的加密下发。
+- [日志采集链路](log-collector-pipeline.md) — 日志采集 agent 的资源开销、多行日志的合并规则、采样与降级的开关。
+- [链路追踪采样](trace-sampling-policy.md) — 全量与尾部采样的成本权衡、慢调用全采的规则、跨服务透传的上下文字段。
+- [监控大盘规范](grafana-dashboard-standards.md) — 大盘的分层：全局概览到服务明细、图表面板的命名约定、告警面板与值班视角。
+- [Prometheus 标签基数](prometheus-label-cardinality.md) — 高基数标签的爆炸风险、relabel 的裁剪策略、预聚合的 recording rule。
+- [ES 索引生命周期](es-index-lifecycle.md) — 索引 rollover 与删除策略、冷热分层存储、分片数对写入吞吐的影响。
+- [ClickHouse 合并树](clickhouse-merge-tree.md) — MergeTree 家族的选型、分区键与排序键的设计、后台合并对新写入的可见性。
+- [Hive 元数据迁移](hive-metastore-migration.md) — metastore 的跨机房迁移步骤、双写的切换窗口、统计信息的重算。
+- [Spark shuffle 调优](spark-shuffle-tuning.md) — shuffle 分区数的经验公式、spill 到磁盘的阈值、AQE 自动倾斜处理。
+- [批调度队列管理](batch-scheduler-queue.md) — 调度队列的层级与配额、抢占策略、大任务的错峰提交约定。
+- [制品库配额](artifact-repository-quota.md) — 制品库的存储配额、镜像的保留策略、依赖缓存加速的接入。
+- [CI 流水线缓存](ci-pipeline-caching.md) — 流水线的依赖缓存命中、并发构建的资源隔离、失败重试的幂等性。
+- [Git 分支模型](git-branching-model.md) — 主干开发与特性分支的选择、合并前的 squash 约定、发布分支的 cherry-pick。
+- [代码评审清单](code-review-checklist.md) — 评审的必查清单：边界条件、日志级别、测试覆盖、事务边界。
+- [需求评审流程](requirement-review-flow.md) — 需求评审的准入材料、技术方案的提前量、变更成本的评估口径。
+- [项目管理规范](project-management-norms.md) — 里程碑与关键路径的汇报节奏、风险的登记与升级、周报的模板。
+- [OKR 撰写指南](okr-writing-guide.md) — 目标与关键结果的写法、量化的口径、季度打分的自评与他评。
+- [绩效评审周期](performance-review-cycle.md) — 绩效的自评材料、校准会议的规则、申诉的窗口。
+- [招聘面试流程](recruitment-interview-loop.md) — 面试轮次与分工、评价表的结构、offer 审批的时限。
+- [培训平台课程](training-platform-courses.md) — 内部课程的上架流程、学习时长的统计口径、外部采购课程的申请。
+- [知识库目录结构](knowledge-base-structure.md) — 知识库的分类与命名、文章的生命周期、置顶与归档的规则。
+- [文档模板库](doc-template-library.md) — 设计文档与复盘文档的模板、必填章节的说明、模板变更的通知。
+- [周报模板](weekly-report-template.md) — 周报的固定章节：进展、风险、下周计划、数据指标的链接。
+- [机房 UPS 维护](datacenter-ups-maintenance.md) — UPS 的巡检周期、电池更换的窗口、断电演练的流程。
+- [机房空调巡检](datacenter-hvac-check.md) — 机房温湿度的巡检记录、局部热点的发现、精密空调的维保。
+- [办公用品申领](office-supplies.md) — 办公用品的申领周期、领用登记、大额采购的审批。
+- [合同归档流程](contract-archive-process.md) — 合同签署后的归档时限、扫描件与原件的管理、借阅的审批。
+- [采购审批流](procurement-approval.md) — 采购需求的立项、比价与招标的界限、到货验收的节点。
+- [安全基线扫描](security-baseline-scan.md) — 主机安全基线的扫描项、修复的时限分级、豁免的申请。
+- [渗透测试报告](penetration-test-report.md) — 年度渗透测试的范围、高危漏洞的修复时限、复测的安排。
+- [权限季度复核](access-review-quarterly.md) — 账号与权限的季度复核、长期未登录账号的冻结、离职交接的核销。
+- [密钥轮换政策](secret-rotation-policy.md) — 静态密钥的轮换周期、轮换失败的双跑窗口、托管服务的密钥绑定。
+- [事故等级定义](incident-severity-definitions.md) — 事故等级的判定标准、定级与升级的时限、复盘材料的模板。
+- [事故复盘规范](incident-postmortem-norms.md) — 复盘的时间窗、责任无关的表述原则、行动项的跟踪闭环。
+- [值班表轮换](duty-roster-rotation.md) — 值班轮换的公平性算法、节假日的补偿、换班的审批。
+- [备份恢复演练](backup-restore-drill.md) — 核心库的备份策略、季度恢复演练的口径、RTO 与 RPO 的验证。
+- [跨机房容灾切换](cross-room-dr-switch.md) — 容灾切换的决策链路、数据同步的延迟口径、切换后的观察窗口。
+- [资产管理台账](asset-inventory-management.md) — 服务器与网络设备的台账管理、资产的标签规范、报废的流程。
+- [网络分区规划](network-segmentation.md) — 办公与生产网络的分区、跨区访问的申请、堡垒机的跳转路径。
+- [堡垒机审计](bastion-host-audit.md) — 生产操作的录制与回放、高危命令的拦截清单、账号的定期审计。
+- [统一身份接入](identity-sso-integration.md) — 单点登录的接入协议、应用的对接改造、多因素认证的范围。
+- [邮件组管理](mail-list-management.md) — 邮件组的创建与归档、外部成员的加入审批、垃圾邮件的申诉。
+- [群组治理](im-group-governance.md) — 内部群的创建规范、机器人消息的卡片规范、群的解散与归档。
+- [OKR 工具上手](okr-tool-onboarding.md) — OKR 系统的目标对齐视图、关键结果的进度更新口径、与绩效系统的联动。
+- [远程办公政策](remote-work-policy.md) — 远程办公的申请条件、核心时段的在线要求、报销的设备清单。
+- [弹性工时制度](flexible-hours.md) — 弹性上下班的带宽、核心协作时间、考勤的异常处理。
+- [出差指引](business-travel-guide.md) — 差旅的预订渠道、标准的舱位与酒店、行程变更的处理。
+- [访客接待](visitor-reception.md) — 访客的预约与登记、接待的动线、保密区的管控。
+- [年会策划](annual-party-planning.md) — 年会的节目征集、场地的预订、预算的审批。
+- [内部黑客松](internal-hackathon.md) — 黑客松的主题与组队、评审的维度、创意的孵化落地。
+- [创新提案箱](innovation-proposal-box.md) — 创新提案的提交与评审、小额试点的拨款、提案的公示。
+- [专利申请指引](patent-application-guide.md) — 专利交底书的撰写、代理所的对接、发明人署名的规则。
+- [开源合规](open-source-compliance.md) — 引入开源组件的许可证审查、漏洞的跟踪、对外开源的审批。
+- [三方 SDK 评审](third-party-sdk-review.md) — 三方 SDK 的准入评审、隐私合规的检查、版本的更新跟踪。
+- [隐私影响评估](privacy-impact-assessment.md) — 个人信息处理的评估模板、最小化采集的原则、跨境传输的评估。
+- [数据分级标准](data-classification-standard.md) — 数据分级的四级定义、各级的存储与传输要求、打标的责任归属。
+- [敏感数据发现](sensitive-data-discovery.md) — 敏感数据的自动扫描规则、误报的处理、新表接入的扫描时机。
+- [数据脱敏规则](data-masking-rules.md) — 展示与日志的双通道脱敏、测试环境的全量脱敏、哈希脱敏的可逆性边界。
+- [特征平台接入](model-feature-store.md) — 离线与在线特征的一致性、特征的注册与复用、回填的口径。
+- [AB 实验平台](abtest-platform.md) — 实验的分流与互斥组、显著性检验的口径、长期持有组的保护。
+- [推荐召回层](recommendation-recall.md) — 多路召回的融合、冷启动的兜底策略、召回层的去重。
+- [搜索引擎调优](search-engine-tuning.md) — 查询理解的干预词典、相关性的调参流程、长尾词的处理。
+- [成本优化扫描](cost-optimization-scan.md) — 低利用率资源的扫描模型、闲置盘与快照的清理、优化项的验收。
+- [绿色算力倡议](green-compute-initiative.md) — 算力的削峰填谷、低碳机房的调度权重、年度碳排放报告。
+- [AI 治理委员会](ai-governance-board.md) — 模型上线的评审范围、提示词变更的管理、误报申诉的流程。
+- [客服机器人运维](chatbot-ops-handbook.md) — 意图覆盖率的监控、坏例回流的人工复核、话术更新的发布节奏。
+- [标注规范](nlp-annotation-guideline.md) — 文本标注的一致性检验、边界样本的仲裁、标注工具的快捷键。

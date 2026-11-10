@@ -27,7 +27,10 @@ import { SubagentMemorySelector, type RecallCandidate } from '../src/recall.ts'
 import { macroAverage, perQueryScore, jaccardAgreement, fixtureFilenames } from '../eval/lib.ts'
 
 const PKG = join(import.meta.dirname, '..')
-const FIXTURES = join(PKG, 'eval', 'fixture-memory')
+/** The fixture set under eval: the small default pool or the Chinese large pool. */
+const FIXTURE_DIR = process.env.DSH_RECALL_EVAL_FIXTURE === 'zh' ? 'fixture-memory-zh' : 'fixture-memory'
+const GOLDEN_NAME = process.env.DSH_RECALL_EVAL_FIXTURE === 'zh' ? 'golden-zh.json' : 'golden.json'
+const FIXTURES = join(PKG, 'eval', FIXTURE_DIR)
 const env = process.env.DSH_RECALL_EVAL
 const skipReason = env !== '1' ? 'set DSH_RECALL_EVAL=1 to run the recall quality eval' : undefined
 
@@ -48,7 +51,11 @@ function routesFromEnv(): ModelRoutes | undefined {
 
 /** Mount the real subagent seam the way the in-repo integration canary does. */
 async function bootStack(): Promise<{ ctx: Context; parent: Agent }> {
-  const [{ default: AgentLoop }, { default: JsonlPersistence }, { default: SubagentRuntime }, Spawn, Testkit] = await Promise.all([
+  // On harness 0.2.2-rc.1 `dsh-session-persistence-jsonl` exports
+  // `{ apply, name, Config, ... }` with NO default; `Spawn`/`Testkit` take
+  // the module namespace (cordis resolves its `apply` export, and the
+  // named exports destructure off the namespace).
+  const [{ default: AgentLoop }, { apply: JsonlPersistence }, { default: SubagentRuntime }, Spawn, Testkit] = await Promise.all([
     import('@deepseek-ai/dsh-agent-loop'),
     import('@deepseek-ai/dsh-session-persistence-jsonl'),
     import('@deepseek-ai/dsh-subagent'),
@@ -100,7 +107,7 @@ describe('W4 recall-selection quality eval', () => {
       inherited: await runArm('inherited', new SubagentMemorySelector(stack, parent, 'spawn', undefined), candidates, files, signal),
       haiku: await runArm('haiku', new SubagentMemorySelector(stack, parent, 'spawn', toAgentOptions(haikuRoute)), candidates, files, signal),
     }
-    const golden = JSON.parse(readFileSync(join(PKG, 'eval', 'golden.json'), 'utf8')) as {
+    const golden = JSON.parse(readFileSync(join(PKG, 'eval', GOLDEN_NAME), 'utf8')) as {
       queries: { class: string; query: string; required: string[]; tolerated: string[] }[]
     }
     // Score each arm against the required set, then pair with the golden order.
@@ -154,7 +161,7 @@ function score(
 
 async function runArm(arm: string, selector: SubagentMemorySelector, candidates: RecallCandidate[], _files: string[], signal: AbortSignal): Promise<ArmResult> {
   void _files
-  const golden = JSON.parse(readFileSync(join(PKG, 'eval', 'golden.json'), 'utf8')) as {
+  const golden = JSON.parse(readFileSync(join(PKG, 'eval', GOLDEN_NAME), 'utf8')) as {
     queries: { class: string; query: string }[]
   }
   const queries: ArmResult['queries'] = []
