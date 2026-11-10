@@ -235,6 +235,7 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
       ids: ['m0002', 'm0001'],
       probabilities: { m0000: 0.25, m0001: 0.75, m0002: 0.91 },
       judged: 3,
+      greyDropped: 0,
     })
 
     expect(requests).toHaveLength(1)
@@ -303,7 +304,7 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
     const { runner, requests, identify } = harness()
     const selector = new SystemOneRecallDecisionSelector(runner, settings())
     const selection = await selector.select(input(0), scope, signal())
-    expect(selection).toEqual({ kind: 'selected', ids: [], probabilities: {}, judged: 0 })
+    expect(selection).toEqual({ kind: 'selected', ids: [], probabilities: {}, judged: 0, greyDropped: 0 })
     expect(requests).toHaveLength(0)
     expect(identify.calls).toBe(0)
   })
@@ -611,21 +612,18 @@ describe('selectRecallWithFallback: composed dispatch', () => {
     })
     const legacy = fakeLegacy(['m0000'])
     const dispatch = await selectRecallWithFallback(input(3), scope, signal(), { runner, settings: settings(), legacy: legacy.selector })
-    expect(dispatch).toEqual({ kind: 'selected', ids: ['m0002', 'm0001'], probabilities, judged: 3 })
+    expect(dispatch).toEqual({ kind: 'selected', ids: ['m0002', 'm0001'], probabilities, judged: 3, greyDropped: 0 })
     expect(legacy.calls).toHaveLength(0)
   })
 
-  it('falls back exactly once to the legacy selector on a grey-zone probability', async () => {
+  it('drops the grey-zone row per candidate and delivers the confident subset terminally', async () => {
     const { runner } = harness({ decide: request => noul(Object.fromEntries(Object.keys(request.questions).map(id => [id, { m0000: 0.1, m0001: 0.5, m0002: 0.91 }[id]]))) })
     const legacy = fakeLegacy(['m0002'])
-    const recallSignal = signal()
-    const dispatch = await selectRecallWithFallback(input(3), scope, recallSignal, { runner, settings: settings(), legacy: legacy.selector })
-    // 0.50 sits inside (0.25, 0.75): the whole pool goes to the old selector once,
-    // rather than partially adopting the 0.91 candidate.
-    expect(dispatch).toEqual({ kind: 'fallback', reason: 'grey-zone', legacy: { kind: 'selected', ids: ['m0002'] } })
-    expect(legacy.calls).toHaveLength(1)
-    expect(legacy.calls[0]?.signal).toBe(recallSignal)
-    expect(legacy.calls[0]?.candidates.map(candidate => candidate.filename)).toEqual(['m0000', 'm0001', 'm0002'])
+    const dispatch = await selectRecallWithFallback(input(3), scope, signal(), { runner, settings: settings(), legacy: legacy.selector })
+    // 0.50 sits inside (0.25, 0.75) and is dropped; the 0.91 candidate is a
+    // terminal selection (#366's band rule) — legacy never runs.
+    expect(dispatch).toEqual({ kind: 'selected', ids: ['m0002'], probabilities: { m0000: 0.1, m0001: 0.5, m0002: 0.91 }, judged: 3, greyDropped: 1 })
+    expect(legacy.calls).toHaveLength(0)
   })
 
   it('dispatches a 97-candidate pool on its top 96 without calling the legacy selector', async () => {
@@ -779,7 +777,7 @@ describe('SystemOneRecallDecisionSelector: pre-selection and admission-exact pla
     expect(requests).toHaveLength(0)
   })
 
-  it('hands the UNFILTERED pool to the legacy adaptation on a grey zone', async () => {
+  it('drops the in-band row of a 97-pool judged top-96 and stays terminal', async () => {
     const { runner, requests } = harness({
       decide: request => noul(Object.fromEntries(
         Object.keys(request.questions).map((id, index) => [id, index === 0 ? 0.5 : 0.91]),
@@ -793,11 +791,41 @@ describe('SystemOneRecallDecisionSelector: pre-selection and admission-exact pla
       signal(),
       { runner, settings: settings(), legacy: legacy.selector },
     )
-    expect(dispatch).toMatchObject({ kind: 'fallback', reason: 'grey-zone' })
-    // The decision arm judged its top 96; the legacy fallback still sees all 97.
+    // The in-band first row is dropped; the 95 remaining 0.91s are a terminal
+    // selection (behavior change vs the pre-PR-B whole-pool abstention).
+    expect(dispatch).toMatchObject({ kind: 'selected' })
+    // One in-band row per batch (4 batches of the judged top-96).
+    expect(dispatch.kind === 'selected' ? dispatch.greyDropped : -1).toBe(4)
     expect(requests.flatMap(candidateIds)).toHaveLength(96)
+    expect(legacy.calls).toHaveLength(0)
+  })
+
+  it('degrades an ALL-IN-BAND selection to the legacy fallback, distinguished from all-low by greyDropped', async () => {
+    const { runner } = harness({
+      decide: request => noul(Object.fromEntries(Object.keys(request.questions).map(id => [id, 0.5]))),
+    })
+    const topics = pool(3)
+    const legacy = fakeLegacy(['m0001'])
+    const selector = new SystemOneRecallDecisionSelector(runner, settings())
+    const selection = await selector.select({ query: 'q', recentTools: [], topics }, scope, signal())
+    // select() returns the empty selected arm with the full greyDropped
+    // count; the fallback decision is made at the withFallback layer.
+    expect(selection).toEqual({
+      kind: 'selected',
+      ids: [],
+      probabilities: { m0000: 0.5, m0001: 0.5, m0002: 0.5 },
+      judged: 3,
+      greyDropped: 3,
+    })
+    const dispatch = await selectRecallWithFallback(
+      { query: 'q', recentTools: [], topics },
+      scope,
+      signal(),
+      { runner, settings: settings(), legacy: legacy.selector },
+    )
+    expect(dispatch).toMatchObject({ kind: 'fallback', reason: 'empty-selection' })
     expect(legacy.calls).toHaveLength(1)
-    expect(legacy.calls[0]?.candidates).toHaveLength(97)
+    expect(legacy.calls[0]?.candidates).toHaveLength(3)
   })
 
   it('degrades an empty decision selection to the legacy fallback', async () => {

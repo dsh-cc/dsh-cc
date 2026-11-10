@@ -237,6 +237,8 @@ interface QueryRecord {
   delivered: string[]
   /** Per-candidate probability of the delivered pool, keyed by fixture filename. */
   probabilities: Record<string, number>
+  /** How many judged rows fell inside the grey band (0 when no selection ran). */
+  greyDropped: number
   score: { precision: number; recall: number; f1: number }
   usage: SystemOneUsage
   /** Batches whose decision answer arrived (the wire answered, not a mock). */
@@ -408,6 +410,7 @@ describe('W4 recall-selection eval — SystemOne arm', () => {
           ...(selection.kind === 'fallback' ? { reason: selection.reason } : {}),
           delivered,
           probabilities,
+          greyDropped: selection.kind === 'selected' ? selection.greyDropped : 0,
           score: perQueryScore(delivered, query.required, query.tolerated),
           usage,
           answeredBatches: recorded.filter(run => run.status === 'answered').length,

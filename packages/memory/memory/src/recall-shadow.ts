@@ -35,7 +35,7 @@ import type { RecallMessageLike } from './recall-query.ts'
  * shows how much of the pool the decision actually saw.
  */
 export type RecallShadowRecord =
-  | { kind: 'selected'; pool: number; judged: number; selected: number }
+  | { kind: 'selected'; pool: number; judged: number; selected: number; greyDropped: number }
   | { kind: 'unavailable'; reason: string; pool: number; judged: number }
   | { kind: 'skipped'; reason: 'no-service' | 'no-origin' }
 
@@ -102,7 +102,7 @@ export async function compareShadowRecall(
     .select(input, binding.scope(turn.originSeq), signal)
   if (selection.kind === 'cancelled') return
   if (selection.kind === 'selected') {
-    deps.report({ kind: 'selected', pool: topics.length, judged: selection.judged, selected: selection.ids.length })
+    deps.report({ kind: 'selected', pool: topics.length, judged: selection.judged, selected: selection.ids.length, greyDropped: selection.greyDropped })
     return
   }
   deps.report({ kind: 'unavailable', reason: selection.reason, pool: topics.length, judged: selection.judged })

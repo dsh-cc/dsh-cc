@@ -144,23 +144,24 @@ The rule above collides with corpora that cannot be judged whole. Live workspace
 - **Admission-exact planning**: for each candidate in canonical order a tentative batch is built with the exact wire state (`{query, recentTools, candidates}` over the 5-tuple `{id, scope, filename, name, description}` — never `path`, never the content hash) and its `noul` questions, then checked against the runner's own admission rules: question count against `maxQuestions`, `estimateDecisionInputTokens(...).requestTokens` against `min(maxInputTokens, perRequestTokens)`, and every per-question estimate against `min(maxInputTokens, perQuestionTokens)`; the batch size is also clamped to `min(batchSize, maxQuestions)`. A rejected add closes the batch before the candidate; a candidate that cannot fit a batch of its own degrades the run with the new selector-side reason `budget` (distinct from the runner's `unavailable-budget`).
 - **Trim loop**: `cap_batches = ceil(maxCandidates / batchSize)`. While the plan needs more batches, drop the lowest-ranked remaining candidate by the pre-selection total order and re-plan — deterministic, terminating, and it re-plans rather than one-shot re-cutting, because cheap low-rank topics are what made the early batches large. `candidates-over-limit` and `batch-count-over-cap` are therefore unreachable from the selector; `planRecallBatches` keeps its guard for direct callers.
 - **Observability**: `RecallSelection.selected` and `RecallSelection.fallback` carry `judged` (the post-pre-selection, post-trim judged pool size; 0 when no plan existed), and the shadow record carries `pool` (the caller's own post-shown-filter count) and `judged` instead of the retired `candidates` field. Fixed values and counts only.
-- **Behavior change, pools of 97-256**: a successful non-empty decision on the lexical top-K is now terminal — the old selector does not run for that turn, where previously the decision arm skipped entirely. Grey-zone, `budget` and runner-unavailable still degrade to the full-pool legacy fallback, and an EMPTY decision selection (e.g. all-low probabilities) is no longer terminal either: it degrades with reason `empty-selection` to the full-pool legacy fallback, because delivering nothing where the old branch would deliver something is a regression. Pools above 256 now judge the top-K where they previously dispatched nothing (the legacy fallback still skips above `fallback-max-candidates` 256). This band is not claimed as no-regression: its acceptance criterion is the S1-03 eval gate below — "active delivered recall no lower than the baseline". Mode `off` is untouched.
+- **Behavior change, pools of 97-256**: a successful non-empty decision on the lexical top-K is now terminal — the old selector does not run for that turn, where previously the decision arm skipped entirely. Amended (per-candidate grey-zone): an in-band probability is dropped per candidate, so a MIXED pool with a confident subset is a terminal selection like any other — only `budget`, runner-unavailable and an EMPTY decision selection still degrade to the full-pool legacy fallback, the empty one with reason `empty-selection`, because delivering nothing where the old branch would deliver something is a regression. On pools above the fallback cap (256) the run-level abstention formerly delivered nothing at all, which is why the per-candidate rule replaced it 〔src:ws:packages/memory/memory/src/recall-decision.ts#L110-L155〕. Pools above 256 now judge the top-K where they previously dispatched nothing (the legacy fallback still skips above `fallback-max-candidates` 256). This band is not claimed as no-regression: its acceptance criterion is the S1-03 eval gate below — "active delivered recall no lower than the baseline". Mode `off` is untouched.
 
 ```ts
 function selectIds(
   rows: readonly { id: string; probability: number; scope: 'workspace' | 'global' }[],
   lo: number, hi: number,
-): string[] | undefined {
-  if (rows.some(r => r.probability > lo && r.probability < hi)) return undefined;
-  return rows.filter(r => r.probability >= hi).sort((a, b) =>
+): { ids: string[]; greyDropped: number } {
+  const greyDropped = rows.filter(r => r.probability > lo && r.probability < hi).length;
+  const ids = rows.filter(r => r.probability >= hi).sort((a, b) =>
     b.probability - a.probability ||
     Number(a.scope === 'global') - Number(b.scope === 'global') ||
     Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)),
   ).slice(0, MAX_RECALL_MEMORIES).map(r => r.id);
+  return { ids, greyDropped };
 }
 ```
 
-`p=0.25` is an explicit exclusion and `p=0.75` an explicit inclusion; any item inside the open interval triggers the old selector for the whole pool, so that uncertain relevant candidates are not dropped. All-low probabilities yield a valid empty result and do not call the old selector. With five or more high-probability items, take the first five by descending probability, workspace first, then ID byte order.
+`p=0.25` is an explicit exclusion and `p=0.75` an explicit inclusion; an item inside the open interval is DROPPED per candidate (counted in `greyDropped`, independent of the selection cap) rather than poisoning the whole pool — a confident subset delivers terminally, and an empty result (all-low or all-in-band) degrades with reason `empty-selection` to the full-pool legacy fallback. With five or more high-probability items, take the first five by descending probability, workspace first, then ID byte order.
 
 The old-selector adapter temporarily places `RecallTopic.id` in `RecallCandidate.filename` and adds the original filename and scope to description; return values are looked up by ID in the local table, never by original filename. Only IDs within the current complete candidate pool may be mapped. If candidates exceed the fallback limit, or the complete fallback request exceeds the byte limit, skip recall for this round and record the reason; do not pick a subset of candidates and pass it off as a complete result.
 
@@ -199,9 +200,9 @@ Only after `agent.inject()` succeeds synchronously are the paths of the actually
 | --- | --- | --- |
 | off, or recallEnabled=false | no runner request | no shadow work exists |
 | no runner, no alias, insufficient budget, timeout, network error, invalid answer | old selector at most once | baseline as usual; comparison records unavailable |
-| probability in the grey zone, complete batching failure, single candidate over window | old selector at most once | baseline as usual; no fake comparison emitted |
+| complete batching failure, single candidate over window | old selector at most once | baseline as usual; no fake comparison emitted |
 | a judged candidate cannot be admitted at all, or the plan cannot be trimmed into the batch cap (`budget`), or the decision selected nothing (`empty-selection`) | old selector at most once, over the complete unfiltered pool | baseline as usual; comparison records unavailable |
-| everything valid and no grey zone | deterministic selected/empty result | comparison only; injecting SystemOne results is forbidden |
+| everything valid (in-band rows dropped per candidate) | deterministic selected/empty result | comparison only; injecting SystemOne results is forbidden |
 | user turn change, scope change, idle, Agent dispose | discard; fallback is forbidden | discard the stale comparison |
 | fallback over limit or itself failing | skip recall this round | baseline keeps its own behaviour as is |
 
