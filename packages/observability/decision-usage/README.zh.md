@@ -2,13 +2,21 @@
 
 [English](README.md) | 中文
 
-SystemOne 决策运行时宿主适配层——可选 `ctx.systemoneDecisions` 服务，实现 SystemOne S1-02 决策运行时计量设计（特性 S1-02）〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L1-L7〕。它把纯执行的 `createDecisionRunner`（`@dsh-cc/systemone`）接到真实宿主依赖上：可信设置、能力路由解析、持久的 JSONL 用量账本，以及锁保护的会话配额。挂载服务本身不触发任何请求、不启用任何业务；服务缺失等价于 unavailable/unconfigured。
+SystemOne 决策运行时宿主适配层——可选 `ctx.systemoneDecisions` 服务，实现 SystemOne S1-02 决策运行时计量设计（特性 S1-02）〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L1-L7〕。它把纯执行的 `createDecisionRunner`（`@dsh-cc/systemone`）接到真实宿主依赖上：可信设置、按别名解析的路由（别名本身就是路由，可选的每别名 pin 行只能收窄它）、持久的 JSONL 用量账本，以及锁保护的会话配额。挂载服务本身不触发任何请求、不启用任何业务；服务缺失等价于 unavailable/unconfigured。
 
 ## 设置
 
-单一可信命名空间 `systemone-decisions`（经 `registerNamespaceSafe` 注册 schema；settings cascade 只从 user/managed/显式 --settings 源重组该键——project/local 永远无法抬高配额或改能力上限）。原始字段为 kebab-case：`max-attempts-per-session`（默认 100）、`max-input-tokens-per-session`（1,000,000）、`max-output-tokens-per-session`（100,000）、`max-retries`（0，取值 0..2）、`capabilities`（行数组）、`ledger-max-bytes`（10,485,760，最小 1,048,576）。
+单一可信命名空间 `systemone-decisions`（经 `registerNamespaceSafe` 注册 schema；settings cascade 只从 user/managed/显式 --settings 源重组该键——project/local 永远无法抬高配额、放宽上界或提供连接信息）。原始字段为 kebab-case：`max-attempts-per-session`（默认 100）、`max-input-tokens-per-session`（1,000,000）、`max-output-tokens-per-session`（100,000）、`max-retries`（0，取值 0..2）、`routes`（每别名 pin 行，默认 `{}`）、`ledger-max-bytes`（10,485,760，最小 1,048,576）。
 
-每条能力行为 `{provider, model, revision, actual-model-id, per-request-tokens, per-question-tokens, max-output-tokens, max-questions}`，全部必填，所有上界必须是正安全整数。一条路由可用的充要条件：别名解析出具体的 `protocol: 'systemone'` 路由，且恰有一行精确匹配 `(provider, model)`——零行或重复匹配都解析为 unconfigured，绝不猜测。`identifyRoute` 只返回无密钥身份——不含 apiKey、baseURL 或 actual-model-id 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L129-L129〕。
+`routes.<alias>` 是可选 pin 行：每个字段都可选，字段缺失即"取默认值"。`revision`（默认 = 解析出的线上模型 id——后端轮换时显式设置它以改变记录的 revision）〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L129-L129〕；`actual-model-id`（可选版本 pin，非空且至多 256 字符；缺失 = 不做版本校验）；`per-request-tokens` / `per-question-tokens`（默认取自 `@dsh-cc/systemone/model-windows` 的实测每模型窗口，按归一化模型 id 取值——`llmbox_systemone/bjev` → 16384——未测量的模型取 1024）；`max-output-tokens`（32768）；`max-questions`（32）。某个字段若"存在但非法"（`null`、空串、0、负数或非安全整数），只让该别名不可用，绝不影响兄弟别名。别名字典键按小写折叠匹配（`routes.Gauge` 作用于 `gauge`）；折叠冲突为后者胜出并只告警一次。
+
+一条路由可用的充要条件：别名解析出具体的 `protocol: 'systemone'` 路由，且 provider 与 model 非空——没有能力表、没有 `(provider, model)` 精确匹配、不继承父级 header、不回退到同级别名；解析失败、协议不符或现有字段非法都解析为 unconfigured，绝不猜测。`identifyRoute` 只返回无密钥身份——不含 apiKey、baseURL 或 actual-model-id 〔src:ws:docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md#L129-L129〕。
+
+默认值只决定每次尝试的**预留**大小，不构成任何保证：每次尝试按 `per-request-tokens` 与 `max-output-tokens` 向会话配额预留，返回 answered 的尝试按实际用量结算，而状态未知的未结算尝试会**保留**其预留——因此当后端计量口径变化（例如未 pin 的后端切换）时会以 `accounting-overrun` 加持久冻结的形式暴露，这正是文档化的 fail-safe 方向。
+
+迁移：已废弃的 `capabilities` 表只要带有行就使整个 section 失败关闭（空的 `capabilities: []` 视为惰性残留而容忍）。把额外字段搬进 `routes.<alias>`，并删除 `provider`/`model`——两者由别名提供。
+
+信任模型共三层：`systemone-decisions` 为可信命名空间（仅 user/managed/显式 flag）；别名映射来自完整 cascade（已记录的残余风险——project 层只能在用户已配置的 provider 键中选择，无法凭空造出 endpoint）；决策通道的 provider 连接信息来自 cascade 对 `llm-pi-ai` 的**仅可信层视图**（`trustedSection('llm-pi-ai')`，鸭子类型探测）。若设置服务没有该 API，provider 记录即不可解析，任何路由都不成立——合并文档丢失来源信息，会采信仓库内携带的 endpoint 或凭据引用。gauge 权限通道仍读合并视图（既有弱点，另行跟踪）。
 
 ## 账本布局与配额
 
