@@ -85,8 +85,9 @@ export function recallToolsHash(tools: readonly string[]): string {
 }
 
 /**
- * Hash of the complete effective settings snapshot, so any threshold, budget or
- * route-alias change invalidates a cached dispatch key.
+ * Hash of the complete effective settings snapshot, so any threshold or budget
+ * change invalidates a cached dispatch key. The route is a fixed lane alias
+ * (`DECISION_LANE_ALIAS`) and pins through `recallRouteId`, not through settings.
  * @param settings - the current internal settings.
  * @returns the settings digest.
  */

@@ -22,10 +22,29 @@ import type {
 
 const SCOPE: DecisionScope = { projectKey: 'proj-a', sessionId: 'sess-a', agentId: 'agent-a', originSeq: 3 }
 
+/** The pinned response model id: the route's version pin and the echoed id. */
+const PINNED_MODEL = 'checkpoint-x.v1'
+
 const ROUTE: DecisionRouteResolution = {
   provider: 'testlane',
   model: 'checkpoint-x',
-  actualModelId: 'checkpoint-x.v1',
+  actualModelId: PINNED_MODEL,
+  baseURL: 'http://127.0.0.1:9',
+  apiKey: 'test-api-key-ZXQ',
+  revision: 'rev-1',
+  perRequestTokens: 16000,
+  perQuestionTokens: 4000,
+  maxOutputTokens: 2000,
+  maxQuestions: 8,
+}
+
+/**
+ * The same route with version pinning disabled: `actualModelId` is absent, so
+ * the echoed model id is recorded but never compared (C4 unpinned path).
+ */
+const UNPINNED_ROUTE: DecisionRouteResolution = {
+  provider: 'testlane',
+  model: 'checkpoint-x',
   baseURL: 'http://127.0.0.1:9',
   apiKey: 'test-api-key-ZXQ',
   revision: 'rev-1',
@@ -148,7 +167,7 @@ function scriptedFetch(script: Array<{ status: number; body: string; headers?: R
   }) as unknown as typeof fetch
 }
 
-function okFetch(model = ROUTE.actualModelId, input = 83, output = 7): typeof fetch {
+function okFetch(model: string = PINNED_MODEL, input = 83, output = 7): typeof fetch {
   return scriptedFetch([{ status: 200, body: envelope(model, input, output) }])
 }
 
@@ -246,7 +265,7 @@ describe('createDecisionRunner', () => {
     const result = await createDecisionRunner(deps).run(makeRequest())
     expect(result.status).toBe('answered')
     if (result.status !== 'answered') return
-    expect(result.model).toBe(ROUTE.actualModelId)
+    expect(result.model).toBe(PINNED_MODEL)
     expect(result.usage).toEqual({ input_tokens: 83, output_tokens: 7 })
     expect(result.decisionId).toBe('uuid-1')
     expect(result.inputHash).toMatch(/^[0-9a-f]{64}$/)
@@ -303,7 +322,7 @@ describe('createDecisionRunner', () => {
   })
 
   it('usage above the capability bound settles actual, records accounting-overrun and is not answered', async () => {
-    const { deps, rows, globalQuota } = makeDeps({ fetchImpl: okFetch(ROUTE.actualModelId, 17000, 20) })
+    const { deps, rows, globalQuota } = makeDeps({ fetchImpl: okFetch(PINNED_MODEL, 17000, 20) })
     const result = await createDecisionRunner(deps).run(makeRequest())
     expect(result.status).toBe('unavailable')
     if (result.status !== 'unavailable') return
@@ -311,7 +330,57 @@ describe('createDecisionRunner', () => {
     expect(globalQuota.permits[0]!.settleCalls).toEqual([{ kind: 'actual', usage: { input_tokens: 17000, output_tokens: 20 } }])
     const outcomeRow = rows[rows.length - 1]!
     expect(outcomeRow.reasonCode).toBe('accounting-overrun')
-    expect(outcomeRow.actualModel).toBe(ROUTE.actualModelId)
+    expect(outcomeRow.actualModel).toBe(PINNED_MODEL)
+  })
+
+  it('an unpinned route is answered on any echoed model, recorded but never rejected on identity', async () => {
+    const { deps, rows, globalQuota } = makeDeps({
+      resolveRoute: () => UNPINNED_ROUTE,
+      fetchImpl: okFetch('checkpoint-x.some-other-revision', 83, 7),
+    })
+    const result = await createDecisionRunner(deps).run(makeRequest())
+    expect(result.status).toBe('answered')
+    if (result.status !== 'answered') return
+    expect(result.model).toBe('checkpoint-x.some-other-revision')
+    expect(result.usage).toEqual({ input_tokens: 83, output_tokens: 7 })
+    expect(phases(rows)).toEqual(['reserve', 'dispatch', 'settle', 'outcome'])
+    expect(rows.map((row) => row.outcome)).toEqual(['reserved', 'dispatched', 'actual', 'answered'])
+    const outcomeRow = rows[rows.length - 1]!
+    expect(outcomeRow.actualModel).toBe('checkpoint-x.some-other-revision')
+    expect(outcomeRow.reasonCode).toBeUndefined()
+    expect(globalQuota.retainedInput).toBe(83)
+    expect(globalQuota.retainedOutput).toBe(7)
+  })
+
+  it('an unpinned route with over-bound usage records accounting-overrun and is not answered', async () => {
+    const { deps, rows, globalQuota } = makeDeps({
+      resolveRoute: () => UNPINNED_ROUTE,
+      fetchImpl: okFetch('checkpoint-x.some-other-revision', 17000, 20),
+    })
+    const result = await createDecisionRunner(deps).run(makeRequest())
+    expect(result.status).toBe('unavailable')
+    if (result.status !== 'unavailable') return
+    expect(result.reason).toBe('malformed')
+    expect(globalQuota.permits[0]!.settleCalls).toEqual([{ kind: 'actual', usage: { input_tokens: 17000, output_tokens: 20 } }])
+    const outcomeRow = rows[rows.length - 1]!
+    expect(outcomeRow.outcome).toBe('malformed')
+    expect(outcomeRow.reasonCode).toBe('accounting-overrun')
+    expect(outcomeRow.actualModel).toBe('checkpoint-x.some-other-revision')
+  })
+
+  it('a pinned mismatch keeps the mismatch path — no accounting-overrun — even when usage also busts the bounds', async () => {
+    const { deps, rows, globalQuota } = makeDeps({ fetchImpl: okFetch('checkpoint-x.OLD', 17000, 2001) })
+    const result = await createDecisionRunner(deps).run(makeRequest())
+    expect(result.status).toBe('unavailable')
+    if (result.status !== 'unavailable') return
+    expect(result.reason).toBe('malformed')
+    // charged at the reported actual usage, never refunded
+    expect(globalQuota.permits[0]!.settleCalls).toEqual([{ kind: 'actual', usage: { input_tokens: 17000, output_tokens: 2001 } }])
+    const outcomeRow = rows[rows.length - 1]!
+    expect(outcomeRow.reasonCode).toBe('model-version-mismatch')
+    expect(outcomeRow.actualModel).toBe('checkpoint-x.OLD')
+    // the freeze-on-overrun path is never reached: the mismatch wins
+    expect(rows.some((row) => row.reasonCode === 'accounting-overrun')).toBe(false)
   })
 
   it('two concurrent runs cannot over-reserve the global quota', async () => {
@@ -338,7 +407,7 @@ describe('createDecisionRunner', () => {
     expect(resultB.reason).toBe('budget')
     expect(globalQuota.peakRetainedInput).toBeLessThanOrEqual(20000)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-    openResponse(new Response(envelope(ROUTE.actualModelId, 1000, 20), { status: 200 }))
+    openResponse(new Response(envelope(PINNED_MODEL, 1000, 20), { status: 200 }))
     const resultA = await runA
     expect(resultA.status).toBe('answered')
     expect(globalQuota.retainedInput).toBe(1000)
@@ -384,7 +453,7 @@ describe('createDecisionRunner', () => {
   it('429 re-reserves a fresh permit: two reserve/settle pairs and an answered second attempt', async () => {
     const fetchImpl = scriptedFetch([
       { status: 429, body: RATE_LIMITED, headers: { 'retry-after': '0' } },
-      { status: 200, body: envelope(ROUTE.actualModelId, 100, 10) },
+      { status: 200, body: envelope(PINNED_MODEL, 100, 10) },
     ])
     const { deps, rows, globalQuota } = makeDeps({ fetchImpl, maxRetries: 1 })
     const result = await createDecisionRunner(deps).run(makeRequest())

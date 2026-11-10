@@ -49,7 +49,6 @@ ctx.toolSearch.registerDeferred({
 | 键 | 类型与范围 | 默认值 |
 | --- | --- | --- |
 | `mode` | `off \| shadow \| active` | `off` |
-| `route-alias` | 非空的已配置别名；模型字面量被拒绝 | `gauge` |
 | `timeout-ms` | 整数，100–5000；整次发现事务的时间上限 | `1200` |
 | `max-input-tokens` | 整数，512–16384；单次 runner 请求，含问题与余量 | `4096` |
 | `max-candidates` | 整数，1–128；完整候选池上限 | `64` |

@@ -37,7 +37,6 @@ function fakeSettingsCtx(initial?: Record<string, unknown>) {
 /** A fully customized, in-range section (every field differs from its default). */
 const CUSTOM_SECTION = {
   mode: 'active',
-  'route-alias': 'gauge-shadow',
   'timeout-ms': 2500,
   'max-input-tokens': 8000,
   'max-surface-events': 96,
@@ -50,7 +49,6 @@ const CUSTOM_SECTION = {
 
 const CUSTOM_SETTINGS: ExtractionDecisionSettings = {
   mode: 'active',
-  routeAlias: 'gauge-shadow',
   timeoutMs: 2500,
   maxInputTokens: 8000,
   maxSurfaceEvents: 96,
@@ -66,7 +64,6 @@ describe('cc-systemone-memory-extraction defaults', () => {
     expect(SETTINGS_NAMESPACE).toBe('cc-systemone-memory-extraction')
     expect(DEFAULT_EXTRACTION_DECISION_SETTINGS).toEqual({
       mode: 'off',
-      routeAlias: 'gauge',
       timeoutMs: 1500,
       maxInputTokens: 6000,
       maxSurfaceEvents: 64,
@@ -139,10 +136,13 @@ describe('parseExtractionDecisionSettings', () => {
     expect(parseExtractionDecisionSettings({ mode: 'always' })).toBeUndefined()
   })
 
-  it('enforces the route-alias length range', () => {
-    expect(parseExtractionDecisionSettings({ 'route-alias': '' })).toBeUndefined()
-    expect(parseExtractionDecisionSettings({ 'route-alias': 'x'.repeat(129) })).toBeUndefined()
-    expect(parseExtractionDecisionSettings({ 'route-alias': 'x'.repeat(128) })?.routeAlias).toHaveLength(128)
+  it('ignores the retired route-alias key: the lane alias is a constant', () => {
+    // The consumer-facing key is gone. A stale key neither rejects the section
+    // nor survives into the effective settings; the gate pins
+    // `DECISION_LANE_ALIAS` on every request.
+    const parsed = parseExtractionDecisionSettings({ mode: 'active', 'route-alias': 'gauge-shadow' })
+    expect(parsed?.mode).toBe('active')
+    expect(Object.keys(parsed!)).not.toContain('routeAlias')
   })
 
   it('enforces every integer knob in its design-table range', () => {

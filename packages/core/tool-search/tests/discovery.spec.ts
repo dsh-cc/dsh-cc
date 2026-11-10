@@ -32,7 +32,6 @@ import type {
 function withSettings(overrides: Partial<DiscoverySettings> = {}): DiscoverySettings {
   return {
     mode: 'active',
-    routeAlias: 'gauge',
     timeoutMs: 1200,
     maxInputTokens: 4096,
     maxCandidates: 64,

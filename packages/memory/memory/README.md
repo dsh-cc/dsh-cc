@@ -133,7 +133,6 @@ leaves every field at its default.
 | Field | Default | Range and meaning |
 |---|---|---|
 | `mode` | `off` | `off` / `shadow` / `active` — see the modes below |
-| `route-alias` | `gauge` | 1-128 chars; must already resolve to a configured `protocol: "systemone"` route |
 | `timeout-ms` | `1500` | 100-5000; total deadline for the whole selection (every batch) |
 | `max-input-tokens` | `6000` | 512-16000; per-batch limit for the complete request |
 | `max-candidates` | `96` | 1-256; a larger candidate pool falls back to the legacy selector |
@@ -161,9 +160,11 @@ Modes:
 Relationship to the existing switch and legacy options: `recallEnabled` remains
 the master switch — with `recallEnabled: false` none of the three modes run.
 `recallProviderName`, `recallAgentOptions` and `recallUseSmallFast` configure
-only the legacy selector and its fallback; they do not steer
-SystemOne routing, which resolves its own alias through
-`route-alias`. `sectionEnabled` and `teamEnabled` are unaffected.
+only the legacy selector and its fallback; they do not steer SystemOne routing,
+which always uses the exported decision lane alias (`DECISION_LANE_ALIAS`,
+`gauge`) — there is no per-consumer alias setting, and the optional
+`systemone-decisions` `routes` pin row can only narrow that lane's revision and
+bounds. `sectionEnabled` and `teamEnabled` are unaffected.
 
 Private inputs: the decision route receives the turn's query plus metadata only
 — per candidate its scope, filename, name and description, and the names of
@@ -186,7 +187,7 @@ nothing, and a mode without the plugin only ever falls back.
 
 ```jsonc
 // settings cascade
-{ "cc-systemone-memory-recall": { "mode": "shadow", "route-alias": "gauge" } }
+{ "cc-systemone-memory-recall": { "mode": "shadow" } }
 ```
 
 ## Model Experience

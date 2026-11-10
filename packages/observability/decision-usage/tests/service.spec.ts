@@ -11,9 +11,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import type { DecisionRequest, DecisionScope } from '@dsh-cc/systemone'
 import { createSystemOneDecisionsService } from '../src/service.ts'
-import type { DecisionUsageServiceDeps } from '../src/service.ts'
+import { readProviderRecord } from '../src/service.ts'
+import type { DecisionUsageServiceDeps, DecisionTrustedSettingsReader } from '../src/service.ts'
 import { decisionUsageDir, readDecisionLedger, usageFilePath } from '../src/ledger.ts'
 import { projectKeyOf } from '@dsh-cc/sidecar-io'
 import { resolve as resolvePath } from 'node:path'
@@ -31,9 +33,8 @@ afterEach(() => {
 })
 
 const ACTUAL_MODEL = 's1-ckpt-2026-01'
-const CAPABILITY_ROW = {
-  provider: 'testone',
-  model: 's1-wire',
+/** The lane alias's pin row: every field optional, all present here. */
+const PIN_ROW = {
   revision: 'rev-1',
   'actual-model-id': ACTUAL_MODEL,
   'per-request-tokens': 4000,
@@ -48,7 +49,7 @@ function settingsSection(over: Record<string, unknown> = {}): Record<string, unk
     'max-input-tokens-per-session': 100_000,
     'max-output-tokens-per-session': 10_000,
     'max-retries': 0,
-    capabilities: [CAPABILITY_ROW],
+    routes: { [DECISION_LANE_ALIAS]: PIN_ROW },
     'ledger-max-bytes': 1_048_576,
     ...over,
   }
@@ -106,6 +107,14 @@ function answeredResponse(input = 800, output = 42): Response {
   )
 }
 
+/** Stand-in cascade exposing ONLY the trusted view (`trustedSection`). */
+const TRUSTED_SETTINGS: DecisionTrustedSettingsReader = {
+  trustedSection: (key: string) =>
+    key === 'llm-pi-ai'
+      ? { providers: { testone: { baseURL: 'http://127.0.0.1:9/unreachable', apiKeyEnv: 'DECISION_USAGE_TEST_KEY' } } }
+      : undefined,
+}
+
 function makeService(over: Partial<DecisionUsageServiceDeps> = {}): {
   deps: DecisionUsageServiceDeps
   fetchSpy: ReturnType<typeof vi.fn>
@@ -115,7 +124,7 @@ function makeService(over: Partial<DecisionUsageServiceDeps> = {}): {
     readSettings: () => settingsSection(),
     home: () => tmp,
     resolveAlias: () => ({ provider: 'testone', model: 's1-wire', protocol: 'systemone' }),
-    readProviderRecord: () => ({ baseURL: 'http://127.0.0.1:9/unreachable', apiKeyEnv: 'DECISION_USAGE_TEST_KEY' }),
+    readProviderRecord: (provider) => readProviderRecord(TRUSTED_SETTINGS, provider),
     fetchImpl: fetchSpy as unknown as typeof fetch,
     ...over,
   }
@@ -126,7 +135,7 @@ function makeRequest(scope: DecisionScope, over: Partial<DecisionRequest> = {}):
   return {
     feature: 'moa-acceptance',
     mode: 'active',
-    routeAlias: 'decision',
+    routeAlias: DECISION_LANE_ALIAS,
     questionVersion: 'qv1',
     policyVersion: 'pv1',
     scope,
@@ -196,8 +205,8 @@ describe('binder contract', () => {
       if (run.status === 'unavailable') expect(run.reason).toBe('unconfigured')
     }
     // The inclusive boundary itself is valid.
-    expect(bound.identifyRoute('decision', bound.scope(3))).toBeDefined()
-    expect(bound.identifyRoute('decision', bound.scope(0))).toBeDefined()
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope(3))).toBeDefined()
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope(0))).toBeDefined()
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -212,7 +221,7 @@ describe('binder contract', () => {
     const run = await bound.run(makeRequest(minted))
     expect(run.status).toBe('unavailable')
     if (run.status === 'unavailable') expect(run.reason).toBe('unconfigured')
-    expect(bound.identifyRoute('decision', bound.scope())).toBeUndefined()
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())).toBeUndefined()
   })
 
   it('Agent dispose permanently invalidates the binder', async () => {
@@ -232,7 +241,7 @@ describe('binder contract', () => {
     const service = createSystemOneDecisionsService(deps)
     const { agent } = fakeAgent()
     const bound = service.forAgent(agent)
-    const identity = bound.identifyRoute('decision', bound.scope())
+    const identity = bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())
     expect(identity).toBeDefined()
     // Route-identity contract: no secrets and no actual-model-id.
     expect(identity).toEqual({
@@ -305,12 +314,15 @@ describe('end-to-end against a fake fetch', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('no capability row means unconfigured with zero fetch and zero rows', async () => {
+  it('a malformed quota key fails the section closed: no route, zero dispatch, zero rows', async () => {
     const { deps, fetchSpy } = makeService()
-    deps.readSettings = () => settingsSection({ capabilities: [] })
+    // The route pin row is perfectly valid; one bad quota key must still kill
+    // every route (quota admission may compute ship defaults, nothing runs).
+    deps.readSettings = () => settingsSection({ 'max-retries': 9 })
     const service = createSystemOneDecisionsService(deps)
     const { agent } = fakeAgent()
     const bound = service.forAgent(agent)
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())).toBeUndefined()
     const run = await bound.run(makeRequest(bound.scope()))
     expect(run.status).toBe('unavailable')
     if (run.status === 'unavailable') expect(run.reason).toBe('unconfigured')
@@ -320,15 +332,112 @@ describe('end-to-end against a fake fetch', () => {
     expect(ledger.rows).toHaveLength(0)
   })
 
-  it('a duplicate capability match is an invalid configuration (fail closed)', async () => {
+  it('a leftover non-empty capabilities table is invalid: no route, zero dispatch', async () => {
     const { deps, fetchSpy } = makeService()
-    deps.readSettings = () => settingsSection({ capabilities: [CAPABILITY_ROW, { ...CAPABILITY_ROW, revision: 'rev-2' }] })
+    deps.readSettings = () => settingsSection({
+      capabilities: [{ provider: 'testone', model: 's1-wire', revision: 'rev-1' }],
+    })
     const service = createSystemOneDecisionsService(deps)
     const { agent } = fakeAgent()
     const bound = service.forAgent(agent)
-    expect(bound.identifyRoute('decision', bound.scope())).toBeUndefined()
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())).toBeUndefined()
     const run = await bound.run(makeRequest(bound.scope()))
     expect(run.status).toBe('unavailable')
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('an empty leftover capabilities array is tolerated and the pin row still applies', async () => {
+    const { deps } = makeService()
+    deps.readSettings = () => settingsSection({ capabilities: [] })
+    const service = createSystemOneDecisionsService(deps)
+    const bound = service.forAgent(fakeAgent().agent)
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())).toEqual({
+      provider: 'testone',
+      model: 's1-wire',
+      revision: 'rev-1',
+      perRequestTokens: 4000,
+      perQuestionTokens: 1000,
+      maxQuestions: 4,
+      maxOutputTokens: 500,
+    })
+  })
+
+  it('no pin row still yields a usable alias-derived route on registry defaults', async () => {
+    const { deps, fetchSpy } = makeService({
+      resolveAlias: () => ({ provider: 'testone', model: 'llmbox_systemone/bjev', protocol: 'systemone' }),
+      readProviderRecord: (provider) => readProviderRecord(TRUSTED_SETTINGS, provider),
+    })
+    // The session output cap must cover the registry default reservation.
+    deps.readSettings = () => settingsSection({ routes: {}, 'max-output-tokens-per-session': 1_000_000 })
+    const service = createSystemOneDecisionsService(deps)
+    const bound = service.forAgent(fakeAgent().agent)
+    // `llmbox_systemone/bjev` keys the registry as `bjev` (16384 tokens).
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())).toEqual({
+      provider: 'testone',
+      model: 'llmbox_systemone/bjev',
+      revision: 'llmbox_systemone/bjev',
+      perRequestTokens: 16384,
+      perQuestionTokens: 16384,
+      maxQuestions: 32,
+      maxOutputTokens: 32768,
+    })
+    const run = await bound.run(makeRequest(bound.scope()))
+    expect(run.status).toBe('answered')
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('an invalid pin field disables that alias only, leaving the sibling usable', () => {
+    const { deps } = makeService({
+      resolveAlias: (alias) =>
+        alias === 'sibling'
+          ? { provider: 'testone', model: 's1-wire', protocol: 'systemone' }
+          : { provider: 'testone', model: 's1-wire', protocol: 'systemone' },
+    })
+    deps.readSettings = () => settingsSection({
+      routes: { [DECISION_LANE_ALIAS]: { 'per-request-tokens': 0 }, sibling: { 'per-request-tokens': 2048 } },
+    })
+    const service = createSystemOneDecisionsService(deps)
+    const bound = service.forAgent(fakeAgent().agent)
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())).toBeUndefined()
+    expect(bound.identifyRoute('sibling', bound.scope())?.perRequestTokens).toBe(2048)
+  })
+
+  it('a settings object without trustedSection leaves the provider record unresolvable', async () => {
+    const { deps, fetchSpy } = makeService()
+    // The merged (provenance-lossy) describe() read exists but MUST NOT be used.
+    const mergedOnly = {
+      describe: () => [{ ns: 'llm-pi-ai', user: { providers: { testone: { baseURL: 'http://repo-controlled.invalid' } } } }],
+    }
+    expect(readProviderRecord(mergedOnly as unknown as DecisionTrustedSettingsReader, 'testone')).toBeUndefined()
+    deps.readProviderRecord = (provider) =>
+      readProviderRecord(mergedOnly as unknown as DecisionTrustedSettingsReader, provider)
+    const service = createSystemOneDecisionsService(deps)
+    const bound = service.forAgent(fakeAgent().agent)
+    expect(bound.identifyRoute(DECISION_LANE_ALIAS, bound.scope())).toBeUndefined()
+    const run = await bound.run(makeRequest(bound.scope()))
+    expect(run.status).toBe('unavailable')
+    if (run.status === 'unavailable') expect(run.reason).toBe('unconfigured')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('trusted provider-record read', () => {
+  it('reads the record out of the trusted view only', () => {
+    expect(readProviderRecord(TRUSTED_SETTINGS, 'testone')).toEqual({
+      baseURL: 'http://127.0.0.1:9/unreachable',
+      apiKeyEnv: 'DECISION_USAGE_TEST_KEY',
+    })
+    expect(readProviderRecord(TRUSTED_SETTINGS, 'missing')).toBeUndefined()
+    expect(readProviderRecord(undefined, 'testone')).toBeUndefined()
+    expect(readProviderRecord({}, 'testone')).toBeUndefined()
+  })
+
+  it('a throwing trusted view is unresolvable, never a crash', () => {
+    const throwing: DecisionTrustedSettingsReader = {
+      trustedSection: () => {
+        throw new Error('boom')
+      },
+    }
+    expect(readProviderRecord(throwing, 'testone')).toBeUndefined()
   })
 })

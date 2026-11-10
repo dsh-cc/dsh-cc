@@ -292,3 +292,150 @@ describe('parallel source loading', () => {
     )
   })
 })
+
+describe('trustedSection (trusted-only view)', () => {
+  // The decision lane reads `llm-pi-ai` connection facts from the trusted
+  // layers only; the merged document (which projects the project/local layers
+  // too) stays available to every other consumer. `z.any()` registers the raw
+  // section verbatim so `settings.get` shows the merged view unchanged.
+  const LlmPiAi = 'llm-pi-ai' as SettingsNamespace
+  const Passthrough: z<Record<string, unknown>> = z.any()
+
+  /** The cascade service object consumers reach via `ctx.get('settings')`. */
+  function settingsOf(ctx: Context): SettingsCascadeProvider {
+    return ctx.get('settings') as SettingsCascadeProvider
+  }
+
+  /** The merged, provenance-lossy `llm-pi-ai` section as the seam publishes it. */
+  function mergedSection(ctx: Context): unknown {
+    const descriptor = ctx.settings.describe().find(entry => String(entry.ns) === 'llm-pi-ai')
+    return descriptor?.user
+  }
+
+  it('keeps the user-layer value while a project-layer baseURL override stays out', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'user-endpoint', apiKey: 'user-key' } } },
+    })
+    const project = await writeSettings(dir, 'project.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'project-endpoint', apiKey: 'project-key' } } },
+    })
+    const local = await writeSettings(dir, 'local.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'local-endpoint' } } },
+    })
+    const ctx = await boot({ userSettingsPath: user, projectSettingsPath: project, localSettingsPath: local })
+    ctx.settings.register(LlmPiAi, Passthrough)
+
+    // Duck-typed seam: consumers call it as `settings?.trustedSection?.(key)`.
+    const duck = ctx.get('settings') as { trustedSection?: (key: string) => unknown }
+    expect(duck.trustedSection?.('llm-pi-ai')).toEqual({
+      providers: { x: { baseURL: 'user-endpoint', apiKey: 'user-key' } },
+    })
+    expect(settingsOf(ctx).trustedSection('llm-pi-ai')).toEqual({
+      providers: { x: { baseURL: 'user-endpoint', apiKey: 'user-key' } },
+    })
+    // The merged view keeps the repo-carried contributions, unchanged.
+    expect((mergedSection(ctx) as { providers: { x: { baseURL: string } } }).providers.x.baseURL)
+      .toBe('local-endpoint')
+  })
+
+  it('merges the flag and policy layers in order after user', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'user-endpoint', apiKey: 'user-key' } } },
+    })
+    const flag = await writeSettings(dir, 'flag.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'flag-endpoint' } } },
+    })
+    const ctx = await boot({
+      userSettingsPath: user,
+      flagSettingsPath: flag,
+      policy: { remoteSettings: { 'llm-pi-ai': { providers: { y: { baseURL: 'policy-endpoint' } } } } },
+    })
+    ctx.settings.register(LlmPiAi, Passthrough)
+    expect(settingsOf(ctx).trustedSection('llm-pi-ai')).toEqual({
+      providers: {
+        x: { baseURL: 'flag-endpoint', apiKey: 'user-key' },
+        y: { baseURL: 'policy-endpoint' },
+      },
+    })
+  })
+
+  it('returns undefined when no trusted layer carries the key', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', { 'ui-theme': { theme: 'user' } })
+    const project = await writeSettings(dir, 'project.json', { 'llm-pi-ai': { providers: { x: { baseURL: 'project-endpoint' } } } })
+    const local = await writeSettings(dir, 'local.json', { 'llm-pi-ai': { providers: { x: { baseURL: 'local-endpoint' } } } })
+    const ctx = await boot({ userSettingsPath: user, projectSettingsPath: project, localSettingsPath: local })
+    ctx.settings.register(LlmPiAi, Passthrough)
+    expect(settingsOf(ctx).trustedSection('llm-pi-ai')).toBeUndefined()
+    expect(settingsOf(ctx).trustedSection('never-configured')).toBeUndefined()
+    // The key is materialized from the repo-carried layers for everyone else.
+    expect((mergedSection(ctx) as { providers: { x: { baseURL: string } } }).providers.x.baseURL)
+      .toBe('local-endpoint')
+  })
+
+  it('does not mutate the merged document or the registered value', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'user-endpoint' } } },
+    })
+    const project = await writeSettings(dir, 'project.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'project-endpoint' }, y: { baseURL: 'project-only' } } },
+    })
+    const ctx = await boot({ userSettingsPath: user, projectSettingsPath: project })
+    ctx.settings.register(LlmPiAi, Passthrough)
+    const beforeMerged = mergedSection(ctx)
+    const beforeValue = ctx.settings.get('llm-pi-ai')
+
+    const trusted = settingsOf(ctx).trustedSection('llm-pi-ai')
+    expect(trusted).toEqual({ providers: { x: { baseURL: 'user-endpoint' } } })
+
+    // The merged view and the resolved value are byte-identical to before.
+    expect(mergedSection(ctx)).toEqual(beforeMerged)
+    expect(ctx.settings.get('llm-pi-ai')).toEqual(beforeValue)
+    expect((mergedSection(ctx) as { providers: Record<string, unknown> }).providers).toEqual({
+      x: { baseURL: 'project-endpoint' },
+      y: { baseURL: 'project-only' },
+    })
+    expect((ctx.settings.get('llm-pi-ai') as { providers: Record<string, unknown> }).providers).toEqual({
+      x: { baseURL: 'project-endpoint' },
+      y: { baseURL: 'project-only' },
+    })
+
+    // The returned view is detached: a caller cannot perturb later reads.
+    ;(trusted as { providers: Record<string, unknown> }).providers['z'] = { baseURL: 'mutated' }
+    expect(settingsOf(ctx).trustedSection('llm-pi-ai')).toEqual({
+      providers: { x: { baseURL: 'user-endpoint' } },
+    })
+  })
+
+  it('never throws on junk layer shapes', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      'llm-pi-ai': { providers: { x: { baseURL: 'user-endpoint' } } },
+    })
+    const cases: unknown[] = [null, 42, 'not-an-object', ['a'], true]
+    for (const junk of cases) {
+      const ctx = await boot({
+        userSettingsPath: user,
+        flagSettingsInline: { 'llm-pi-ai': junk },
+      })
+      // No registration here: a non-object merged section already fails
+      // `register` loud upstream — this view must stay total regardless.
+      // Junk in a higher trusted layer replaces the lower value (the ordinary
+      // merge rule) and is reported as absent rather than thrown.
+      expect(() => settingsOf(ctx).trustedSection('llm-pi-ai')).not.toThrow()
+      expect(settingsOf(ctx).trustedSection('llm-pi-ai')).toBeUndefined()
+      expect(() => settingsOf(ctx).trustedSection(undefined as unknown as string)).not.toThrow()
+    }
+    // A nested junk shape inside an object layer stays total too.
+    const ctx = await boot({
+      userSettingsPath: user,
+      flagSettingsInline: { 'llm-pi-ai': { providers: 'junk' } },
+    })
+    ctx.settings.register(LlmPiAi, Passthrough)
+    expect(() => settingsOf(ctx).trustedSection('llm-pi-ai')).not.toThrow()
+    expect(settingsOf(ctx).trustedSection('llm-pi-ai')).toEqual({ providers: 'junk' })
+  })
+})

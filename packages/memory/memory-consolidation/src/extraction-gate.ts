@@ -23,6 +23,7 @@
  * @module @dsh-cc/memory-consolidation/extraction-gate
  */
 
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import type {
   BoundDecisionRunner,
   DecisionRequest,
@@ -114,7 +115,7 @@ export interface ExtractionDecisionGateDeps {
  * Read the keyless route identity, treating a throwing runner as unavailable
  * rather than as a gate fault.
  * @param runner - the bound runner.
- * @param routeAlias - the configured decision route alias.
+ * @param routeAlias - the decision lane alias ({@link DECISION_LANE_ALIAS}).
  * @param scope - the authoritative decision scope.
  */
 function identifyRoute(
@@ -243,7 +244,9 @@ export function createExtractionDecisionGate(deps: ExtractionDecisionGateDeps): 
       }
       const runner = deps.runner
       if (runner === undefined) return EXTRACT_UNAVAILABLE
-      const routeAlias = settings.routeAlias
+      // The alias is NOT a consumer setting: every SystemOne decision in this
+      // repo routes through the one exported lane constant.
+      const routeAlias = DECISION_LANE_ALIAS
       const before = identifyRoute(runner, routeAlias, scope)
       if (before === undefined) return EXTRACT_UNAVAILABLE
       const request: DecisionRequest = {

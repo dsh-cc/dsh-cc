@@ -57,7 +57,6 @@ Add the object `reducer-decision-gate` under the existing namespace `cc-context-
 | Raw key inside the object | Type, range | Default |
 | --- | --- | --- |
 | `mode` | `off \| shadow \| active` | `off` |
-| `route-alias` | non-empty configured alias; model literals rejected | `gauge` |
 | `timeout-ms` | integer, 100–3000, shared by the whole group judgement | `800` |
 | `max-input-tokens` | integer, 512–16384, per request including state, all questions and headroom | `4096` |
 | `max-source-tokens` | integer, 512–32768, cap on the complete source text | `16384` |

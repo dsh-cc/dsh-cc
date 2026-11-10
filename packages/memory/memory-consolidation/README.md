@@ -100,7 +100,6 @@ section and keeps the previous snapshot):
 | Key | Default | Meaning |
 |---|---|---|
 | `mode` | `off` | `off` keeps the legacy listener and issues no decision request; `shadow` serialises jobs through the coordinator but still extracts and only records the would-skip; `active` lets an eligible low-probability verdict skip the fork |
-| `route-alias` | `gauge` | configured decision route alias — it selects the System One decision model, never the generative extraction model |
 | `timeout-ms` | `1500` | per-decision wire timeout (integer, 100–5000) |
 | `max-input-tokens` | `6000` | estimated-token budget of one decision state (integer, 512–16000) |
 | `max-surface-events` | `64` | above this many reviewed events the window extracts directly (integer, 1–256) |
@@ -112,11 +111,14 @@ section and keeps the previous snapshot):
 
 These probabilities are experimental: there is no accuracy or benefit guarantee.
 The gate is inert unless `@dsh-cc/decision-usage` — or another provider of the
-root-realm `ccSystemoneDecisions` service — is mounted and its
-`systemone-decisions` capability rows configure the requested route; without that
-service every eligible window simply extracts (reason `unavailable`), and the
-extraction model, `memoryHome` and `subagentProviderName` keep their original
-configuration under every mode.
+root-realm `ccSystemoneDecisions` service — is mounted. There is no per-consumer
+alias setting: the decision route is the exported lane alias
+(`DECISION_LANE_ALIAS`, `gauge`) resolved by the model-alias registry, and the
+service's `systemone-decisions` `routes` pin rows can only narrow that lane
+(revision, an optional version pin, token bounds). Without that service every
+eligible window simply extracts (reason `unavailable`), and the extraction model,
+`memoryHome` and `subagentProviderName` keep their original configuration under
+every mode.
 
 **Shadow is not event-for-event identical to the legacy scheduling.** `shadow` and
 `off` produce the same expected memory content with the same read/write

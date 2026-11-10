@@ -56,28 +56,33 @@ Decision-model arm:
 ```
 DSH_RECALL_EVAL=1 \
 DSH_RECALL_SYSTEMONE_ROUTE='{"provider":"…","model":"…","protocol":"systemone"}' \
-DSH_RECALL_SYSTEMONE_CAPABILITIES='[{"provider":"…","model":"…","revision":"…","actual-model-id":"…","per-request-tokens":…,"per-question-tokens":…,"max-output-tokens":…,"max-questions":…}]' \
+DSH_RECALL_SYSTEMONE_ROUTES='{"gauge":{"revision":"…","actual-model-id":"…"}}' \
 DSH_RECALL_SYSTEMONE_CONNECTION='{"baseURL":"https://…","apiKeyEnv":"…"}' \
 pnpm vitest run packages/memory/memory/tests/eval-recall-systemone.spec.ts
 ```
 
 Requires (any missing piece makes the suite **skip**, never fail):
 
-- `DSH_RECALL_SYSTEMONE_ROUTE` — the concrete route the alias resolves to, as
-  the `ccModelRoutes` layer reports it. Only `protocol: "systemone"` counts; a
-  chat route is not a decision route.
-- `DSH_RECALL_SYSTEMONE_CAPABILITIES` — the trusted capability table rows
-  (the same shape the `systemone-decisions` settings namespace accepts). Exactly
-  one row must match `(provider, model)`; zero or several rows resolve to
-  unconfigured.
+- `DSH_RECALL_SYSTEMONE_ROUTE` — the concrete route the lane alias (`gauge`)
+  resolves to, as the `ccModelRoutes` layer reports it. Only
+  `protocol: "systemone"` counts; a chat route is not a decision route. The alias
+  itself is not a setting: every consumer pins the exported lane constant.
+- optional `DSH_RECALL_SYSTEMONE_ROUTES` — the `systemone-decisions` `routes`
+  dict (pin rows keyed by alias, the same shape the settings namespace accepts).
+  A row can only narrow the alias route: `revision` (default: the wire model id),
+  `actual-model-id` (absent: no version pin, so S1-01 validation alone applies),
+  `per-request-tokens` / `per-question-tokens` (default: the measured per-model
+  window), `max-output-tokens` (`32768`) and `max-questions` (`32`). An absent
+  row runs exactly those defaults; a present row with an invalid field resolves
+  to unconfigured, as in the host service.
 - `DSH_RECALL_SYSTEMONE_CONNECTION` — the provider record's `baseURL`, plus the
   `apiKeyEnv` name of the credential. **Credentials come only from the existing
   route configuration**: the spec reads the named environment variable the way
   the host service's env fallback does, and never invents a key.
 - optional `DSH_RECALL_SYSTEMONE_SETTINGS` — a JSON object of the kebab-case
-  `cc-systemone-memory-recall` section (alias, thresholds, batch and size
-  limits). `mode` is forced to `active` for this arm; everything else falls back
-  to the design defaults.
+  `cc-systemone-memory-recall` section (thresholds, batch and size limits).
+  `mode` is forced to `active` for this arm; everything else falls back to the
+  design defaults.
 
 The arm drives the production wire stack (`createDecisionRunner` → the
 SystemOne client → a real `fetch`) through the same `SystemOneRecallDecisionSelector`

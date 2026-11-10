@@ -55,7 +55,7 @@ This design scores every item over a bounded, fully visible pool with independen
 
 No MCP server changes, and no model network logic inside `scoreStored()`.
 The `BoundDecisionRunner` bound to the caller comes from the optional `ctx.systemoneDecisions.forAgent(exec.agent)`; it is provided by the S1-02 `decision-usage` plugin. If the service or actor is missing, fall back to the lexical path; scope is never built from tool parameters.
-First call `runner.identifyRoute(routeAlias, scope)` to obtain the keyless route identity; `undefined` falls back directly, with no separate provider resolver. Re-read the identity after every await and compare provider, model, revision, perRequestTokens, perQuestionTokens, and maxOutputTokens in full, discarding the entire judgment when any of them changes. The actual responding model is checked by S1-02 against the trusted capability's actual-model-id; consumers must not compare the gateway deployment alias directly against `answered.model`.
+First call `runner.identifyRoute(DECISION_LANE_ALIAS, scope)` to obtain the keyless route identity; `undefined` falls back directly, with no separate provider resolver. Re-read the identity after every await and compare provider, model, revision, perRequestTokens, perQuestionTokens, and maxOutputTokens in full, discarding the entire judgment when any of them changes. The actual responding model is checked by S1-02 against the optional route pin's actual-model-id (absent pin: identity unchecked, usage still bounded); consumers must not compare the gateway deployment alias directly against `answered.model`.
 
 ## Settings
 
@@ -64,7 +64,6 @@ Namespace `cc-tool-discovery`. Raw keys are kebab-case; internal types convert t
 | Key | Type, range | Default |
 | --- | --- | --- |
 | `mode` | `off \| shadow \| active` | `off` |
-| `route-alias` | non-empty configured alias; model literals rejected | `gauge` |
 | `timeout-ms` | integer, 100–5000; time ceiling for the whole discovery transaction | `1200` |
 | `max-input-tokens` | integer, 512–16384; per runner request, including questions and headroom | `4096` |
 | `max-candidates` | integer, 1–128; cap on the complete eligible pool | `64` |

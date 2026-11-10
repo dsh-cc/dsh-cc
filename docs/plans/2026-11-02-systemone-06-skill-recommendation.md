@@ -54,7 +54,7 @@ All paths below are new, identified as new implementation rather than existing A
 
 Add the package to `tsconfig.packages.json`. It is mounted explicitly following the existing plugin installation pattern and is not added to the default preset. After mounting, `mode` still defaults to off; under off the tool returns only the off result described below and does not call the runner.
 If default mounting is decided separately in the future, the preset and composition tests must be changed independently; this design must not be used to enable it as a side effect.
-Obtain S1-02's BoundDecisionRunner from the optional `ctx.systemoneDecisions.forAgent(exec.agent)`. Read provider, model, revision, and windows via `runner.identifyRoute(routeAlias, scope)` first, with no separate provider resolver; a missing service, actor, or identity yields unavailable.
+Obtain S1-02's BoundDecisionRunner from the optional `ctx.systemoneDecisions.forAgent(exec.agent)`. Read provider, model, revision, and windows via `runner.identifyRoute(DECISION_LANE_ALIAS, scope)` first, with no separate provider resolver; a missing service, actor, or identity yields unavailable.
 After every await, re-read and compare the full DecisionRouteIdentity; any field changing discards the entire recommendation. The actual responding model is checked by S1-02 against the trusted capability's actual-model-id; consumers must not compare `answered.model` directly with the gateway deployment alias. The existing `skill-claude-code`, `command-skills`, and `skill-usage` do not depend on this new package.
 
 ## Settings and tool contract
@@ -64,7 +64,6 @@ Namespace `cc-skill-recommendation`; every threshold is experimental configurati
 | Raw key | Type, range | Default |
 | --- | --- | --- |
 | `mode` | `off \| shadow \| active` | `off` |
-| `route-alias` | non-empty configured alias; model literals rejected | `gauge` |
 | `timeout-ms` | integer, 100–5000; covers all batches | `1500` |
 | `max-input-tokens` | integer, 512–16384; per batch, including state, all questions, and headroom | `4096` |
 | `max-candidates` | integer, 1–128 | `64` |

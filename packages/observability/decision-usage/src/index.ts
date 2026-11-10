@@ -12,11 +12,12 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
-import { readUserSection } from '@dsh-cc/settings-ns'
 import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { registerSettings } from './settings.ts'
-import { createSystemOneDecisionsService } from './service.ts'
-import type { DecisionProviderRecord, SystemOneDecisionsService } from './service.ts'
+import { createSystemOneDecisionsService, readProviderRecord } from './service.ts'
+import type { DecisionProviderRecord, DecisionTrustedSettingsReader, SystemOneDecisionsService } from './service.ts'
+
+export { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 
 export {
   DEFAULT_DECISION_SETTINGS,
@@ -32,18 +33,32 @@ export {
   SettingsSchema,
   decisionMaxRetries,
   decisionSessionLimits,
+  decisionSettingsOf,
   parseDecisionSettings,
   registerSettings,
 } from './settings.ts'
 export type {
-  DecisionCapabilityRowSettings,
+  DecisionRoutePinRowSettings,
   DecisionSessionLimits,
+  DecisionSettingsParseResult,
   DecisionSettingsReader,
   SystemOneDecisionsSettings,
 } from './settings.ts'
 
-export { matchDecisionCapability, resolveDecisionRoute, toDecisionCapability } from './route.ts'
-export type { DecisionAliasRoute, DecisionCapability, DecisionRouteConnection, DecisionRouteDeps } from './route.ts'
+export {
+  DEFAULT_DECISION_MAX_OUTPUT_TOKENS,
+  DEFAULT_DECISION_MAX_QUESTIONS,
+  createWarnOnce,
+  lookupRoutePin,
+  resolveDecisionRoute,
+  toDecisionRoutePin,
+} from './route.ts'
+export type {
+  DecisionAliasRoute,
+  DecisionRouteConnection,
+  DecisionRouteDeps,
+  DecisionRoutePin,
+} from './route.ts'
 
 export {
   LEDGER_DIR_NAME,
@@ -81,8 +96,13 @@ export type {
   QuotaRejection,
 } from './quota.ts'
 
-export { createSystemOneDecisionsService } from './service.ts'
-export type { DecisionProviderRecord, DecisionUsageServiceDeps, SystemOneDecisionsService } from './service.ts'
+export { createSystemOneDecisionsService, readProviderRecord } from './service.ts'
+export type {
+  DecisionProviderRecord,
+  DecisionTrustedSettingsReader,
+  DecisionUsageServiceDeps,
+  SystemOneDecisionsService,
+} from './service.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -103,19 +123,23 @@ declare module '@deepseek-ai/cordis' {
 export const name = 'decision-usage'
 
 /** The `llm-pi-ai` settings namespace the provider records live under (upstream precedent). */
-export const PROVIDER_RECORD_NAMESPACE = 'llm-pi-ai'
+export { PROVIDER_RECORD_NAMESPACE } from './service.ts'
 
-/** Read the trusted provider record for one provider key (readUserSection idiom). */
-function readProviderRecord(ctx: Context, provider: string): DecisionProviderRecord | undefined {
+/**
+ * Read the trusted provider record for one provider key.
+ *
+ * The record comes from the cascade's provenance-preserving trusted view
+ * (`trustedSection('llm-pi-ai')`, duck-typed) and NEVER from the merged
+ * `readUserSection` document: that document carries the project and local
+ * (repo-carried) layers, so a checked-in settings file could point a decision
+ * (whose answer is adopted into memory) at an endpoint it controls. Fail
+ * closed when the settings service has no such API — a route without trusted
+ * connection facts stays unconfigured.
+ */
+function readTrustedProviderRecord(ctx: Context, provider: string): DecisionProviderRecord | undefined {
   try {
-    const settings = ctx.get('settings') as { describe?: () => ReadonlyArray<{ ns?: unknown; user?: unknown }> } | undefined
-    const raw = readUserSection(settings, PROVIDER_RECORD_NAMESPACE)
-    const providers = (raw as { providers?: unknown } | undefined)?.providers
-    if (typeof providers !== 'object' || providers === null) return undefined
-    const record = (providers as Record<string, unknown>)[provider]
-    return typeof record === 'object' && record !== null
-      ? (record as DecisionProviderRecord)
-      : undefined
+    const settings = ctx.get('settings') as DecisionTrustedSettingsReader | undefined
+    return readProviderRecord(settings, provider)
   } catch {
     return undefined
   }
@@ -208,8 +232,9 @@ export function apply(ctx: Context): void {
         return undefined
       }
     },
-    readProviderRecord: (provider) => readProviderRecord(ctx, provider),
+    readProviderRecord: (provider) => readTrustedProviderRecord(ctx, provider),
     resolveCredential: (ref) => resolveCredential(ctx, ref),
+    warn: (message) => ctx.logger.warn(message),
   })
   try {
     ctx.provide('systemoneDecisions', service)

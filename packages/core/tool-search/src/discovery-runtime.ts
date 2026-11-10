@@ -23,6 +23,7 @@
  * @module @dsh-cc/tool-search/discovery-runtime
  */
 
+import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
 import {
   TOOL_DISCOVERY_POLICY_VERSION,
   TOOL_DISCOVERY_QUESTION_VERSION,
@@ -275,7 +276,7 @@ export function createDiscoveryRuntime<S>(deps: DiscoveryRuntimeDeps<S>): Discov
     }
     const scope = runner.scope()
     if (!sameScope(scope, snapshot.scope)) throw new DiscoveryFallbackSignal('stale')
-    const route = runner.identifyRoute(snapshot.settings.routeAlias, scope)
+    const route = runner.identifyRoute(DECISION_LANE_ALIAS, scope)
     if (route === undefined || !sameIdentity(route, snapshot.route)) {
       throw new DiscoveryFallbackSignal('stale')
     }
@@ -326,7 +327,7 @@ export function createDiscoveryRuntime<S>(deps: DiscoveryRuntimeDeps<S>): Discov
       const run = await runner.run({
         feature: 'tool-discovery',
         mode: settings.mode === 'shadow' ? 'shadow' : 'active',
-        routeAlias: settings.routeAlias,
+        routeAlias: DECISION_LANE_ALIAS,
         questionVersion: TOOL_DISCOVERY_QUESTION_VERSION,
         policyVersion: TOOL_DISCOVERY_POLICY_VERSION,
         scope: snapshot.scope,
@@ -402,7 +403,7 @@ export function createDiscoveryRuntime<S>(deps: DiscoveryRuntimeDeps<S>): Discov
     entries: readonly DeferredEntry[],
   ): Promise<DiscoveryEvaluation> => {
     const scope = runner.scope()
-    const route = runner.identifyRoute(settings.routeAlias, scope)
+    const route = runner.identifyRoute(DECISION_LANE_ALIAS, scope)
     // No keyless identity ⇒ no judgment and no model call (§ "File
     // responsibilities": "undefined falls back directly").
     if (route === undefined) return { kind: 'lexical', reason: 'unavailable' }

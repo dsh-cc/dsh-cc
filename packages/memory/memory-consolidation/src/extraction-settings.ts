@@ -41,8 +41,6 @@ export type ExtractionMode = 'off' | 'shadow' | 'active'
 export interface ExtractionDecisionSettings {
   /** Gate mode; `off` keeps the legacy extraction path and reads no runner. */
   mode: ExtractionMode
-  /** Configured decision route alias resolved by the S1-02 route table. */
-  routeAlias: string
   /** Per-decision wire timeout in milliseconds. */
   timeoutMs: number
   /** Upper bound on the estimated tokens of one complete decision state. */
@@ -64,14 +62,10 @@ export interface ExtractionDecisionSettings {
 /** Inclusive bounds of the experimental probability knob. */
 export const MIN_SKIP_PROBABILITY = 0
 export const MAX_SKIP_PROBABILITY = 0.2
-/** Inclusive bounds of the route-alias length. */
-export const MIN_ROUTE_ALIAS_CHARS = 1
-export const MAX_ROUTE_ALIAS_CHARS = 128
 
 /** Ship defaults (design table): the gate is off unless explicitly enabled. */
 export const DEFAULT_EXTRACTION_DECISION_SETTINGS: ExtractionDecisionSettings = Object.freeze({
   mode: 'off',
-  routeAlias: 'gauge',
   timeoutMs: 1500,
   maxInputTokens: 6000,
   maxSurfaceEvents: 64,
@@ -94,11 +88,6 @@ const ModeSchema = z.union([z.const('off'), z.const('shadow'), z.const('active')
  */
 const SettingsObject = z.object({
   mode: ModeSchema.default(DEFAULT_EXTRACTION_DECISION_SETTINGS.mode),
-  'route-alias': z
-    .string()
-    .min(MIN_ROUTE_ALIAS_CHARS)
-    .max(MAX_ROUTE_ALIAS_CHARS)
-    .default(DEFAULT_EXTRACTION_DECISION_SETTINGS.routeAlias),
   'timeout-ms': z.number().min(100).max(5000).default(DEFAULT_EXTRACTION_DECISION_SETTINGS.timeoutMs),
   'max-input-tokens': z
     .number()
@@ -171,9 +160,6 @@ export function parseExtractionDecisionSettings(raw: unknown): ExtractionDecisio
   }
   const mode = resolved.mode
   if (mode !== 'off' && mode !== 'shadow' && mode !== 'active') return undefined
-  const routeAlias = resolved['route-alias']
-  if (typeof routeAlias !== 'string') return undefined
-  if (routeAlias.length < MIN_ROUTE_ALIAS_CHARS || routeAlias.length > MAX_ROUTE_ALIAS_CHARS) return undefined
   // Bounds inclusive on both ends; `z.number().max` yields floats, so each
   // integer knob is re-checked as a safe integer in its design-table range.
   if (!isIntegerIn(resolved['timeout-ms'], 100, 5000)) return undefined
@@ -188,7 +174,6 @@ export function parseExtractionDecisionSettings(raw: unknown): ExtractionDecisio
   if (skipProbability < MIN_SKIP_PROBABILITY || skipProbability > MAX_SKIP_PROBABILITY) return undefined
   return Object.freeze({
     mode,
-    routeAlias,
     timeoutMs: resolved['timeout-ms'] as number,
     maxInputTokens: resolved['max-input-tokens'] as number,
     maxSurfaceEvents: resolved['max-surface-events'] as number,

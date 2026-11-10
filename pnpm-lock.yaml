@@ -979,6 +979,9 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/systemone':
+        specifier: workspace:^
+        version: link:../../llm-tuning/systemone
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis

@@ -53,7 +53,7 @@ The cost benefit must be verified by real metering, not inferred from "a few few
 | `packages/compaction/tool-use-summary/tests/ledger.spec.ts` | modify: new skipped rows read back, old ok rows stay compatible |
 | `packages/compaction/tool-use-summary/package.json` | modify: declare the systemone decision contract dependency |
 
-Inject a BoundDecisionRunner from the optional `ctx.systemoneDecisions.forAgent(exec.agent)`; when it is missing, generate directly. First read the keyless identity and windows with `runner.identifyRoute(routeAlias, scope)`; do not write another provider resolver; a missing identity falls back to the old generation.
+Inject a BoundDecisionRunner from the optional `ctx.systemoneDecisions.forAgent(exec.agent)`; when it is missing, generate directly. First read the keyless identity and windows with `runner.identifyRoute(DECISION_LANE_ALIAS, scope)`; do not write another provider resolver; a missing identity falls back to the old generation.
 Re-read and compare the complete DecisionRouteIdentity after every await; any change in provider, model, revision or window discards the whole set of suggestions and takes the old generation path. The actual response model is validated by S1-02's actual-model-id check on the trusted capability; the gateway deployment alias must not be compared directly with answered.model. Summary generation still uses the existing side-query; do not switch it to the System One model.
 S1-02 alone owns decision metering and hash auditing. The existing TUS ledger only additionally records why this call has no summary and the decisionId; it does not copy answers, usage or full state.
 
@@ -64,7 +64,6 @@ The existing namespace `cc-tool-use-summary` gains an object `decision-gate`; th
 | Key | Type, range | Default |
 | --- | --- | --- |
 | `mode` | `off \| shadow \| active` | `off` |
-| `route-alias` | non-empty configured alias; model literals forbidden | `gauge` |
 | `timeout-ms` | integer, 100–3000, deadline shared by all chunks | `800` |
 | `max-input-tokens` | integer, 512–16384, per request including state, questions and margin | `4096` |
 | `min-source-tokens` | integer, 256–32768; below this, generate the old way directly | `2048` |

@@ -38,7 +38,6 @@ Add an `moa.acceptance.dimensions` sub-object. The old `acceptance.enabled`, `sh
 | raw field | default | range |
 |---|---|---|
 | `mode` | `off` | off/shadow/active |
-| `route-alias` | `gauge` | non-empty configured SystemOne alias |
 | `timeout-ms` | 1500 | integer 100..8000 |
 | `max-input-tokens` | 4000 | integer 512..16000 |
 | `min-addresses-request` | 0.80 | finite number 0..1 |

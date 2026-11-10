@@ -50,7 +50,6 @@ Settings live in the `cc-tool-discovery` namespace; raw keys are kebab-case:
 | Key | Type, range | Default |
 | --- | --- | --- |
 | `mode` | `off \| shadow \| active` | `off` |
-| `route-alias` | non-empty configured alias; model literals rejected | `gauge` |
 | `timeout-ms` | integer, 100–5000; time ceiling for the whole discovery transaction | `1200` |
 | `max-input-tokens` | integer, 512–16384; per runner request, including questions and headroom | `4096` |
 | `max-candidates` | integer, 1–128; cap on the complete eligible pool | `64` |

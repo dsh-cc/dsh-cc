@@ -2,7 +2,7 @@
  * The optional `ctx.systemoneDecisions` host service (design §"Public
  * interface", §"Architecture and files"): `forAgent(agent)` returns a
  * BoundDecisionRunner wiring the pure createDecisionRunner to real deps —
- * trusted settings, capability route resolution, the durable quota provider
+ * trusted settings, alias + pin-row route resolution, the durable quota provider
  * and the locked ledger append. The service itself NEVER triggers a request;
  * mounting it enables no business.
  *
@@ -36,9 +36,9 @@ import type {
 import { decisionUsageDir } from './ledger.ts'
 import { createDecisionQuota, DecisionQuotaError } from './quota.ts'
 import type { DecisionQuota } from './quota.ts'
-import { resolveDecisionRoute } from './route.ts'
-import { decisionMaxRetries, decisionSessionLimits, parseDecisionSettings } from './settings.ts'
-import type { SystemOneDecisionsSettings } from './settings.ts'
+import { createWarnOnce, resolveDecisionRoute } from './route.ts'
+import { decisionMaxRetries, decisionSessionLimits, decisionSettingsOf, parseDecisionSettings } from './settings.ts'
+import type { DecisionSettingsParseResult } from './settings.ts'
 
 /** The service face mounted at `ctx.systemoneDecisions`. */
 export interface SystemOneDecisionsService {
@@ -50,6 +50,51 @@ export interface SystemOneDecisionsService {
 export interface DecisionProviderRecord {
   baseURL?: unknown
   apiKeyEnv?: unknown
+}
+
+/**
+ * The settings-service face the plugin reads provider records through: the
+ * provenance-preserving trusted view (`SettingsCascadeProvider.trustedSection`,
+ * duck-typed). The merged `describe()` read is provenance-lossy — it carries
+ * project/local (repo-carried) overrides — so it is NEVER consulted here.
+ */
+export interface DecisionTrustedSettingsReader {
+  trustedSection?(key: string): unknown
+}
+
+/** The `llm-pi-ai` settings namespace the trusted provider records live under. */
+export const PROVIDER_RECORD_NAMESPACE = 'llm-pi-ai'
+
+/**
+ * Read one provider record from the TRUSTED view of `llm-pi-ai`.
+ *
+ * Fail-closed by design: when the settings service exposes no callable
+ * `trustedSection`, the record is unresolvable (undefined ⇒ the route stays
+ * unconfigured). There is deliberately no fallback to the merged
+ * `readUserSection` read — that document mixes the project and local layers
+ * in, so a repo-carried `providers.*` row could supply a decision endpoint or
+ * credential reference (endpoint exfiltration into decisions adopted into
+ * memory). No route is better than a repo-controlled one.
+ * @param settings - the host settings service (possibly absent).
+ * @param provider - the provider key to look up.
+ * @returns the raw record, or undefined when unresolvable.
+ */
+export function readProviderRecord(
+  settings: DecisionTrustedSettingsReader | undefined,
+  provider: string,
+): DecisionProviderRecord | undefined {
+  try {
+    if (typeof settings?.trustedSection !== 'function') return undefined
+    const raw = settings.trustedSection(PROVIDER_RECORD_NAMESPACE)
+    const providers = (raw as { providers?: unknown } | undefined)?.providers
+    if (typeof providers !== 'object' || providers === null) return undefined
+    const record = (providers as Record<string, unknown>)[provider]
+    return typeof record === 'object' && record !== null
+      ? (record as DecisionProviderRecord)
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /** Injectable seams: every host dependency is explicit for testability. */
@@ -64,6 +109,8 @@ export interface DecisionUsageServiceDeps {
   readProviderRecord(provider: string): DecisionProviderRecord | undefined
   /** Credential chain (credentials service); env spelling is the built-in fallback. */
   resolveCredential?(ref: string): Promise<string | undefined>
+  /** Warn sink for route-configuration faults (collisions); deduped here. */
+  warn?(message: string): void
   now?(): number
   uuid?(): string
   fetchImpl?: typeof fetch
@@ -121,12 +168,14 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
   const quotaByDir = new Map<string, DecisionQuota>()
   /** apiKey cache per provider key, warmed asynchronously before each run. */
   const apiKeyByProvider = new Map<string, string>()
+  /** Warn-once route-configuration sink (folded-key collisions). */
+  const warnRoute = createWarnOnce((message) => deps.warn?.(message))
 
-  const readParsed = (): SystemOneDecisionsSettings | undefined => {
+  const readParsed = (): DecisionSettingsParseResult => {
     try {
       return parseDecisionSettings(deps.readSettings())
     } catch {
-      return undefined
+      return { status: 'invalid' }
     }
   }
 
@@ -180,7 +229,10 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
       if (quota === undefined) {
         quota = createDecisionQuota({
           dir,
-          limits: () => decisionSessionLimits(readParsed()),
+          // An absent or invalid section degrades to ship defaults here: quota
+          // admission may compute defaults, but nothing dispatches without a
+          // usable route (see resolveRouteFor).
+          limits: () => decisionSessionLimits(decisionSettingsOf(readParsed())),
           now,
           uuid,
         })
@@ -209,8 +261,12 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
   }
 
   function resolveRouteFor(alias: string): DecisionRouteResolution | undefined {
-    const settings = readParsed()
-    return resolveDecisionRoute(alias, settings?.capabilities ?? [], {
+    const parsed = readParsed()
+    // Fail closed: a present-but-invalid section makes NO route usable, so a
+    // malformed quota key can never be accompanied by a live route.
+    if (parsed.status === 'invalid') return undefined
+    const routes = parsed.status === 'valid' ? parsed.settings.routes : undefined
+    return resolveDecisionRoute(alias, routes, {
       resolveAlias: (name) => deps.resolveAlias(name),
       connection(provider) {
         const record = recordRef(provider)
@@ -218,6 +274,7 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
         const apiKey = apiKeyByProvider.get(provider) ?? envFallback(record.apiKeyEnv)
         return { baseURL: record.baseURL, ...(apiKey !== undefined ? { apiKey } : {}) }
       },
+      ...(deps.warn !== undefined ? { warn: warnRoute } : {}),
     })
   }
 
@@ -261,7 +318,7 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
        * The scope mint. Missing host facts (cwd, session id, a broken seq)
        * are stamped with a sentinel so the runner's shape check passes and
        * validateScope rejects the run as UNCONFIGURED — the design's outcome
-       * for missing capability/configuration, never a process.cwd guess.
+       * for missing configuration/routes, never a process.cwd guess.
        */
       const scope = (originSeq?: number): DecisionScope => {
         const seq = currentSeq(agent)
@@ -282,7 +339,7 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
           now,
           uuid,
           fetchImpl,
-          maxRetries: decisionMaxRetries(readParsed()),
+          maxRetries: decisionMaxRetries(decisionSettingsOf(readParsed())),
         })
 
       return {
@@ -296,7 +353,7 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
         },
         async run(request: DecisionRequest, options): Promise<DecisionRun> {
           // Secrets ride only through warmCredentials → resolveRoute; the run
-          // re-reads settings, capabilities, credentials and quota limits live.
+          // re-reads settings, route pins, credentials and quota limits live.
           await warmCredentials(request.routeAlias)
           try {
             return await makeRunner().run(request, options)

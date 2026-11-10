@@ -55,7 +55,6 @@ Add `cc-systemone-memory-recall`, registered through `registerNamespaceSafe`. Ex
 | External field | Internal field and type | Default | Validation range and meaning |
 | --- | --- | --- | --- |
 | `mode` | `mode: 'off' \| 'shadow' \| 'active'` | `off` | off does not read the runner and sends no decision request |
-| `route-alias` | `routeAlias: string` | `gauge`  〔src:ws:packages/memory/memory/README.md#L136-L144〕| non-empty, length 1-128; must already be configured |
 | `timeout-ms` | `timeoutMs: number` | `1500` | integer, 100-5000; total deadline for the whole selection  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `max-input-tokens` | `maxInputTokens: number` | `6000` | integer, 512-16000; per-batch limit for the complete request  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
 | `max-candidates` | `maxCandidates: number` | `96` | integer, 1-256; above this, switch to the old selector  〔src:ws:packages/memory/memory/README.md#L136-L144〕|
@@ -102,7 +101,7 @@ interface RecallDecisionSelector {
 
 The decision quota's projectKey is decided by the host as `projectKeyOf(path.resolve(session.header.cwd))`; the memory directory is still decided by the original `resolveWorkspaceMemoryDir()` canonical repo root. The two are not mixed: scope belongs only to decisions and budgets, while the canonical memoryDir/path decides file visibility. The service verifies the bound scope before reserve and after await; an unavailable binding or a failed scope construction both degrade — never construct a fake scope and continue.
 
-Before sending a request, call `runner.identifyRoute(routeAlias, scope)` to obtain `{ provider, model, revision, perRequestTokens, perQuestionTokens, maxOutputTokens }`; undefined degrades directly. The consumer does not resolve the provider itself. The dispatch key includes provider, model, revision and a hash of the complete effective settings. After await, call identifyRoute again; if the identity or revision changed, discard the old answers and forbid injection; the next pre-step for the same origin may select again under the new revision. A checkpoint update must update the capability revision, and real evaluation pins checkpoint/revision.
+Before sending a request, call `runner.identifyRoute(DECISION_LANE_ALIAS, scope)` to obtain `{ provider, model, revision, perRequestTokens, perQuestionTokens, maxOutputTokens }`; undefined degrades directly. The consumer does not resolve the provider itself. The dispatch key includes provider, model, revision and a hash of the complete effective settings. After await, call identifyRoute again; if the identity or revision changed, discard the old answers and forbid injection; the next pre-step for the same origin may select again under the new revision. A checkpoint update must update the pinned route revision (an unpinned route rotates only on an alias retarget), and real evaluation pins checkpoint/revision.
 
 Assign IDs after sorting by scope (workspace first) and then by the UTF-8 byte order of the canonical absolute path. path is used only for local mapping and isolation; state sends only scope, filename, name and description. Two `rules.md` files with the same name each get their own ID.
 
@@ -117,7 +116,7 @@ const questions: Record<string, SystemOneQuestion> = {
   },
 };
 const request: DecisionRequest = {
-  feature: 'memory-recall', mode: 'active', routeAlias: 'gauge',
+  feature: 'memory-recall', mode: 'active',
   questionVersion: 'memory-recall-noul-v1', policyVersion: 'memory-recall-v1',
   scope, state: {
     query: 'Why does this test fail randomly?', recentTools: ['bash'],
