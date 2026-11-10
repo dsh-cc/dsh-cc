@@ -114,6 +114,34 @@ describe('the windowed prompt', () => {
     expect(rig.reviewedThrough()).toBe(3)
   })
 
+  it('dispatches the gate for the live first-window shape: a system-message snapshot replace exempts the window (issue #362)', async () => {
+    // The exact live shape from 2026-11-10: the harness system-prompt/runtime-
+    // context snapshot projection replaces its own predecessor `system/message`
+    // mid-session. The replaced row is non-surface, so the window stays complete
+    // and the gate IS asked — before the fix this fell back to a fork silently.
+    const rig = extractionRig({ mode: 'active', probability: 0.9 })
+    rig.growTo(2)
+    rig.append({
+      type: 'system/message',
+      seq: 3,
+      time: 0,
+      surfaceOp: 'append',
+      data: { content: [{ type: 'text', text: 'runtime context snapshot v1' }] },
+    } as unknown as Parameters<typeof rig.append>[0])
+    rig.append({
+      type: 'system/message',
+      seq: 4,
+      time: 0,
+      surfaceOp: { op: 'replace', startSeq: 3, endSeq: 3 },
+      data: { content: [{ type: 'text', text: 'runtime context snapshot v2' }] },
+    } as unknown as Parameters<typeof rig.append>[0])
+    rig.growTo(5)
+    await rig.stop()
+    // The window survived the snapshot replace: the gate dispatched once.
+    expect(rig.requests()).toHaveLength(1)
+    expect(rig.windows()).toEqual([{ fromExclusive: -1, throughInclusive: 5 }])
+  })
+
   it('extracts as unavailable (one fork) when no decision service is bound', async () => {
     const rig = extractionRig({ mode: 'active', runner: false })
     await rig.stopAt(2)

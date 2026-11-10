@@ -384,3 +384,151 @@ describe('budgets and fingerprints', () => {
     expect(window.events).toEqual([])
   })
 })
+
+// Snapshot-local replace exemption (issue #362): the session log is
+// append-only, so the raw events at replaced seqs survive in the input —
+// their types decide whether a replace destroyed reviewable material. A
+// replace over non-surface nodes only (the harness system-prompt snapshot
+// projection replaces its own predecessor `system/message`) exempts the
+// window; a replace over surface evidence (compaction-micro / CCR) stays
+// destructive; gaps, inverted ranges and string seqs fail closed.
+
+describe('snapshot-local replace exemption (issue #362)', () => {
+  /** A non-surface `system/message` node, as the runtime-context/system-prompt snapshot appends. */
+  const systemNode = (seq: number, text: string): SessionEvent =>
+    surfaceEvent(seq, 'system/message', { content: [{ type: 'text', text }] })
+
+  /** A `system/message` replacer carrying a replace op (the live shape at seq 985 of the issue transcript). */
+  const systemReplacement = (seq: number, startSeq: number, endSeq: number): SessionEvent =>
+    surfaceEvent(seq, 'system/message', { content: [{ type: 'text', text: 'snapshot v2' }] }, { op: 'replace', startSeq, endSeq })
+
+  it('RED-live: a snapshot replace of a non-surface system node leaves the window complete', () => {
+    // The exact live shape: seq 15 is a system/message, seq 985 replaces
+    // [15,15], the window is (-1, 991] with genuine user evidence present.
+    const events = [
+      systemNode(15, 'runtime context snapshot'),
+      userEvent(16, 'genuine question'),
+      assistantText(17, 'genuine answer'),
+      userEvent(990, 'late question'),
+      systemReplacement(985, 15, 15),
+    ]
+    const window = build(events, { capturedHead: 991 })
+    expect(window.complete).toBe(true)
+    expect(window.events.map((event) => event.seq)).toEqual([16, 17, 990])
+  })
+
+  it('evidence survives and both snapshots stay absent from the evidence list', () => {
+    const events = [
+      systemNode(15, 'snapshot one'),
+      userEvent(16, 'question'),
+      systemReplacement(985, 15, 15),
+    ]
+    const window = build(events, { capturedHead: 991 })
+    expect(window.complete).toBe(true)
+    expect(window.events.map((event) => event.seq)).toEqual([16])
+    // The replaced node and the replacer are both non-surface: neither is evidence.
+    expect(window.events.some((event) => event.seq === 15 || event.seq === 985)).toBe(false)
+  })
+
+  it('a compaction replace over a surface seq stays destructive even with many non-surface rows present', () => {
+    // Unrelated non-surface rows defeat the count short-circuit: the exemption
+    // must still be decided by membership and type, not by counts.
+    const events = [
+      systemNode(1, 'notice one'),
+      systemNode(2, 'notice two'),
+      systemNode(3, 'notice three'),
+      systemNode(4, 'notice four'),
+      userEvent(5, 'genuine original'),
+      surfaceEvent(6, 'tool/result', { message: { content: [{ type: 'text', text: 'result body' }] } }, { op: 'replace', startSeq: 5, endSeq: 5 }),
+      userEvent(7, 'after the replaced evidence'),
+    ]
+    const window = build(events, { capturedHead: 7 })
+    expect(window.complete).toBe(false)
+    expect(window.extractReason).toBe('incomplete')
+  })
+
+  it('a replace range with an interior gap stays incomplete', () => {
+    // [2, 4] where seq 3 never appears in the log: fail closed.
+    const events = [
+      systemNode(2, 'notice'),
+      systemNode(4, 'notice'),
+      systemReplacement(9, 2, 4),
+      userEvent(5, 'question'),
+    ]
+    const window = build(events, { capturedHead: 9 })
+    expect(window.complete).toBe(false)
+  })
+
+  it('a multi-seq range fully non-surface is exempt', () => {
+    const events = [
+      systemNode(2, 'notice a'),
+      systemNode(3, 'notice b'),
+      systemNode(4, 'notice c'),
+      systemReplacement(9, 2, 4),
+      userEvent(5, 'question'),
+    ]
+    const window = build(events, { capturedHead: 9 })
+    expect(window.complete).toBe(true)
+    expect(window.events.map((event) => event.seq)).toEqual([5])
+  })
+
+  it('a mixed range containing a surface seq stays incomplete', () => {
+    const events = [
+      systemNode(2, 'notice'),
+      userEvent(3, 'surface evidence'),
+      systemNode(4, 'notice'),
+      systemReplacement(9, 2, 4),
+      userEvent(5, 'question'),
+    ]
+    const window = build(events, { capturedHead: 9 })
+    expect(window.complete).toBe(false)
+  })
+
+  it('an inverted range stays destructive (no vacuous exemption)', () => {
+    const events = [systemNode(15, 'notice'), systemReplacement(20, 20, 15), userEvent(5, 'question')]
+    const window = build(events, { capturedHead: 25 })
+    expect(window.complete).toBe(false)
+  })
+
+  it('a string-seq replaced row is never exempt', () => {
+    // The replaced node carries a string seq identity: the numeric exemption
+    // must not coerce through it.
+    const events = [
+      surfaceEvent('15', 'system/message', { content: [{ type: 'text', text: 'string-seq snapshot' }] }),
+      systemReplacement(985, 15, 15),
+      userEvent(16, 'question'),
+    ]
+    const window = build(events, { capturedHead: 991 })
+    expect(window.complete).toBe(false)
+  })
+
+  it('string endpoints on the replace are not exempt (unusable range)', () => {
+    const broken = surfaceEvent(4, 'system/message', { content: [{ type: 'text', text: 'x' }] }, { op: 'replace', startSeq: '15', endSeq: '15' })
+    const window = build([systemNode(15, 'notice'), broken, userEvent(16, 'question')], { capturedHead: 20 })
+    expect(window.complete).toBe(false)
+  })
+
+  it('a huge declared range is bounded, not enumerated', () => {
+    // startSeq 0 endSeq 1e9: the count short-circuit must reject before any
+    // per-seq loop; a window with only two non-surface rows cannot cover it.
+    const events = [
+      systemNode(1, 'notice'),
+      systemNode(2, 'notice'),
+      systemReplacement(9, 0, 1_000_000_000),
+      userEvent(5, 'question'),
+    ]
+    const window = build(events, { capturedHead: 9 })
+    expect(window.complete).toBe(false)
+  })
+
+  it('hash stability: a window without replaces keeps byte-identical fingerprints', () => {
+    const events = [userEvent(2, 'a'), assistantText(3, 'b'), userEvent(4, 'c')]
+    const before = build(events, { capturedHead: 4 })
+    expect(before.complete).toBe(true)
+    // Rebuilding the same input must reproduce the same hashes (the index of
+    // seqs introduced by the exemption must not perturb replace-free windows).
+    const again = build(events, { capturedHead: 4 })
+    expect(again.evidenceHash).toBe(before.evidenceHash)
+    expect(again.indexHash).toBe(before.indexHash)
+  })
+})
