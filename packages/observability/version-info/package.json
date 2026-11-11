@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/version-info",
   "description": "Single owner of the dsh-cc own-package-version read (release-train version from package.json with an offline-safe fallback)",
-  "version": "0.9.4",
+  "version": "0.9.5-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

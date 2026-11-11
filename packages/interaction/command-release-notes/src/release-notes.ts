@@ -14,6 +14,32 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.9.5-rc.1 — defaults, SystemOne decisions and fixes
+
+- **Defaults** — the completion gate, turn rules (judged and repeat
+  reminder), LSP diagnostics-on-write and post-edit auto-verify are now on
+  by default; each keeps an explicit \`enabled: false\` opt-out. Context
+  compression is on in measurement-only (dry-run) posture.
+- **Prompt suggestions** — still off by default; when enabled they run on
+  top-level turn stops only, and an unconfigured cheap-lane alias is skipped
+  instead of billed to the parent route.
+- **SystemOne decisions** — a decision runtime with contract validation,
+  budget and metering, routed through the \`gauge\` lane alias. It backs
+  optional memory recall selection, a memory extraction gate and semantic
+  tool discovery, all off by default.
+- **Memory** — recall preselection and admission planning for large corpora,
+  plus fixes to recall tie-breaking, grey-zone rows and consolidation.
+- **Permissions** — the auto-mode underspec criteria are retuned so
+  read-only compound shell commands no longer escalate to ask.
+- **Settings** — secret redaction now covers union, intersect and transform
+  nodes; frozen cascade sections parse without mutation faults; provider,
+  namespace and cascade merge into @dsh-cc/settings.
+- **Fixes** — ACP resolves the preset roster per use (no more stock-plugin
+  fallback under load) and reports the current version; moa writes
+  automatic escalation rows in chain order; /compact resolves its zh alias.
+- **Packaging** — serena-first and output-styles merge into
+  @dsh-cc/prompt-extras; Node 24 is the primary line and 22 the engines floor.
+
 ## 0.9.4 — Claude Code compatibility layer
 
 - **Commands** — 21 human-facing slash commands spanning session inspection
