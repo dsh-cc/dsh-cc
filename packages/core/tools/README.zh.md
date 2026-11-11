@@ -20,7 +20,6 @@
 7. **呈现模式**——fork 的 `ToolExecutor` 插件（`cc-executor`，导出为 `@dsh-cc/tools/executor`）在共享批量流水线上实现 `native` / `code` / `both`，承载 `run_code` 传输与 SDK／协议 section；`both` 不声明「只能调用 run_code」的规则，因为它的原生调用确实会执行。
 8. **注册 tripwire**——扁平参数规格在测试模式下硬失败、在生产环境告警，即工具 schema 门禁的 CI 分支。
 9. **审批接缝拒绝文案**——`pipeline` 中的 ask 原因清洗与环境／权限指引尾句，每次 harness 版本升级都要保留。
-10. **退役的 append-order 辅助（仅测试支持）**——`test-support.ts`（导出为 `@dsh-cc/tools/test-support`）保留已删除的 `@dsh-cc/tool-append-order` 插件的 `appendStable` 算法与按作用域记忆，作为可执行的文档：它挂接的 assemble 瀑布 `tools` 数组已不存在，因此顺序改由宿主 `systemPrompt.toolOrder` 构造态决定，未列名的其余工具桶改为按字典序重排。
 
 不再重新施加（已被上游吸收）：嵌套 `presentationMeta` 支持，以及分阶段调度垫片（调度由执行器自己负责）。
 
