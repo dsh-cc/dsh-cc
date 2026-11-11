@@ -12,6 +12,12 @@
  * a void promise; every failure inside the prediction collapses into a
  * registry miss (or keeps the prior value).
  *
+ * Cost posture (2026-11-11): only TOP-LEVEL turn stops predict (subagent
+ * sessions also emit `agent/turn-stopping` — turn-rules guards the same
+ * event), and the side query uses `onUnrouted: 'skip'` rather than the
+ * `'inherit'` default: an unconfigured cheap-lane alias must never bill the
+ * parent route once per turn (advisor-watchdog / context-crusher precedent).
+ *
  * @module @dsh-cc/prompt-suggest
  */
 
@@ -99,6 +105,12 @@ function textOf(content: unknown): string {
     .trim()
 }
 
+/** Top-level-only predicate (turn-rules precedent): subagent stops never predict. */
+function isTopLevel(agent: { session: { header: { origin?: string; delegationDepth?: number } } }): boolean {
+  const header = agent.session.header
+  return header.origin !== 'subagent' && (header.delegationDepth ?? 0) <= 0
+}
+
 /** Extract (last user prompt, final assistant text) from the session events. */
 function lastExchange(agent: { session: { snapshotEvents?: () => readonly unknown[] } }): { user: string; assistant: string } {
   let user = ''
@@ -135,7 +147,9 @@ async function runPrediction(
       prompt: userPrompt(user, assistant),
       // Abort composed inside runSideQuery: settings timeoutMs ∪ dispose.
       signal: dispose,
-      onUnrouted: 'inherit',
+      // NEVER inherit the parent route: this fires on every turn stop, so an
+      // unconfigured alias would bill the main model once per turn.
+      onUnrouted: 'skip',
     })
     if (!result.ok) {
       // An 'empty' verdict IS the model's "no confident prediction" → clear
@@ -174,6 +188,8 @@ export function apply(ctx: Context): void {
   ctx.on('agent/turn-stopping', ({ agent, signal }) => {
     try {
       if (signal?.aborted) return
+      // Subagent sessions fire the same event; only the top-level stop predicts.
+      if (!isTopLevel(agent as never)) return
       const settings = readSettings()
       const sessionId = String(agent.session.header.id)
       // Disabled is airtight: no adapter call AND any prior suggestion is

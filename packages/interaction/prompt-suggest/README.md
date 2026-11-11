@@ -6,7 +6,7 @@ Next-prompt suggestion: at `agent/turn-stopping` the plugin fire-and-forgets one
 
 ## How it works
 
-The listener decides synchronously (enabled gate, session id, disabled-clear) and spawns a void promise — turn-stop is never awaited or blocked (memory-consolidation precedent). `runSideQuery` composes the `timeoutMs` budget with the plugin's dispose signal via `AbortSignal.any`; every failure shape (`timeout`/`error`/`unrouted`) keeps the registry's prior value, while an `empty` verdict (the model's "no confident prediction") clears it. A whitespace-only answer maps to `empty`.
+The listener decides synchronously (enabled gate, **top-level-only gate**, session id, disabled-clear) and spawns a void promise — turn-stop is never awaited or blocked (memory-consolidation precedent). `runSideQuery` composes the `timeoutMs` budget with the plugin's dispose signal via `AbortSignal.any`; every failure shape (`timeout`/`error`/`unrouted`) keeps the registry's prior value, while an `empty` verdict (the model's "no confident prediction") clears it. A whitespace-only answer maps to `empty`.
 
 The registry is module-level (not per-context) so the TUI's re-instantiation of its autocomplete provider can never lose a stored suggestion. **Same-process assumption:** the interactive TUI reads the registry via a plain import; if the TUI ever runs out-of-process, the registry is simply empty there and the feature no-ops — fail-soft by construction. `getSuggestion(sessionId)` is the only read surface: it returns `undefined` when absent, expired, or never written (which includes every disabled session — the disabled producer writes nothing and clears any prior entry at the next turn-stop).
 
@@ -16,12 +16,12 @@ The vendored pi-tui Editor consults the autocomplete provider only on trigger ch
 
 ## Settings
 
-Namespace `cc-prompt-suggest`:
+Only **top-level** turn stops predict: subagent sessions also emit `agent/turn-stopping`, so the listener applies the same `origin !== 'subagent' && delegationDepth <= 0` predicate turn-rules uses. Namespace `cc-prompt-suggest`:
 
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `false` | Master flag, **opt-in**. Read live at every turn-stop; disabling makes no adapter call and clears the session's stored suggestion. |
-| `alias` | `haiku` | Cheap-lane alias consulted through `ccModelRoutes`/`resolveAlias`; unconfigured inherits the parent route (fail-soft). |
+| `alias` | `haiku` | Cheap-lane alias consulted through `ccModelRoutes`/`resolveAlias`; an unconfigured alias is **skipped** (`onUnrouted: 'skip'`) — the parent route is never billed, because this fires on every top-level turn stop. |
 | `timeoutMs` | `4000` | Wall-clock budget for the prediction; composed with the plugin dispose signal. |
 | `maxTokens` | `128` | Token budget for the prediction. |
 

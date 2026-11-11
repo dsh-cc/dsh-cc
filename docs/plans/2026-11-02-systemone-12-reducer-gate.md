@@ -21,7 +21,7 @@
 
 [ContextCrusher.crush](../../packages/context/context-crusher/src/index.ts#L170) first checks enabled, store, protected tools, retrieval tools, content shape and size, then attempts deterministic compression.
 [reduceOrPassthrough](../../packages/context/context-crusher/src/index.ts#L266) enters the reducer only when the deterministic route does not match or does not pay off; on failure it returns the original accept decision and keeps additionalContexts.
-[isReducerEligible](../../packages/context/context-crusher/src/reducer.ts#L54) requires reducerEnabled, the bash tool and the configured command regex all to hold. In the [default config](../../packages/context/context-crusher/src/config.ts#L34) both crusher and reducer are off, with mode dry-run.
+[isReducerEligible](../../packages/context/context-crusher/src/reducer.ts#L54) requires reducerEnabled, the bash tool and the configured command regex all to hold. In the [default config](../../packages/context/context-crusher/src/config.ts#L34) the crusher is ON since 2026-11-11 (mode dry-run, so measurement only) while the reducer stays off.
 [reduceToolOutput](../../packages/context/context-crusher/src/reducer.ts#L112) builds the view, checks the caller and the generative route's provider, then calls the side-query; a missing route and an inherited provider are both rejected outright, and nothing is billed to the parent model.
 [verifyReceipt](../../packages/context/context-crusher/src/verifier.ts#L35) validates schema, verbatim quotes, exit status, size and counts.
 [Source storage and marker](../../packages/context/context-crusher/src/reducer.ts#L210) run only when validation passes and mode=on; the full originalText is stored and the last line keeps the context_retrieve locator marker.

@@ -3,9 +3,9 @@ import { resolveConfig, overlaySettings, DEFAULTS, DEFAULT_REDUCER_COMMANDS } fr
 import type { CrusherConfig } from '../src/types.ts'
 
 describe('config resolution', () => {
-  it('applies defaults (enabled false, dry-run)', () => {
+  it('applies defaults (enabled true since 2026-11-11, dry-run)', () => {
     expect(resolveConfig()).toEqual({
-      enabled: false, mode: 'dry-run', minBytes: 8192, minSavingsRatio: 0.4,
+      enabled: true, mode: 'dry-run', minBytes: 8192, minSavingsRatio: 0.4,
       protectedTools: DEFAULTS.protectedTools,
       reducerEnabled: false,
       reducerCommands: DEFAULT_REDUCER_COMMANDS.map((source) => new RegExp(source)),
@@ -13,6 +13,15 @@ describe('config resolution', () => {
       reducerMaxTokens: 1024, reducerTimeoutMs: 10_000, reducerAlias: 'haiku',
       deferRequests: 0, deferMargin: 1.5, deferMaxAgeMs: 1_800_000,
     })
+  })
+
+  it('explicit opt-out wins over the promoted default', () => {
+    const base = resolveConfig()
+    expect(overlaySettings(base, { enabled: false }).enabled).toBe(false)
+    // The measurement posture is unchanged by the promotion.
+    expect(overlaySettings(base, {}).mode).toBe('dry-run')
+    expect(overlaySettings(base, {}).deferRequests).toBe(0)
+    expect(overlaySettings(base, {}).reducerEnabled).toBe(false)
   })
 
   it('rejects invalid values', () => {

@@ -55,10 +55,10 @@ function assistantEvent(text: string): unknown {
   return { type: 'assistant/message', seq: 2, data: { message: { id: 'm2', role: 'assistant', content: [{ type: 'text', text }] } } }
 }
 
-function fakeAgent(sessionId: string, events: unknown[]): Agent {
+function fakeAgent(sessionId: string, events: unknown[], header: Record<string, unknown> = {}): Agent {
   return {
     session: {
-      header: { id: sessionId },
+      header: { id: sessionId, ...header },
       snapshotEvents: () => events,
       requestHeader: () => ({ config: { provider: 'deepseek', model: 'deepseek-v4-pro' } }),
     },
@@ -71,14 +71,23 @@ interface Boot {
   calls: () => GenerateOptions[]
 }
 
-async function boot(opts: { enabled?: boolean; script?: readonly StreamChunk[] } = {}): Promise<Boot> {
+async function boot(opts: { enabled?: boolean; script?: readonly StreamChunk[]; routed?: boolean } = {}): Promise<Boot> {
   const enabled = opts.enabled ?? true
+  const routed = opts.routed ?? true
   const adapter = new ScriptedAdapter()
   if (opts.script !== undefined) adapter.script = opts.script
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   ctx.llm.registerAdapter(['deepseek'], adapter)
-  ctx.provide('settings', { register: () => ({ get: () => ({ enabled, alias: 'haiku', timeoutMs: 4000, maxTokens: 128 }) }) })
+  ctx.provide('settings', {
+    // `model-aliases` overlay gives the side query a fillable route; without it
+    // the alias is unrouted and the producer now SKIPS (never inherits).
+    get: (ns: string) => {
+      if (ns !== 'model-aliases') return undefined
+      return routed ? { haiku: { provider: 'deepseek', model: 'deepseek-v4-pro' } } : undefined
+    },
+    register: () => ({ get: () => ({ enabled, alias: 'haiku', timeoutMs: 4000, maxTokens: 128 }) }),
+  })
   apply(ctx)
   return {
     ctx,
@@ -187,6 +196,27 @@ describe('@dsh-cc/prompt-suggest producer', () => {
     const agent = fakeAgent('sess-bare', [userEvent('q'), assistantEvent('a')])
     await expect(turnStop(ctx, agent)).resolves.toBeUndefined()
     expect(getSuggestion('sess-bare')).toBeUndefined()
+  })
+
+  it('subagent turn stops never predict (no adapter call, no registry entry)', async () => {
+    const { ctx, calls } = await boot()
+    // `agent/turn-stopping` fires for subagent sessions too (turn-rules guards
+    // the same event); both shapes below must be ignored.
+    await turnStop(ctx, fakeAgent('sess-sub', [userEvent('q'), assistantEvent('a')], { origin: 'subagent' }))
+    await turnStop(ctx, fakeAgent('sess-deep', [userEvent('q'), assistantEvent('a')], { delegationDepth: 1 }))
+    expect(calls()).toHaveLength(0)
+    expect(getSuggestion('sess-sub')).toBeUndefined()
+    expect(getSuggestion('sess-deep')).toBeUndefined()
+  })
+
+  it('unrouted alias → skip: the parent route is never billed', async () => {
+    // No `model-aliases` overlay: the cheap-lane alias cannot be filled. With
+    // `onUnrouted: 'skip'` this must make ZERO adapter calls (the old
+    // 'inherit' behavior billed the main model once per turn stop).
+    const { ctx, calls } = await boot({ routed: false })
+    await turnStop(ctx, fakeAgent('sess-unrouted', [userEvent('q'), assistantEvent('a')]))
+    expect(calls()).toHaveLength(0)
+    expect(getSuggestion('sess-unrouted')).toBeUndefined()
   })
 
   it('dispose aborts an in-flight prediction (composed abort: timeout ∪ dispose)', async () => {

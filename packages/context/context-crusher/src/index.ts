@@ -5,7 +5,11 @@
  * post-`next()`) compresses large grep/log-shaped tool results, persists the
  * original in a content-addressed store, and appends a `ccr://<hash>` marker;
  * the `context_retrieve({ hash })` agent tool restores the original. Defaults
- * are `enabled: false, mode: 'dry-run'` — nothing replaces until opted in.
+ * since 2026-11-11 are `enabled: true, mode: 'dry-run', defer-requests: 0`:
+ * measurement only — each qualifying result appends one `applied: false`
+ * ledger row and the tool result is returned untouched. Replacement, deferral
+ * and the evidence-preserving reducer all stay opt-in (`mode: 'on'`,
+ * `defer-requests > 0`, `reducer-enabled: true`).
  *
  * Fail-closed everywhere: a missing `dshHomePath` force-disables the crusher,
  * and every store/ledger/sweep I/O error degrades to passthrough — a throw in

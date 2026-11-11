@@ -26,7 +26,7 @@ Namespace `cc-context-compression` (settings overlay re-read on every use; confi
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | Master flag; the feature is opt-in. |
+| `enabled` | `true` | Master flag; default ON since 2026-11-11 (opt out with `false`). In the default `dry-run` mode this only records ledger rows — no tool result is ever rewritten. |
 | `mode` | `dry-run` | `dry-run` measures only; `on` replaces. |
 | `min-bytes` | `8192` | Minimum size before eligibility (token-meter tokens; the key keeps its legacy name). |
 | `min-savings-ratio` | `0.4` | Minimum token saving fraction. |
