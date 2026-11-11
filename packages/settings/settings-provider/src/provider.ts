@@ -19,7 +19,7 @@ import type { Fiber } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { SettingsNamespace, SettingsUpdateSource } from './types.ts'
-import { parseSettingsNamespace } from './namespace.ts'
+import { duplicateRegistrationMessage, parseSettingsNamespace } from './namespace.ts'
 import type { SettingsNamespaceInput } from './namespace.ts'
 import { redactSecrets } from './redact.ts'
 import { resolveValue } from './contract.ts'
@@ -175,7 +175,7 @@ export abstract class SettingsProvider extends Service {
       throw new TypeError('settings.register: schema must be a callable schemastery Schema')
     }
     if (this.registrations.has(parsedNs)) {
-      throw new Error(`settings namespace "${parsedNs}" is already registered`)
+      throw new Error(duplicateRegistrationMessage(parsedNs))
     }
     const registration: SettingsRegistration = {
       ns: parsedNs,

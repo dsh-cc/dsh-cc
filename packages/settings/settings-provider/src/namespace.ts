@@ -40,3 +40,31 @@ export function parseSettingsNamespace(value: string): SettingsNamespace {
   }
   return value as SettingsNamespace
 }
+
+/**
+ * The message {@link SettingsProvider.register} throws when a namespace is
+ * already owned.
+ *
+ * This is the single author of that string. Consumers that cooperate with the
+ * duplicate case (`@dsh-cc/settings-ns` degrades to a live read instead of
+ * throwing) match on it, so a second hand-built copy would silently stop
+ * matching when either side is edited — the failure mode the pin in
+ * `settings-ns` used to guard against with a literal, which only caught
+ * upstream drift and not drift between our own two copies.
+ *
+ * @param ns - the namespace that was already registered.
+ * @returns the exact `Error.message` the provider throws.
+ */
+export function duplicateRegistrationMessage(ns: string): string {
+  return `settings namespace "${ns}" is already registered`
+}
+
+/**
+ * Whether an error is the duplicate-registration signal for `ns`.
+ * @param error - the caught value.
+ * @param ns - the namespace the caller tried to register.
+ * @returns `true` when `error` is exactly that signal.
+ */
+export function isDuplicateRegistration(error: unknown, ns: string): boolean {
+  return error instanceof Error && error.message === duplicateRegistrationMessage(ns)
+}

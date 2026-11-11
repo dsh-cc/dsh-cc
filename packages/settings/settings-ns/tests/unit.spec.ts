@@ -24,7 +24,8 @@ interface RecordedCall {
 }
 
 /** Fake provider: records register/installSection calls, throws on duplicates. */
-function fakeProvider(resolved: Record<string, unknown> = { level: 1 }) {
+function fakeProvider(initial: Record<string, unknown> = { level: 1 }) {
+  let resolved = initial
   const registrations = new Set<string>()
   const calls: RecordedCall[] = []
   const provider = {
@@ -46,6 +47,10 @@ function fakeProvider(resolved: Record<string, unknown> = { level: 1 }) {
     /** Simulate the owning fiber disposing: the registration disappears. */
     dropRegistration(ns: string) {
       registrations.delete(ns)
+    },
+    /** Change the value the provider resolves for a registered namespace. */
+    setResolved(next: Record<string, unknown>) {
+      resolved = next
     },
   }
   return provider
@@ -81,6 +86,58 @@ describe('registerNamespaceSafe', () => {
     const { registerNamespaceSafe: registerCopy } = await import('../src/index.ts?copy2')
     const readB = registerCopy(ctx, NS, schema)
     expect(readB()).toEqual({ level: 4 })
+    // Guarantee 2: the loser of the race degrades to a LIVE read of the
+    // winner's namespace — not a snapshot taken at registration time.
+    provider.setResolved({ level: 5 })
+    expect(readB()).toEqual({ level: 5 })
+  })
+
+  it('defers registration until a late provider arrives (ctx.inject)', async () => {
+    // Guarantee 1: the provider's async init settles DURING the mount sweep, so
+    // an early apply must defer rather than degrade to undefined forever (the
+    // stranded-namespace incident).
+    const ctx = new Context()
+    const read = registerNamespaceSafe(ctx, NS, schema)
+    expect(read()).toBeUndefined()
+    const provider = fakeProvider({ level: 7 })
+    provider.ctx = ctx
+    ctx.provide('settings', provider)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(read()).toEqual({ level: 7 })
+    expect(provider.calls.filter((call) => call.op === 'register')).toHaveLength(1)
+  })
+
+  it('never serves the previous owner\'s frozen scope after re-acquisition', () => {
+    // Guarantee 3 (the #79 hole): a disposed owner's scope keeps returning the
+    // value it froze at acquisition. The reader must serve the NEWLY acquired
+    // scope, never that stale one.
+    let generation = 1
+    const provider = fakeProvider()
+    const ctx = boot(provider)
+    provider.get = () => undefined // disconnected from register: only scopes read
+    provider.register = () => {
+      const snapshot = { level: generation }
+      return { get: () => snapshot }
+    }
+    const read = registerNamespaceSafe(ctx, NS, schema)
+    expect(read()).toEqual({ level: 1 })
+    provider.dropRegistration(NS)
+    generation = 2
+    // Serving the previous scope would answer { level: 1 } here.
+    expect(read()).toEqual({ level: 2 })
+  })
+
+  it('degrades to undefined when re-registration hits INACTIVE_EFFECT', () => {
+    // Guarantee 4: the plugin's own fiber is unloading, so the effect can no
+    // longer be created — the reader must go quiet instead of throwing.
+    const provider = fakeProvider()
+    const ctx = boot(provider)
+    const read = registerNamespaceSafe(ctx, NS, schema)
+    provider.dropRegistration(NS)
+    provider.register = () => {
+      throw Object.assign(new Error('effect is inactive'), { code: 'INACTIVE_EFFECT' })
+    }
+    expect(read()).toBeUndefined()
   })
 
   it('self-heals: after the registration disappears, the next read re-registers (§3.1.4)', () => {

@@ -26,7 +26,7 @@ export function installSectionSafe<T>(ctx: Context, ns: SettingsNamespace, schem
 - **挂载顺序解耦。** 两个助手都把注册放进 `ctx.inject(['settings'])` 里：preset 插件先于 settings 服务挂载时，注册在子作用域中等待服务到达后再发生，不再与启动顺序竞争。
 - **直读事实源。** reader 始终经 `settings.get(ns)` 解析，绝不读缓存的 scope 对象，因此已销毁的属主不会吐出陈旧的冻结值。假设对象 schema（`z.object(...)`）：合法的解析值永不为 `undefined`，这正是自愈触发条件无歧义的前提。
 - **懒式自愈。** 当读取观察到 `undefined` 且启动期上下文仍然存活时，reader 用相同 schema/options 重新注册并重读——每个丢失的属主只产生一对 register/unregister。
-- **重复注册容忍。** 匹配 `settings namespace "<ns>" is already registered` 的 `register()` 抛错（常量钉死、spec 防上游漂移）降级为实时 provider 读取。值保真警告：双模块副本 schema 不同时，降级路径读到的是另一副本的解析值。
+- **重复注册容忍。** 匹配 `settings namespace "<ns>" is already registered` 的 `register()` 抛错降级为实时 provider 读取。判定用的是 `@dsh-cc/settings-provider` 的 `isDuplicateRegistration`——与 provider 抛出点是同一个函数，两侧结构上不可能互相漂移；spec 仍钉死字面文本，让上游漂移照常响亮失败。值保真警告：双模块副本 schema 不同时，降级路径读到的是另一副本的解析值。
 - **陈旧 reader 绝不抛错。** 在已销毁/正在卸载的上下文上重新获取（cordis `CordisError` 码 `INACTIVE_EFFECT`）降级为 `undefined`，绝不向热读路径抛错。其余 register 错误照常传播。
 - **`installSectionSafe` 预检。** 命名空间已被占用时不调用 harness 的 `installSection`：直接接线 hooks（`setSource` 实时读 `settings.get(ns)`；重载通知来自 provider 公开的 `settings/updated` 提交事件，按命名空间过滤、属主 ctx 卸载后失效、随调用方挂载一起解除）。全新路径原样委托。属主消亡后不重新注册——走调用方既有的回退契约，与 harness 自身的 provider 丢失语义一致。
 - 只读契约：助手只返回 reader / 接线 hooks；需要写/订阅的消费方继续直接调用 provider。
