@@ -38,6 +38,7 @@
     "check:inject": "node scripts/check-inject.mjs && node scripts/check-inject.test.mjs",
     "check:model-literals": "node scripts/check-model-literals.mjs && node scripts/check-model-literals.test.mjs",
     "check:workflow-pipefail": "node scripts/check-workflow-pipefail.mjs && node scripts/check-workflow-pipefail.test.mjs",
+    "check:workflow-node": "node scripts/check-workflow-node.mjs && node scripts/check-workflow-node.test.mjs",
     "smoke:profile-boot": "bash scripts/smoke-profile-boot.sh",
     "smoke:acp": "node scripts/smoke-acp.mjs"
   },

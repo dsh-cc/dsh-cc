@@ -1,5 +1,36 @@
 # Dev notes
 
+## Node version line
+
+`.nvmrc` holds the primary runtime line (`24`). Workflows resolve it with
+`node-version-file` wherever the checkout is the commit under test: presubmit
+`static-gates` and `unit-tests`, both `formal-design` jobs,
+`parity-freshness`, and `daily-release` (which only ever checks out main).
+
+`publish` and `release-tag` keep a literal `node-version: 24` instead. They
+can check out an older release tag that predates `.nvmrc`, and a republish or
+re-tag of an old release must not fail on a missing version file. Keep those
+two literals equal to `.nvmrc`.
+
+presubmit `quality-gates` deliberately stays on Node 22. `engines` is
+`^22.19 || >=24`, and a declared range that no job ever runs stops being a
+guarantee — that job is where the 22.19 floor is proven to still install,
+typecheck, bundle, boot and pack. Keep both lines green before merging.
+
+`scripts/check-workflow-node.mjs` enforces the mechanical half of this in the
+static prefix and in pre-commit: every `actions/setup-node` step must pin a
+line, and a `node-version:` literal must be `.nvmrc` or the engines floor. A
+new workflow that inherits the runner image's Node, or a harness pin bumped
+without its runtime, fails there.
+
+Why 24 is the primary line: the pinned sibling harness declares
+`engines.node >=24.9.0` and runs its own CI on 24, so building it on Node 22
+prints `[WARN] Unsupported engine` while the suite under test runs against it.
+
+`@types/node` tracks the *floor* (22.x), not the primary line. Types must
+never be newer than the oldest runtime we support, or code that type-checks on
+the primary line can crash on the floor.
+
 ## pnpm verification on network-restricted hosts
 
 pnpm 11.7.0 verifies package integrity against registry attestations and

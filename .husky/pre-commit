@@ -42,6 +42,7 @@ node scripts/check-vendor-purity.mjs
 node scripts/check-capability-evidence.mjs
 node scripts/generate-parity-matrix.mjs --check
 node scripts/check-workflow-pipefail.mjs
+node scripts/check-workflow-node.mjs
 node packages/evaluation/vwa-eval/scripts/select-gold.mjs --check
 node scripts/check-inject.mjs
 node scripts/check-model-literals.mjs

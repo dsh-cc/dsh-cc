@@ -40,7 +40,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Primary line, same file as presubmit (deviation #5 there). This
+          # job checks out at the workspace root, so the file is at `.nvmrc`.
+          node-version-file: .nvmrc
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 

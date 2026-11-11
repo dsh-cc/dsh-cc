@@ -55,6 +55,18 @@
 #      measured 19min without finishing). Harness package depth / tsdown
 #      workspace changes must be mirrored here.
 #
+#   5. Node line policy (2026-11): `.nvmrc` holds the *primary* runtime line
+#      (24 — the Active LTS, and the floor the pinned sibling harness itself
+#      declares: harness `engines.node` is `>=24.9.0`, so building it on 22
+#      prints `[WARN] Unsupported engine`). `static-gates`, `unit-tests` and
+#      publish resolve that file via `node-version-file`; `quality-gates`
+#      deliberately stays on Node 22 as the *floor* verification of this
+#      repo's own `engines: ^22.19 || >=24` — a declared range that no job
+#      ever runs is a claim, not a guarantee. Both lines must be green.
+#      Enforced by scripts/check-workflow-node.mjs (static-gates): every
+#      setup-node must pin a line, and a `node-version:` literal must be
+#      `.nvmrc` or the engines floor.
+#
 # deepseek-harness pin upgrade flow: once harness master checks out, update
 # DSH_HARNESS_REF in the env block above to the new SHA and commit it
 # together with this repo's adaptations. Changing the ref changes the cache
@@ -118,7 +130,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Primary line (deviation #5): the runtime shipped artifacts run on.
+          node-version-file: dsh-cc/.nvmrc
 
       # Pure static scan, no node_modules needed: catches "a spec imports an
       # undeclared link:/workspace dependency" — a CI-only failure class
@@ -141,6 +154,14 @@ jobs:
       - name: Workflow pipefail (check:workflow-pipefail)
         working-directory: dsh-cc
         run: node scripts/check-workflow-pipefail.mjs && node scripts/check-workflow-pipefail.test.mjs
+
+      # Deviation #5 enforced instead of documented: every setup-node pins a
+      # line, and a `node-version:` literal must be `.nvmrc` or the engines
+      # floor. Catches "a new workflow inherits the runner image's Node" and
+      # "someone bumped the harness pin but not the runtime".
+      - name: Workflow Node lines (check:workflow-node)
+        working-directory: dsh-cc
+        run: node scripts/check-workflow-node.mjs && node scripts/check-workflow-node.test.mjs
 
       - name: Canonical project identity (check:identity)
         working-directory: dsh-cc
@@ -215,6 +236,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          # Floor line (deviation #5): proves the `^22.19` half of engines
+          # still installs, typechecks, bundles and boots the profile. The
+          # primary line runs in `unit-tests` and publish.
           node-version: 22
 
       # Pnpm store cache (deviation #2 in the header). The key pins the
@@ -401,7 +425,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Primary line (deviation #5): same runtime as publish and dev.
+          node-version-file: dsh-cc/.nvmrc
 
       # Pnpm store cache (deviation #2 in the header). The key pins the
       # lockfile hashes; `restore-keys` falls back to the newest store with

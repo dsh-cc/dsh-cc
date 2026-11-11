@@ -97,7 +97,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22   # deliberately no registry-url: token vs OIDC is decided explicitly in the publish step
+          # Keep equal to `.nvmrc` (primary line; deviation #5 in presubmit.yml).
+          # Deliberately a literal instead of `node-version-file`: this job
+          # checks out the release TAG, and republishing an older tag must not
+          # fail because that commit predates `.nvmrc`.
+          node-version: 24   # deliberately no registry-url: token vs OIDC is decided explicitly in the publish step
           cache: pnpm
           cache-dependency-path: |
             dsh-cc/pnpm-lock.yaml

@@ -48,7 +48,8 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Primary line, same file as presubmit (deviation #5 there).
+          node-version-file: dsh-cc/.nvmrc
       # Pnpm store cache, keyed on the lockfiles with a prefix fallback so a
       # dependency change only downloads the new tarballs (setup-node's
       # `cache: pnpm` restores on the exact key only — see presubmit.yml
@@ -123,7 +124,8 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Primary line, same file as presubmit (deviation #5 there).
+          node-version-file: dsh-cc/.nvmrc
       # Restore-only like the TLA+ job — presubmit.yml's `quality-gates` owns
       # the write (see the note in the TLA+ job).
       - name: Resolve the pnpm store directory

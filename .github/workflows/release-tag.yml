@@ -107,6 +107,13 @@ jobs:
           ref: ${{ env.TARGET }}
           fetch-depth: 1
 
+      # Keep equal to `.nvmrc` (primary line; deviation #5 in presubmit.yml).
+      # Literal, not `node-version-file`: TARGET may be an older commit that
+      # predates the file.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       # Idempotent: if the tag is already on the remote (previous success /
       # human-pushed), skip tagging and fall through to the recovery check.
       - id: idem
