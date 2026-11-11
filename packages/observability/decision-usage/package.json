@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/decision-usage",
   "description": "SystemOne decision runtime host adapter — trusted settings, capability route resolution, durable JSONL usage ledger and lock-guarded session quota behind the optional ctx.systemoneDecisions service (docs/plans/2026-11-02-systemone-02-decision-runtime-metering.md)",
-  "version": "0.9.4",
+  "version": "0.10.0-rc.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
