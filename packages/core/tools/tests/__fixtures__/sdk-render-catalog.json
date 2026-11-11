@@ -1,0 +1,103 @@
+[
+  {
+    "name": "bash",
+    "description": "Run a command in the shell and return its output.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string", "description": "The command to run." },
+        "description": { "type": "string", "description": "What this command does." },
+        "timeout": { "type": "number", "description": "Optional deadline in seconds." }
+      },
+      "required": ["command", "description"]
+    },
+    "outputSchema": { "type": "string" }
+  },
+  {
+    "name": "bash-extra-required",
+    "description": "Bash shape with one required key beyond command/description; the example must not render.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string" },
+        "description": { "type": "string" },
+        "workdir": { "type": "string" }
+      },
+      "required": ["command", "description", "workdir"]
+    },
+    "outputSchema": { "type": "string" }
+  },
+  {
+    "name": "bash-command-constrained",
+    "description": "Bash shape whose command field only accepts a constrained enum; the example must not render.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string", "enum": ["ls", "cat"] },
+        "description": { "type": "string" }
+      },
+      "required": ["command", "description"]
+    },
+    "outputSchema": { "type": "string" }
+  },
+  {
+    "name": "search-index",
+    "description": "Search the workspace index with a nested filter and an enum mode.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "description": "The text to search for." },
+        "filter": {
+          "type": "object",
+          "properties": {
+            "pathPrefix": { "type": "string" },
+            "mode": { "type": "string", "enum": ["exact", "fuzzy", "regex"] }
+          },
+          "required": ["mode"]
+        }
+      },
+      "required": ["query"]
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "hits": { "type": "array", "items": { "type": "string" } },
+        "total": { "type": "number" }
+      },
+      "required": ["hits", "total"]
+    }
+  },
+  {
+    "name": "mcp-external",
+    "description": "An MCP-shaped tool whose parameters carry a root $schema annotation.",
+    "parameters": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" }
+      },
+      "required": ["query"],
+      "additionalProperties": false
+    },
+    "outputSchema": { "type": "string" }
+  },
+  {
+    "name": "mcp_nested",
+    "description": "An MCP-shaped tool with a $schema annotation nested inside a property.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "inner": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "value": { "type": "number" }
+          },
+          "required": ["value"]
+        }
+      },
+      "required": ["inner"]
+    },
+    "outputSchema": { "type": "string" }
+  }
+]
