@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { CANONICAL_LAUNCHER, CANONICAL_NODE, FIXTURES, matchInvocation } from '../scripts/lib/argv.mjs'
+import { LANE } from '../scripts/lib/lane.mjs'
 
 interface Fixture {
   name: string
@@ -41,6 +42,27 @@ describe('cc-codex-bridge shared argv/lexer fixture table', () => {
     const layers = new Set(fixtures.map((f) => f.layer))
     expect(layers.has('lexer')).toBe(true)
     expect(layers.has('argv')).toBe(true)
+  })
+
+  // The shared table is lane-neutral by construction; these two rows depend on
+  // THIS lane's transport flags and live here instead (grok's spec pins the
+  // opposite expectations for the same inputs).
+  it('accepts a dash-leading inline prompt (stdin transport makes it data, never a flag)', () => {
+    expect(LANE.rejectDashLeadingInlinePrompt).toBe(false)
+    expect(matchInvocation(`${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- -restart-from-scratch`))
+      .toMatchObject({ ok: true, value: { prompt: { kind: 'inline', text: '-restart-from-scratch' } } })
+  })
+
+  it('accepts a carriage return in the inline prompt (stdin transport, no line re-parse)', () => {
+    expect(LANE.rejectCarriageReturnInPrompt).toBe(false)
+    expect(matchInvocation(`${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- "line one\rline two"`))
+      .toMatchObject({ ok: true, value: { prompt: { kind: 'inline', text: 'line one\rline two' } } })
+  })
+
+  it('still rejects a newline, under this lane\'s reason string', () => {
+    expect(LANE.lineBreakReason).toBe('prompt-newline')
+    expect(matchInvocation(`${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- "line one\nline two"`))
+      .toMatchObject({ ok: false, reason: 'prompt-newline' })
   })
 
   it('every negative row carries a violated-rule label', () => {

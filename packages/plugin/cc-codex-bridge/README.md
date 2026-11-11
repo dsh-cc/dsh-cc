@@ -20,6 +20,16 @@ remains the single write boundary — workspace plus temp areas only.
 - Codex credentials are synced into a `0700` temp-dir home per run; the Codex CLI
   itself resolves to a validated absolute path at spawn.
 
+### Shared lane library
+
+`scripts/lib/{lexer,argv,canonical}.mjs` are **generated** from
+`scripts/lib/bridge-lane/` at the repository root (the single authored source,
+shared with `cc-grok-bridge`); `scripts/lib/lane.mjs` is this plugin's own
+hand-written config and the only per-lane input. Editing a generated file loses —
+edit the source and run `node scripts/generate-bridge-lane-lib.mjs`.
+`check` in pre-commit and presubmit fails when a copy drifts. `home.mjs` is
+NOT shared: the two lanes clean up temp homes differently.
+
 ## Usage
 
 1. **Status at session start.** A SessionStart hook fires on every session

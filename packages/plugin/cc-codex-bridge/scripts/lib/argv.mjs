@@ -1,7 +1,13 @@
+// GENERATED FILE — do not edit. Source: scripts/lib/bridge-lane/argv.mjs
+// Regenerate: node scripts/generate-bridge-lane-lib.mjs
 /**
- * §3.2-d pinned argv grammar for the codex-rescue-bridge (§5: one shared
- * parser source for matcher and launcher; the exported FIXTURES table is
- * the single fixture suite PR-2's hook tests reuse).
+ * §3.2-d pinned argv grammar for both bridge lanes (one shared parser source
+ * for matcher and launcher; the exported FIXTURES table is the single
+ * fixture suite the hook tests reuse).
+ *
+ * AUTHORED at scripts/lib/bridge-lane/argv.mjs and GENERATED into each
+ * bridge's scripts/lib/ by scripts/generate-bridge-lane-lib.mjs. The shipped
+ * copies are byte-identical; per-lane values come from `./lane.mjs`.
  *
  *   invocation := NODE LAUNCHER [--last] prompt
  *   prompt     := '--prompt-file' PATH | '--' SINGLE_LINE_NONEMPTY_PROMPT
@@ -12,18 +18,25 @@
  *     expansion, or a PATH-resolved name never byte-equals a canonical
  *     absolute literal — indirection dies here).
  *   - `--last` appears at most once, only in the slot shown.
- *   - the positional prompt is a single literal token, never empty, no
- *     newline, and MAY start with `-` (it reaches Codex via stdin, so it is
- *     data, never a flag).
+ *   - the positional prompt is a single literal token, never empty, and
+ *     contains no `\n`. Whether a `\r` or a leading `-` is also rejected is
+ *     TRANSPORT specific, hence lane config rather than shared grammar: the
+ *     Codex lane pipes the prompt to the child's stdin (`codex exec … -`), so
+ *     both stay data; the Grok lane passes it as the `-p` VALUE, where the CLI
+ *     re-parses a leading `-` as a flag (probed: clap misparse, exit 2) and a
+ *     `\r` acts as a line break — that lane rejects both and points at
+ *     `--prompt-file`. `lane.mjs` carries the two flags and the break reason;
+ *     each lane's own spec pins its rows.
  *   - PATH for --prompt-file is non-empty; containment is checked at match
- *     time by the PR-2 hook, not here.
+ *     time by the hook, not here.
  *   - unknown shapes fail closed with a machine-readable `reason`.
  */
+import { LANE } from './lane.mjs'
 import { lexCommand } from './lexer.mjs'
 
 /** Example canonical anchor pair used by the shared fixture table. */
 export const CANONICAL_NODE = '/usr/local/bin/node'
-export const CANONICAL_LAUNCHER = '/opt/dsh-cc/cc-codex-bridge/scripts/codex-rescue-run.mjs'
+export const CANONICAL_LAUNCHER = LANE.canonicalLauncher
 
 const fail = (reason) => ({ ok: false, layer: 'argv', reason })
 const ok = (value) => ({ ok: true, layer: 'argv', value })
@@ -56,13 +69,15 @@ export function parseArgv(argv, { node, launcher }) {
   if (rest.length > 2) return fail('trailing-arguments')
   const prompt = rest[1].text
   if (prompt === '') return fail('empty-prompt')
-  if (prompt.includes('\n')) return fail('prompt-newline')
+  const breaks = prompt.includes('\n') || (LANE.rejectCarriageReturnInPrompt && prompt.includes('\r'))
+  if (breaks) return fail(LANE.lineBreakReason)
+  if (LANE.rejectDashLeadingInlinePrompt && prompt.startsWith('-')) return fail('dash-leading-inline-prompt')
   return ok({ last, prompt: { kind: 'inline', text: prompt } })
 }
 
 /**
  * Full matcher pipeline: lex the raw bash command to exactly one simple
- * command (§3.2-a), then pin its argv to the grammar (§3.2-d).
+ * command, then pin its argv to the grammar.
  */
 export function matchInvocation(raw, { node = CANONICAL_NODE, launcher = CANONICAL_LAUNCHER } = {}) {
   const lex = lexCommand(raw)
@@ -71,9 +86,12 @@ export function matchInvocation(raw, { node = CANONICAL_NODE, launcher = CANONIC
 }
 
 /**
- * Shared fixture table (§5 one-shared-parser-source rule). Every row runs
+ * Shared fixture table (one-shared-parser-source rule). Every row runs
  * through matchInvocation; positive rows pin the normalized parse, negative
- * rows carry `reason` = the violated rule. `layer` documents which layer
+ * rows carry `reason` = the violated rule. Rows whose expectation depends on
+ * a transport flag (`rejectCarriageReturnInPrompt` /
+ * `rejectDashLeadingInlinePrompt`) live in each lane's own spec instead, so
+ * this table stays lane-neutral. `layer` documents which layer
  * rejects (or accepts) the row; lexer-layer rows fail regardless of anchors.
  */
 export const FIXTURES = [
@@ -88,9 +106,9 @@ export const FIXTURES = [
   {
     name: 'inline prompt with --last in its only slot',
     layer: 'argv',
-    input: `${CANONICAL_NODE} ${CANONICAL_LAUNCHER} --last -- "continue the rescue"`,
+    input: `${CANONICAL_NODE} ${CANONICAL_LAUNCHER} --last -- "continue the previous thread"`,
     ok: true,
-    value: { last: true, prompt: { kind: 'inline', text: 'continue the rescue' } },
+    value: { last: true, prompt: { kind: 'inline', text: 'continue the previous thread' } },
   },
   {
     name: 'prompt-file form',
@@ -107,20 +125,6 @@ export const FIXTURES = [
     value: { last: true, prompt: { kind: 'prompt-file', path: '/tmp/prompts/p.txt' } },
   },
   {
-    name: 'positional prompt may itself be --last (data after --)',
-    layer: 'argv',
-    input: `${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- --last`,
-    ok: true,
-    value: { last: false, prompt: { kind: 'inline', text: '--last' } },
-  },
-  {
-    name: 'positional prompt may start with - (stdin handoff makes it data)',
-    layer: 'argv',
-    input: `${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- -restart-from-scratch`,
-    ok: true,
-    value: { last: false, prompt: { kind: 'inline', text: '-restart-from-scratch' } },
-  },
-  {
     name: 'quoted multi-word prompt is one token',
     layer: 'argv',
     input: `${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- 'multi word prompt'`,
@@ -128,8 +132,8 @@ export const FIXTURES = [
     value: { last: false, prompt: { kind: 'inline', text: 'multi word prompt' } },
   },
   {
-    name: 'command substitution inside single quotes is pure data',
-    layer: 'lexer',
+    name: 'expansion-flagged prompt word is accepted as data (never executed)',
+    layer: 'argv',
     input: `${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- '$(rm -rf /)'`,
     ok: true,
     value: { last: false, prompt: { kind: 'inline', text: '$(rm -rf /)' } },
@@ -140,12 +144,12 @@ export const FIXTURES = [
     // The POSIX single-quote escape `'\''` needs `\\''` in a JS template
     // literal: a lone `\` is swallowed (collapses to `''`, an empty quoted
     // segment), which would lex the path to "quotes", not "quote's".
-    input: `${CANONICAL_NODE} '/opt/dsh space/quote'\\''s/cc-codex-bridge/scripts/codex-rescue-run.mjs' -- p`,
-    launcher: '/opt/dsh space/quote\'s/cc-codex-bridge/scripts/codex-rescue-run.mjs',
+    input: `${CANONICAL_NODE} '/opt/dsh space/quote'\\''s/${LANE.name}/scripts/${LANE.launcherFile}' -- p`,
+    launcher: `/opt/dsh space/quote's/${LANE.name}/scripts/${LANE.launcherFile}`,
     ok: true,
     value: { last: false, prompt: { kind: 'inline', text: 'p' } },
   },
-  // ---- negative: lexer layer (§3.2-a) ----
+  // ---- negative: lexer layer ----
   {
     name: 'unquoted semicolon (compound command)',
     layer: 'lexer',
@@ -237,7 +241,7 @@ export const FIXTURES = [
     ok: false,
     reason: 'unclosed-quote',
   },
-  // ---- negative: expansion-bearing anchor tokens (§3.2-b) ----
+  // ---- negative: expansion-bearing anchor tokens ----
   {
     name: 'tilde expansion in argv[0]',
     layer: 'argv',
@@ -248,7 +252,7 @@ export const FIXTURES = [
   {
     name: 'glob expansion in launcher path',
     layer: 'argv',
-    input: `${CANONICAL_NODE} /opt/dsh-cc/*/scripts/codex-rescue-run.mjs -- p`,
+    input: `${CANONICAL_NODE} /opt/dsh-cc/*/scripts/${LANE.launcherFile} -- p`,
     ok: false,
     reason: 'expansion-in-argv1',
   },
@@ -259,11 +263,11 @@ export const FIXTURES = [
     ok: false,
     reason: 'expansion-in-argv0',
   },
-  // ---- negative: argv layer (§3.2-b/d) ----
+  // ---- negative: argv layer ----
   {
     name: 'forged launcher path (absolute but not the anchor)',
     layer: 'argv',
-    input: `${CANONICAL_NODE} /tmp/evil/scripts/codex-rescue-run.mjs -- p`,
+    input: `${CANONICAL_NODE} /tmp/evil/scripts/${LANE.launcherFile} -- p`,
     ok: false,
     reason: 'argv1-byte-mismatch',
   },
@@ -277,7 +281,7 @@ export const FIXTURES = [
   {
     name: 'symlink-literal anchor (bytes differ from the canonical launcher)',
     layer: 'argv',
-    input: `${CANONICAL_NODE} /tmp/link-to-codex-rescue-run.mjs -- p`,
+    input: `${CANONICAL_NODE} /tmp/link-to-${LANE.launcherFile} -- p`,
     ok: false,
     reason: 'argv1-byte-mismatch',
   },
@@ -328,7 +332,7 @@ export const FIXTURES = [
     layer: 'argv',
     input: `${CANONICAL_NODE} ${CANONICAL_LAUNCHER} -- "line one\nline two"`,
     ok: false,
-    reason: 'prompt-newline',
+    reason: LANE.lineBreakReason,
   },
   {
     name: 'unknown flag before the prompt',

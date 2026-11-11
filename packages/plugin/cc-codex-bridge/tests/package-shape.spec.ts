@@ -5,6 +5,7 @@
  * artifact can never silently lose a component the loader mounts.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { LANE } from '../scripts/lib/lane.mjs'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -42,6 +43,18 @@ describe('packages/plugin/cc-codex-bridge package shape', () => {
 
   it('the commands directory holds the rescue command document', () => {
     expect(existsSync(join(PKG_DIR, 'commands', 'rescue.md'))).toBe(true)
+  })
+
+  it('the generated bridge-lane copies and their lane config agree with this package', () => {
+    // The three shared modules are GENERATED from scripts/lib/bridge-lane/;
+    // the per-lane lane.mjs is hand-written. This pins the hand-written half:
+    // a copy-paste slip there would otherwise arm the wrong launcher.
+    expect(LANE.name).toBe(pkg.name.replace('@dsh-cc/plugin-', ''))
+    expect(LANE.canonicalLauncher.endsWith(`/${LANE.name}/scripts/${LANE.launcherFile}`)).toBe(true)
+    for (const module of ['lexer.mjs', 'argv.mjs', 'canonical.mjs']) {
+      const body = readFileSync(join(PKG_DIR, 'scripts', 'lib', module), 'utf8')
+      expect(body.startsWith(`// GENERATED FILE\u0020\u2014 do not edit. Source: scripts/lib/bridge-lane/${module}`)).toBe(true)
+    }
   })
 
   it('the scripts/lib directory holds the shared lexer and argv parser', () => {
