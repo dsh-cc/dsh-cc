@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../observability/version-info"
+    },
+    {
       "path": "../command-usage"
     }
   ]

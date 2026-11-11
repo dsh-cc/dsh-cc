@@ -31,9 +31,7 @@ const ID_RE = /^[0-9a-f]{20}$/
 const KEY_LEN = 16
 
 /** sha256 hex, first 16 chars. */
-export function projectKeyOf(cwd: string): string {
-  return createHash('sha256').update(cwd, 'utf8').digest('hex').slice(0, KEY_LEN)
-}
+export { projectKeyOf } from '@dsh-cc/sidecar-io'
 
 /** Injectable clock signature (tests pass a fake; never sleep in tests). */
 export type NowFn = () => number

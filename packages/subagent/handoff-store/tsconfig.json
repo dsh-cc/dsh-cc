@@ -9,16 +9,19 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
       "path": "../../core/tools"
     },
     {
-      "path": "../../workspace/session-cwd"
+      "path": "../../observability/sidecar-io"
     },
     {
       "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../settings/settings-provider"
+    },
+    {
+      "path": "../../workspace/session-cwd"
     }
   ]
 }

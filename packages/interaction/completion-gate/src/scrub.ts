@@ -14,20 +14,18 @@
  * @module @dsh-cc/completion-gate/scrub
  */
 
+import { truncateUtf8 } from '@dsh-cc/sidecar-io'
+
 /** Max stored head size in UTF-8 bytes (§3.2/§4 step 6). */
 export const HEAD_MAX_BYTES = 200
 
 const REDACTED = '<redacted>'
 
 /**
- * UTF-8-safe byte truncation (turn-rules `truncateUtf8` precedent): operates
- * at the byte level, so a split multi-byte sequence degrades to a replacement
- * character instead of corrupting earlier bytes.
+ * UTF-8-safe byte truncation — implementation lives in `@dsh-cc/sidecar-io`
+ * (single source; the turn-rules copy that seeded this one now delegates too).
  */
-export function truncateUtf8(text: string, maxBytes: number): string {
-  if (maxBytes <= 0) return ''
-  return Buffer.from(text, 'utf8').subarray(0, maxBytes).toString('utf8')
-}
+export { truncateUtf8 }
 
 /** A quoted or bare shell word (used for values we may redact). */
 const VALUE = String.raw`(?:"[^"]*"|'[^']*'|\S+)`

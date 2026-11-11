@@ -22,6 +22,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { HandoffLedger } from './ledger.ts'
 import { registerSettings } from './settings.ts'
 import { HandoffStore } from './store.ts'
@@ -44,20 +45,11 @@ export type { HandoffDeps } from './tools.ts'
 export type { HandoffConfig, HandoffError, HandoffLedgerRow, HandoffMeta } from './types.ts'
 
 /** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
-type HomeFn = (...segments: string[]) => string
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Harness-home path resolver, provided by @deepseek-ai/dsh-app-boot at boot. Optional in tests. */
     dshHomePath?: (...segments: string[]) => string
-  }
-}
-
-function dshHomeFn(ctx: Context): HomeFn | undefined {
-  try {
-    return ctx.dshHomePath
-  } catch {
-    return undefined
   }
 }
 

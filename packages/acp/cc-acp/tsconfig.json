@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../../interaction/moa"
+    },
+    {
+      "path": "../../observability/version-info"
     }
   ]
 }

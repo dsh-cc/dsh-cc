@@ -61,6 +61,9 @@ importers:
       '@dsh-cc/moa':
         specifier: workspace:^
         version: link:../../interaction/moa
+      '@dsh-cc/version-info':
+        specifier: workspace:^
+        version: link:../../observability/version-info
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -371,6 +374,10 @@ importers:
         version: 4.3.2
 
   packages/compaction/compaction-basic-cc:
+    dependencies:
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -468,6 +475,10 @@ importers:
         version: link:../../settings/settings-provider
 
   packages/compaction/compaction-micro:
+    dependencies:
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2048,6 +2059,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
+      '@dsh-cc/version-info':
+        specifier: workspace:^
+        version: link:../../observability/version-info
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2073,6 +2087,9 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2407,6 +2424,9 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2865,6 +2885,12 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../sidecar-io
+      '@dsh-cc/version-info':
+        specifier: workspace:^
+        version: link:../version-info
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2939,6 +2965,12 @@ importers:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
         version: link:../../../../deepseek-harness/vendor/cordis
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/observability/version-info:
+    devDependencies:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -3555,6 +3587,9 @@ importers:
       '@dsh-cc/settings-ns':
         specifier: workspace:^
         version: link:../../settings/settings-ns
+      '@dsh-cc/sidecar-io':
+        specifier: workspace:^
+        version: link:../../observability/sidecar-io
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis

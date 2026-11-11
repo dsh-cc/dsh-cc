@@ -44,5 +44,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@dsh-cc/sidecar-io": "workspace:^"
   }
 }

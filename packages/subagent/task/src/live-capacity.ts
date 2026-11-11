@@ -15,29 +15,18 @@
  */
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { acquireAdmission, type AdmissionLease } from '@dsh-cc/subagent-resume-pins'
+import {
+  LIVE_CAPACITY_REFUSAL,
+  MAX_LIVE_CONTINUABLE_CHILDREN,
+  acquireAdmission,
+  type AdmissionLease,
+} from '@dsh-cc/subagent-resume-pins'
 
-/**
- * The tree-wide resident-activation cap (UX plan §3.6), restated as the cc
- * bundle's `maxActiveSubagents` pool configuration (`cordis.patch.yml`):
- * one pool per root activation tree, shared by local and external
- * descendants; a slot is reserved at materialization and returned only at
- * disposal. Kept as a constant so the refusal copy names the real number.
- */
-export const MAX_LIVE_CONTINUABLE_CHILDREN = 25
-
-/**
- * The single runtime refusal literal for the resident-capacity cap (D4). The
- * continuation admission in `@dsh-cc/subagent-resume-pins` carries the same
- * text, so the user-visible remedy cannot drift between the spawn lanes and
- * `send_message` continuations; a test pins byte equality.
- */
-export const LIVE_CAPACITY_REFUSAL = `parent has ${MAX_LIVE_CONTINUABLE_CHILDREN} resident subagents in its activation `
-  + 'tree (limit reached): the harness counts every resident activation in the tree — '
-  + 'running children, idle parents waiting on child settlement, and cold-resumed '
-  + 'children all hold slots; send_message follow-ups to an already-resident child do '
-  + 'not. Free a slot with release_agent on a listed child (or /agents release <id> '
-  + 'interactively), dispose children you no longer resume, or let running children settle'
+// The tree-wide resident-activation cap (UX plan §3.6) and the single runtime
+// refusal literal (D4) now live in `@dsh-cc/subagent-resume-pins`; both are
+// re-exported here so the spawn lane and `send_message` continuations cannot
+// drift, and this module keeps its existing import surface.
+export { MAX_LIVE_CONTINUABLE_CHILDREN, LIVE_CAPACITY_REFUSAL }
 
 /**
  * Map the harness pool's bare ACTIVATION_LIMIT_REACHED throw onto the D4

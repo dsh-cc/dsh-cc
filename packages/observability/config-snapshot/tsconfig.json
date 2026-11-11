@@ -12,7 +12,13 @@
       "path": "../../compat/cc-plugin-manager"
     },
     {
+      "path": "../../observability/version-info"
+    },
+    {
       "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../sidecar-io"
     }
   ]
 }
