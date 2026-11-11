@@ -12,7 +12,7 @@
 
 export { SettingsProvider, default } from './provider.ts'
 export { SettingsConflictError } from './contract.ts'
-export { parseSettingsNamespace } from './namespace.ts'
+export { duplicateRegistrationMessage, isDuplicateRegistration, parseSettingsNamespace } from './namespace.ts'
 export { redactSecrets } from './redact.ts'
 export type { SettingsNamespace, SettingsUpdateSource } from './types.ts'
 export type { SettingsNamespaceInput } from './namespace.ts'

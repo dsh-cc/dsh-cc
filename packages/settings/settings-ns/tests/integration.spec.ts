@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
+import { SettingsProvider, duplicateRegistrationMessage, type SettingsNamespace } from '@dsh-cc/settings-provider'
 import { installSectionSafe, registerNamespaceSafe, type SettingsReader } from '../src/index.ts'
 
 const NS = 'cc-settings-ns-it'
@@ -53,6 +53,21 @@ async function harness(doc: Record<string, unknown> = { [NS]: { level: 5 } }) {
   await fiber
   return ctx
 }
+
+describe('duplicate-registration message ownership', () => {
+  it('the real provider throws exactly the message settings-ns matches on', async () => {
+    // The single coupling that lets the duplicate path degrade instead of
+    // throwing: the provider's thrown text and the matcher's expected text are
+    // now the SAME function call, not two literals kept in sync by hand.
+    const ctx = await harness()
+    const provider = ctx.get('settings') as SettingsProvider
+    const schema = z.object({ level: z.number().default(1) })
+    provider.register(NS as SettingsNamespace, schema)
+    expect(() => provider.register(NS as SettingsNamespace, schema))
+      .toThrow(duplicateRegistrationMessage(NS))
+    expect(duplicateRegistrationMessage(NS)).toBe(`settings namespace "${NS}" is already registered`)
+  })
+})
 
 describe('registerNamespaceSafe under real cordis', () => {
   it('double mount over a shared provider: the second mount does not throw and both readers agree (§3.2.1)', async () => {

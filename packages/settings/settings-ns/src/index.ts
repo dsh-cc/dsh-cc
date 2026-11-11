@@ -14,6 +14,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { isDuplicateRegistration } from '@dsh-cc/settings-provider'
 import type { SettingsNamespace, SettingsProvider, SettingsRegisterOptions } from '@dsh-cc/settings-provider'
 
 /** Composition base layer and cross-field validation passed through to the provider. */
@@ -41,17 +42,12 @@ export interface SectionHooks<T> {
 }
 
 /**
- * The exact duplicate-registration message harness `SettingsProvider.register`
- * throws. Pinned coupling: upstream drift must fail loudly here (and in the
- * specs that pin it), not silently in production.
+ * The duplicate-registration message, re-exported from its single owner
+ * (`@dsh-cc/settings-provider`). It used to be built here as a second literal
+ * copy, which meant the two sides could drift from EACH OTHER while the pin
+ * test still passed — it only compared this copy against itself.
  */
-export function duplicateRegistrationMessage(ns: SettingsNamespace): string {
-  return `settings namespace "${ns}" is already registered`
-}
-
-function isDuplicate(error: unknown, ns: SettingsNamespace): boolean {
-  return error instanceof Error && error.message === duplicateRegistrationMessage(ns)
-}
+export { duplicateRegistrationMessage } from '@dsh-cc/settings-provider'
 
 /**
  * Presentation-free passthrough schema: resolves any section unchanged, so a
@@ -163,7 +159,7 @@ export function registerNamespaceSafe<T>(
   } catch (error) {
     // A duplicate means another mount or module copy owns the namespace;
     // degrade to live reads and let self-healing retry when it disappears.
-    if (!isDuplicate(error, ns)) throw error
+    if (!isDuplicateRegistration(error, ns)) throw error
   }
   const readValue = (): T | undefined =>
     providerGet !== undefined ? providerGet() : (scope?.get?.() as T | undefined)
@@ -176,7 +172,7 @@ export function registerNamespaceSafe<T>(
         scope = settings.register(ns, schema, registerOptions) as { get?: () => unknown } | undefined
         reacquired = true
       } catch (error) {
-        if (!isDuplicate(error, ns) && !isInactive(error)) throw error
+        if (!isDuplicateRegistration(error, ns) && !isInactive(error)) throw error
       }
     }
     // A re-acquisition in THIS call makes this mount the namespace owner: its
