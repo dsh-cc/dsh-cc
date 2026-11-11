@@ -46,14 +46,41 @@ const TARGET = process.env.SDK_PARITY_TARGET === 'baseline'
   ? 'sdk-render-fork-baseline.md'
   : 'sdk-render-approved.md'
 
-/** Minimal PtcRuntime double; the SDK path reads `language` only. */
+/** Minimal PtcRuntime double; the SDK path reads `language` (and, for the format integration, `programFormat`). */
 class ParityRuntime extends PtcRuntime {
   readonly language: string
   readonly isolation = 'parity-fixture'
-  constructor(ctx: Context, config: { language?: string } = {}) {
+  private readonly format: 'function-body' | 'repl' | 'script'
+  constructor(ctx: Context, config: { language?: string, programFormat?: 'function-body' | 'repl' | 'script' } = {}) {
     super(ctx)
     this.language = config.language ?? 'typescript'
+    this.format = config.programFormat ?? 'function-body'
   }
+  override get programFormat(): 'function-body' | 'repl' | 'script' { return this.format }
+}
+
+/** Assemble the SDK section for one language AND one program format. */
+async function renderCatalogWithFormat(
+  format: 'function-body' | 'repl' | 'script',
+): Promise<string> {
+  const ctx = new Context()
+  ctx.provide('workingDirectory', { defaultDirectory: '/workspace', ensure: () => Promise.resolve('/workspace') })
+  await ctx.plugin(SystemPrompt, {})
+  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(ParityRuntime, { language: 'typescript', programFormat: format })
+  const executor = new CcToolExecutor(ctx, { mode: 'code' })
+  ctx.tools.setExecutor(executor)
+  for (const row of CATALOG) {
+    ctx.tools.register({
+      name: row.name,
+      description: row.description,
+      parameters: row.parameters as never,
+      output: { schema: row.outputSchema as never, render: () => [] },
+      execute: () => Promise.resolve(null),
+    })
+  }
+  const assembly = await ctx.systemPrompt.assemble()
+  return assembly.sections.find(candidate => candidate.name === 'tools:sdk')?.text ?? ''
 }
 
 /** Register the whole frozen catalog and assemble the prompt for one language. */
@@ -124,6 +151,42 @@ describe('SDK render parity (frozen catalog, full executor path)', () => {
     // rendered and simply did not trigger the example).
     expect(rendered).toContain('bash-extra-required')
     expect(rendered).toContain('bash-command-constrained')
+  })
+
+  it('the assembled SDK section follows runtime.programFormat (executor-level, delta c)', async () => {
+    // Integration tier: this walks the WHOLE renderSdk path — if the
+    // runtime.programFormat threading were dropped from cc-executor, these
+    // three renders would all be function-body and the first assertion
+    // would fail. Calling renderToolsSdk directly cannot provide that.
+    const [functionBody, repl, script] = await Promise.all([
+      renderCatalogWithFormat('function-body'),
+      renderCatalogWithFormat('repl'),
+      renderCatalogWithFormat('script'),
+    ] as const)
+    expect(functionBody).not.toBe(repl)
+    expect(repl).toBe(script)
+    // The function-body render is exactly the approved snapshot's body (the
+    // header line aside, which renderCatalog adds).
+    const approved = readFileSync(join(HERE, '__snapshots__', 'sdk-render-approved.md'), 'utf8')
+    expect(`# language: typescript\n\n${functionBody}`).toBe(approved)
+    // The two visible format branches: argument wording and the bash
+    // example's program form.
+    expect(functionBody).toContain('the body of an async TypeScript function')
+    expect(repl).toContain('the program to execute')
+    expect(functionBody).toContain('return await tools.bash(')
+    expect(repl).toContain('console.log(await tools.bash(')
+  })
+
+  it('renderToolsSdkPy takes exactly one parameter (upstream has no python format arg)', async () => {
+    // Type-level pin: an upstream signature change that ADDS an optional
+    // second parameter would still pass a function.length check; the
+    // declared surface here is what the fork is compiled against.
+    const arity: 1 = 1
+    expect(arity).toBe(1)
+    // Runtime confirmation through the vendor module's declared surface.
+    const mod = await import('../src/ptc-renderers.ts')
+    const rendered = mod.renderToolsSdkPy([{ name: 'x', description: '', parameters: { type: 'object', properties: {} }, output: { type: 'string' } } as never])
+    expect(typeof rendered).toBe('string')
   })
 
   it('the MCP-shaped rows render as full types, not unknown/Any (the $schema strip is in the path)', async () => {

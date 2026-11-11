@@ -57,6 +57,33 @@ interface PtcRenderers {
 const specifier: string = '@deepseek-ai/dsh-tool-executor-ptc'
 const upstream = await import(specifier) as unknown as PtcRenderers
 
+// The TS renderer picks its instruction copy (and the bash example's program
+// form) from the runtime's programFormat; Python has no format parameter
+// upstream. The wrapper keeps the table exhaustive over the known languages.
+const SDK_RENDERERS: Record<string, (schemas: readonly ToolSdkSchema[], format: PtcProgramFormat) => string> = {
+  typescript: (schemas, format) => upstream.renderToolsSdk(schemas, format),
+  python: schemas => upstream.renderToolsSdkPy(schemas),
+}
+
+/** Whether a SDK renderer is registered for `language`. */
+export function hasSdkRenderer(language: string): boolean {
+  return Object.hasOwn(SDK_RENDERERS, language)
+}
+
+/**
+ * Render the SDK section for a runtime's language, threading the runtime's
+ * program format into the TypeScript renderer.
+ * @param language - the loaded runtime's language identifier.
+ * @param format - the loaded runtime's program format.
+ * @param schemas - the visible tools' SDK schemas.
+ * @returns the rendered `tools:sdk` section text.
+ */
+export function renderSdkSection(language: string, format: PtcProgramFormat, schemas: readonly ToolSdkSchema[]): string {
+  const render = SDK_RENDERERS[language]
+  if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${language}`)
+  return render(schemas, format)
+}
+
 export const jsonSchemaToTs = upstream.jsonSchemaToTs
 export const jsonSchemaToPy = upstream.jsonSchemaToPy
 export const renderToolsSdk = upstream.renderToolsSdk
