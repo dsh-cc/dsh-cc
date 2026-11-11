@@ -7,7 +7,7 @@
  * Driven through the production judge listener with a fake agent/session
  * (scripted session events) and a canned System One `fetchImpl`.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,8 +19,31 @@ import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCor
 import { captureClaimed, getCapturedOpening, resetRuntimeCore } from '../src/runtime-state.ts'
 import { escalationOpening, GAUGE_ROUTE, routes as tierRoutes, userOpening } from './rig.ts'
 
+/**
+ * Ledger write latency knob: delays the FIRST `judge` row append by
+ * `firstJudgeMs` (0 = pass-through), so a test can pin the slow-write side
+ * of a race instead of hoping the filesystem loses it.
+ */
+const ledgerDelay = vi.hoisted(() => ({ firstJudgeMs: 0, delayed: false }))
+vi.mock('@dsh-cc/sidecar-io', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dsh-cc/sidecar-io')>()
+  return {
+    ...actual,
+    appendJsonl: async (...args: Parameters<typeof actual.appendJsonl>) => {
+      const row = args[1] as { type?: string }
+      if (ledgerDelay.firstJudgeMs > 0 && !ledgerDelay.delayed && row?.type === 'judge') {
+        ledgerDelay.delayed = true
+        await new Promise((resolve) => setTimeout(resolve, ledgerDelay.firstJudgeMs))
+      }
+      return actual.appendJsonl(...args)
+    },
+  }
+})
+
 const dirs: string[] = []
 afterEach(() => {
+  ledgerDelay.firstJudgeMs = 0
+  ledgerDelay.delayed = false
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   resetRuntimeCore()
 })
@@ -71,6 +94,10 @@ interface UnitOptions {
   ladder?: ResolvedRoute[]
   /** Hold the first judge call until `deferred.resolve()` (stale-guard tests). */
   holdJudge?: boolean
+  /** Per-turn tier (router's tierFor); overrides `tier`. */
+  tierFor?: (turn: number) => number
+  /** Runs synchronously inside the agent's followup (start the retry turn). */
+  onFollowup?: (source: unknown) => void
 }
 
 function makeUnitRig(options: UnitOptions = {}): UnitRig {
@@ -124,7 +151,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
   const deps: JudgeDeps = {
     readSettings: () => settings,
     getCapturedOpening: (turnId) => getCapturedOpening(turnId),
-    tierFor: () => options.tier ?? 1,
+    tierFor: (turn) => options.tierFor?.(turn) ?? options.tier ?? 1,
     routes: () => tierRoutes() as never,
     resolveBackend: () => ({ baseURL: 'http://127.0.0.1:9' }),
     fetchImpl,
@@ -155,6 +182,7 @@ function makeUnitRig(options: UnitOptions = {}): UnitRig {
     followup: (message: { content: { type: string; text?: string }[]; source?: unknown }) => {
       selectLog.push({ kind: 'followup', detail: message.source })
       followed.push({ text: (message.content ?? []).map((b) => b.text ?? '').join(''), source: message.source })
+      options.onFollowup?.(message.source)
     },
   }
   return {
@@ -299,6 +327,45 @@ describe('moa acceptance judge — unit', () => {
     expect(rig.followed[0].source).toMatchObject({ originSeq: 0, fromTier: 2, toTier: 3 })
     expect(rig.bookkeeping.stateFor(0)).toEqual({ tierFloor: 3, retriesUsed: 1 }) // one entry, not the retry's own seq
     expect(rig.bookkeeping.stateFor(2)).toBeUndefined()
+  }, 30_000)
+
+  it('automatic chain (§3.3.5): a retry judged before the first escalation rows land still ledgers in chain order', async () => {
+    // The followup starts the retry turn, and that turn's judge can finish
+    // before the first escalation's ledger writes do. Resume rehydration reads
+    // the LAST routing.jsonl row, so the rows must keep chain order.
+    ledgerDelay.firstJudgeMs = 50 // the first escalation's ledger write is slow
+    const row = 'moa: draft → blueprint, first answer rejected by judge'
+    const rig: UnitRig = makeUnitRig({
+      maxEscalations: 2,
+      tierFor: (turn) => turn, // turn 1 ran on draft, the retry turn 2 on blueprint
+      onFollowup: (source) => {
+        if ((source as { fromTier?: number }).fromTier !== 1) return
+        rig.session.events.push(
+          { seq: 2, type: 'user/message', data: { content: [{ type: 'text', text: row }], source: source as Record<string, unknown> } },
+          { seq: 3, type: 'assistant/message', data: { turn: 2, message: { content: [{ type: 'text', text: 'retry answer' }] } } },
+        )
+        rig.session.seq = 4
+        void rig.seed(2, [escalationOpening(row, 0, 1, 2)])
+        rig.stop(2) // the retry turn ends inside the followup
+      },
+    })
+    await rig.seed(1, [userOpening('write a debounce function')])
+    seedTurn(rig, 1, 'write a debounce function')
+    rig.stop(1)
+    const rows = await readRows<{ type: string; originSeq: number; fromTier: number; toTier: number }>(rig.routingLedger, 2)
+    expect(rig.followed.map((followed) => followed.source)).toEqual([
+      expect.objectContaining({ originSeq: 0, fromTier: 1, toTier: 2 }),
+      expect.objectContaining({ originSeq: 0, fromTier: 2, toTier: 3 }),
+    ])
+    expect(rows.map((entry) => [entry.fromTier, entry.toTier])).toEqual([
+      [1, 2],
+      [2, 3],
+    ])
+    const judgeRows = await readRows<{ tier: string; acted: boolean }>(rig.acceptanceLedger, 2)
+    expect(judgeRows.map((entry) => [entry.tier, entry.acted])).toEqual([
+      ['draft', true],
+      ['blueprint', true],
+    ])
   }, 30_000)
 
   it('accept: P(acceptable) >= tau → no followup, judge row acted:false, NO escalate row', async () => {

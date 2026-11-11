@@ -119,16 +119,24 @@ export function createAcceptanceJudge(
   /** One in-flight escalation per agent (§3.4): keyed by agent reference. */
   const inFlight = new WeakSet<object>()
 
-  const logJudge = async (row: Record<string, unknown>): Promise<void> => {
-    const path = deps.acceptanceLedgerPath?.()
-    if (path === undefined) return
-    await appendJsonl(path, { type: 'judge', ts: new Date().toISOString(), ...row })
+  /**
+   * Ledger writes go through one FIFO, so rows land in the order they were
+   * enqueued. Without it, an automatic chain races itself: the followup
+   * starts the retry turn, whose judge can append its `escalate` row while
+   * this judge's two awaited appends are still in flight. Resume rehydration
+   * reads the LAST routing.jsonl row (D3.2), so a reordered chain would
+   * rehydrate the lower tier and fail the freshness check.
+   */
+  let ledgerTail: Promise<void> = Promise.resolve()
+  const enqueueWrite = (path: string | undefined, row: Record<string, unknown>): Promise<void> => {
+    if (path === undefined) return ledgerTail
+    ledgerTail = ledgerTail.then(() => appendJsonl(path, row)).catch(() => undefined)
+    return ledgerTail
   }
-  const logEscalate = async (row: { originSeq: number; fromTier: number; toTier: number }): Promise<void> => {
-    const path = deps.routingLedgerPath?.()
-    if (path === undefined) return
-    await appendJsonl(path, { type: 'escalate', ts: new Date().toISOString(), ...row })
-  }
+  const logJudge = (row: Record<string, unknown>): Promise<void> =>
+    enqueueWrite(deps.acceptanceLedgerPath?.(), { type: 'judge', ts: new Date().toISOString(), ...row })
+  const logEscalate = (row: { originSeq: number; fromTier: number; toTier: number }): Promise<void> =>
+    enqueueWrite(deps.routingLedgerPath?.(), { type: 'escalate', ts: new Date().toISOString(), ...row })
 
   /** Plain-text projection of message content blocks. */
   const textBlocks = (content: { type: string; text?: string }[] | undefined): string =>
@@ -375,6 +383,12 @@ export function createAcceptanceJudge(
       snap.agent.model.select(toSelection)
       noteMoaSelection(toSelection)
     }
+    // Enqueue both rows BEFORE the followup: the followup starts the retry
+    // turn, and that turn's judge must append after this escalation's rows.
+    const logged = Promise.all([
+      logJudge({ ...base, pAcceptable, acted: true, reason: 'escalated' }),
+      logEscalate({ originSeq: snap.originSeq, fromTier: snap.fromTier, toTier }),
+    ])
     // The typed followup IS the visible escalation status row (§3.5 single
     // row): durable user/message, moa-escalation provenance, form notice —
     // never a raw re-send of the user text with source.kind 'user' (that
@@ -392,8 +406,7 @@ export function createAcceptanceJudge(
         },
       }),
     )
-    await logJudge({ ...base, pAcceptable, acted: true, reason: 'escalated' }).catch(() => undefined)
-    await logEscalate({ originSeq: snap.originSeq, fromTier: snap.fromTier, toTier }).catch(() => undefined)
+    await logged
   }
 
   return {
