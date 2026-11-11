@@ -1,17 +1,21 @@
 {
-  "name": "@dsh-cc/output-styles",
-  "description": "Claude Code-compatible output style selection for the DeepSeek Harness",
+  "name": "@dsh-cc/prompt-extras",
+  "description": "Two system-prompt overlays for the CC preset, one package: serena-first steering and Claude Code output styles",
   "version": "0.9.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
-    "directory": "packages/compat/cc-output-styles"
+    "directory": "packages/compat/cc-prompt-extras"
   },
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./lib/index.d.ts",
-      "default": "./lib/index.js"
+    "./serena-first": {
+      "types": "./lib/serena-first.d.ts",
+      "default": "./lib/serena-first.js"
+    },
+    "./output-styles": {
+      "types": "./lib/output-styles.d.ts",
+      "default": "./lib/output-styles.js"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -20,28 +24,30 @@
     "lib"
   ],
   "license": "Apache-2.0",
-  "peerDependencies": {
-    "@deepseek-ai/dsh-commands": ">=0.2.2-rc.1",
-    "@deepseek-ai/dsh-system-prompt": ">=0.2.2-rc.1",
-    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-home-paths": ">=0.2.2-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
-  },
   "dependencies": {
     "yaml": "^2.4.2"
   },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-commands": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": ">=0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
   "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
     "@deepseek-ai/cordis-plugin-loader": "link:../../../../deepseek-harness/vendor/loader",
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
     "@deepseek-ai/dsh-scope": "link:../../../../deepseek-harness/packages/core/scope",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
-    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
-    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
-    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
-    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery"
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/settings-provider": "workspace:^",
+    "typescript": "6.0.3"
   },
   "publishConfig": {
     "access": "public"

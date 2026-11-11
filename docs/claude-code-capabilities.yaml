@@ -2297,7 +2297,7 @@ capabilities:
       ux: full
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-output-styles" }
-      - { type: test, path: packages/compat/cc-output-styles/tests/output-styles.spec.ts }
+      - { type: test, path: packages/compat/cc-prompt-extras/tests/output-styles.spec.ts }
     deviation: { kind: none }
 
   commands.permissions:
@@ -3262,7 +3262,7 @@ capabilities:
       ux: full
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: serena-first" }
-      - { type: test, path: packages/compat/cc-serena-first/tests/serena-first.spec.ts }
+      - { type: test, path: packages/compat/cc-prompt-extras/tests/serena-first.spec.ts }
     deviation: { kind: none }
 
   # ── plugins ─────────────────────────────────────────────────────────────
@@ -4257,7 +4257,7 @@ capabilities:
       ux: full
     evidence:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: cc-output-styles" }
-      - { type: test, path: packages/compat/cc-output-styles/tests/styles.spec.ts }
+      - { type: test, path: packages/compat/cc-prompt-extras/tests/styles.spec.ts }
     deviation: { kind: none }
 
   ux.statusline:

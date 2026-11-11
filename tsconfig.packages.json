@@ -44,6 +44,9 @@
       "path": "./packages/compat/cc-plugin-manager"
     },
     {
+      "path": "./packages/compat/cc-prompt-extras"
+    },
+    {
       "path": "./packages/compat/cc-model-aliases"
     },
     {
@@ -52,9 +55,7 @@
     {
       "path": "./packages/context/context-crusher"
     },
-    {
-      "path": "./packages/compat/cc-serena-first"
-    },
+
     {
       "path": "./packages/memory/memory"
     },
@@ -85,9 +86,7 @@
     {
       "path": "./packages/core/tool-notebook-edit"
     },
-    {
-      "path": "./packages/compat/cc-output-styles"
-    },
+
     {
       "path": "./packages/subagent/coordinator"
     },
