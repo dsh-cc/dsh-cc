@@ -94,6 +94,11 @@ export interface HelpableExtras {
  */
 export function helpable(def: CommandDescriptor & Pick<CommandDefinition, 'handler'>, extras?: HelpableExtras): CommandDefinition {
   const wrapped: CommandDefinition = {
+    // Identity must survive the wrap: first-party alias resolution (the
+    // harness `builtinCommandName` / `resolveCommand` path) and client
+    // localization both key off `definitionId`, so dropping it here would
+    // silently disable the zh token aliases for every wrapped command.
+    ...(def.definitionId !== undefined ? { definitionId: def.definitionId } : {}),
     name: def.name,
     description: def.description,
     ...(def.input !== undefined ? { input: def.input } : {}),

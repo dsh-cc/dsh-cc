@@ -56,8 +56,20 @@ describe('@dsh-cc/command-release-notes registration', () => {
 describe('/release-notes content', () => {
   it('embeds a seeded changelog with the version section', () => {
     expect(CHANGELOG).toContain('# Release notes')
-    expect(CHANGELOG).toContain('Permissions durability')
+    expect(CHANGELOG).toContain('Permissions')
     expect(CHANGELOG).toContain('Commands')
+  })
+  it('newest section version tracks this package version', async () => {
+    // Drift tripwire: the constant is an author-time snapshot, so without this
+    // pin a version bump leaves the command reporting a stale release (it once
+    // shipped 0.1.0-rc.5 facts at 0.9.4). Offline-safe: reads the package's own
+    // manifest, no network.
+    const { readFile } = await import('node:fs/promises')
+    const { fileURLToPath } = await import('node:url')
+    const manifestPath = fileURLToPath(new URL('../package.json', import.meta.url))
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { version: string }
+    const newestSection = /^## (\S+)/mu.exec(CHANGELOG)
+    expect(newestSection?.[1]).toBe(manifest.version)
   })
   it('renders a bounded prefix of lines', () => {
     const short = renderReleaseNotes(CHANGELOG, 4)
@@ -76,14 +88,14 @@ describe('/release-notes human command', () => {
     expect(execution?.result.kind).toBe('success')
     const text = (execution?.result as { text: string }).text
     expect(text).toContain('# Release notes')
-    expect(text).toContain('0.1.0-rc.5')
+    expect(text).toContain('0.9.4')
   })
   it('honors a line-count argument and ignores an invalid one', async () => {
     const { ctx, agent } = await harness()
     const short = await ctx.commands.execute(agent, '/release-notes 3', [], new AbortController().signal)
     expect((short?.result as { text: string }).text.split('\n')).toHaveLength(3)
     const full = await ctx.commands.execute(agent, '/release-notes bogus', [], new AbortController().signal)
-    expect((full?.result as { text: string }).text).toContain('0.1.0-rc.5')
+    expect((full?.result as { text: string }).text).toContain('0.9.4')
   })
 })
 

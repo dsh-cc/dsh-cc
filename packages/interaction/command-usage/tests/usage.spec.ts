@@ -81,6 +81,19 @@ describe('helpable', () => {
     handler: vi.fn(() => ({ kind: 'success', text: 'ran' })),
   })
 
+  it('preserves the first-party definitionId through the wrap', () => {
+    // Identity outlives the wrapper: builtin alias resolution and client
+    // localization both match on definitionId, so dropping it here silently
+    // disables the zh token aliases for every wrapped command.
+    const def = helpable({ ...makeDef(), definitionId: 'first-party-id' as never })
+    expect(def.definitionId).toBe('first-party-id')
+  })
+
+  it('omits definitionId when the input has none (absence-preserving)', () => {
+    const def = helpable(makeDef())
+    expect('definitionId' in def).toBe(false)
+  })
+
   it('answers a help request with formatted help text', () => {
     const def = makeDef()
     const wrapped = helpable(def)

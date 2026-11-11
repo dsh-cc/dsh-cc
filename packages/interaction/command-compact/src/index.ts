@@ -10,7 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { ManualCompactionError } from '@deepseek-ai/dsh-compaction'
-import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { CommandDefinitionId, type CommandInvocation, type CommandResult } from '@deepseek-ai/dsh-commands'
 import { setCompactHint, takeCompactHint } from '@dsh-cc/compaction-basic'
 import { helpable } from '@dsh-cc/command-usage'
 
@@ -106,6 +106,10 @@ export function apply(ctx: Context): void {
     // invocation can enter while already-started handler promises quiesce.
     yield async () => { await Promise.allSettled(active) }
     yield ctx.commands.register(helpable({
+      // First-party identity: the harness resolves the zh token 压缩 (and the
+      // client's localized menu label) only through `builtinCommandName`,
+      // which matches on this exact definitionId.
+      definitionId: CommandDefinitionId('@deepseek-ai/dsh-command-compact'),
       name: 'compact',
       description: 'Compact older conversation history',
       input: { hint: '[instructions]' },

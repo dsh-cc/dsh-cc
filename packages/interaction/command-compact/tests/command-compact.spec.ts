@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import CommandRuntime, { type CommandResult } from '@deepseek-ai/dsh-commands'
+import CommandRuntime, {
+  CommandDefinitionId,
+  type CommandResult,
+} from '@deepseek-ai/dsh-commands'
+import { builtinCommandName, resolveCommand } from '@deepseek-ai/dsh-commands/builtin'
 import {
   CompactionId,
   CompactionEngine,
@@ -133,6 +137,7 @@ describe('@dsh-cc/command-compact registration', () => {
     const loader = Object.create(Loader.prototype) as Loader
     expect(loader.unwrapExports(commandCompact)).toBe(commandCompact)
     expect(test.ctx.commands.list(test.agent)).toContainEqual({
+      definitionId: CommandDefinitionId('@deepseek-ai/dsh-command-compact'),
       name: 'compact',
       description: 'Compact older conversation history',
       input: { hint: '[instructions]' },
@@ -140,6 +145,19 @@ describe('@dsh-cc/command-compact registration', () => {
 
     await test.plugin.dispose()
     expect(test.ctx.commands.find(test.agent, 'compact')).toBeUndefined()
+  })
+
+  it('carries the first-party identity so zh aliases and localization resolve', async () => {
+    const test = await harness()
+    const catalog = test.ctx.commands.list(test.agent)
+    const descriptor = catalog.find(entry => entry.name === 'compact')
+    // The identity must survive `helpable()` — it copies the descriptor, so a
+    // dropped `definitionId` silently disables both paths below.
+    expect(builtinCommandName(descriptor!)).toBe('compact')
+    // The zh token 压缩 only resolves through the definitionId match.
+    expect(resolveCommand('压缩', catalog)?.name).toBe('compact')
+    // ...and the English spelling resolves by exact name, not by identity.
+    expect(resolveCommand('compact', catalog)?.name).toBe('compact')
   })
 })
 

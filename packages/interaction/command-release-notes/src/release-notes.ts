@@ -3,33 +3,44 @@
  * repository's tracked history and README. The full changelog rides a TS string
  * constant so the command is offline-safe and deterministic — no filesystem or
  * network at call time.
+ *
+ * The newest section's version MUST equal this package's `package.json`
+ * version; `tests/command-release-notes.spec.ts` pins that pairing so the
+ * snapshot cannot silently age into a wrong report again.
+ *
  * @module @dsh-cc/command-release-notes/release-notes
  */
 
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
-## 0.1.0-rc.5 — Claude Code feature parity
+## 0.9.4 — Claude Code compatibility layer
 
-- **Permissions durability** — the permission-rule engine (allow/deny/ask +
-  mode) now reads its rules from a durable settings section, so edits survive
-  restarts and hot-reload without a re-deploy.
-- **Hook events** — a 27-event CC hook bridge (command + http executors)
-  surfaces lifecycle, permission, and tool events to external hook runners.
-- **Schedule** — hook and command scheduling runs recurring work through the
-  harness's turn-loop seams.
-- **WebFetch / WebSearch** — web fetch and search tooling integrates with the
-  standard tool registry.
-- **Commands** — human-facing slash commands: /status, /doctor, /cost,
-  /export, /stats.
-- **Memory** — CLAUDE.md-style file memory with dynamic recall by a forked
-  side-query, plus background consolidation.
-- **Skills** — SKILL.md providers read CC directories; ToolSearch resolves
-  deferred tool names.
-- **MCP** — a vendored MCP client with OAuth 2.1, resources, and prompts, plus
-  a .mcp.json parser.
-- **Project shape** — settings-cascade (5-level file precedence), subagent
-  coordinator, compaction-micro, and git-worktree tools.
+- **Commands** — 21 human-facing slash commands spanning session inspection
+  (/status, /cost, /stats, /export, /diff, /transcript), diagnostics (/doctor),
+  configuration (/config, /permissions, /preset, /mcp, /skills, /agents,
+  /tasks, /memory, /plugin), workflow (/commit-split, /branch, /resume,
+  /rename, /compact, /init) and metadata (/version, /release-notes, /help).
+- **Hooks** — a Claude-Code hook bridge over the harness hook protocol,
+  covering lifecycle, permission, tool and subagent events, with command and
+  http executors plus Stop-block capping.
+- **Permissions** — a CC-shaped allow/deny/ask rule engine with modes,
+  session-scoped grants, and an auto mode that decides low-risk calls through
+  a classifier.
+- **Memory** — CLAUDE-style file memory with a project index, sidecar recall
+  and background consolidation.
+- **Skills and plugins** — SKILL.md discovery across the CC roots, a plugin
+  marketplace loader, and deferred tool-name resolution via ToolSearch.
+- **MCP** — an MCP client with resources, prompts and deferred startup, plus a
+  .mcp.json/.claude.json parser and a migration command.
+- **Compaction** — a CC-aware compaction engine with optional cost gating,
+  tool-use summaries and staleness microcompaction.
+- **Subagents** — a task tool with worktree isolation, resume pins, a handoff
+  store and a background-capacity release valve.
+- **ACP** — an Agent Client Protocol session surface so external editors can
+  drive dsh-cc over stdio.
+- **Session plumbing** — a 5-level settings cascade, session projections,
+  statusline rendering and a working-directory facade.
 
 See per-package READMEs for detailed contracts.
 `
