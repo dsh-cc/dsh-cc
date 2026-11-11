@@ -4,6 +4,8 @@
 **Date:** 2026-09-23
 **Worktree:** `.claude/worktrees/oh-my-pi` (branch `worktree-oh-my-pi`) — doc origin; implementation worktree `.claude/worktrees/turn-rules`.
 
+**Default promotion (2026-11-11):** the two built-in reminder sub-features — Phase-2 `judged` and the later `repeat-reminder` — now default to **true** (opt out per key with `false`). The trigger-rule engine's own default is unchanged (`enabled: true`, zero trigger-bearing rules by default).
+
 ## 1. Problem
 
 dsh-cc ingests rules today (Cursor-plugin `rules/*.mdc`, capability
@@ -310,7 +312,7 @@ Per-session, on disk, so compaction and resume cannot re-fire a `once` rule:
 - Resume: session id follows the resumed session (resume-pins precedent,
   `packages/subagent/resume-pins`), so the ledger just works.
 
-### 4.7 Judged rules (phase 2, flagged, default off)
+### 4.7 Judged rules (phase 2, flagged, default ON since 2026-11-11)
 
 omp's third trigger class asks a cheap model ("LLM judge", yes-prob ≥ 0.7
 gate; `oh-my-pi/packages/coding-agent/src/export/ttsr.ts:365-398`, verified

@@ -6,7 +6,8 @@
 完成（"tests pass"、"committed"、"pushed"、"build succeeded"），而自最近一条真实
 用户消息以来没有匹配的执行证据，就注入一次提醒。
 
-- 默认关闭（`cc-completion-gate.enabled`）。哈希字段始终记录；清洗过的 bash
+- **2026-11-11 起默认开启**（`cc-completion-gate.enabled` 默认 `true`，经生产
+  dogfood 由暗发布转正；如需关闭设 `false`）。哈希字段始终记录；清洗过的 bash
   命令头（≤200 字节，六步 scrubber）只在开启时捕获，且绝不写入台账文件。
 - 提醒预算由 `nudges-per-session` 控制，默认每会话一次。两个键都只认用户层
   settings.json，每个事件热读。

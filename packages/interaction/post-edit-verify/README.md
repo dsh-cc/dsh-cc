@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Post-edit auto-verify: after an accepted `edit`/`write` result, the plugin runs a user-declared fast verification command through the harness ShellExecutor and **appends** its outcome (`[auto-verify]` text block) to the **same** tool result — one observation covers both events, so a failed verify surfaces without an extra model round-trip. **Default OFF** (`cc-post-edit-verify.enabled: false`, opt-in).
+Post-edit auto-verify: after an accepted `edit`/`write` result, the plugin runs a user-declared fast verification command through the harness ShellExecutor and **appends** its outcome (`[auto-verify]` text block) to the **same** tool result — one observation covers both events, so a failed verify surfaces without an extra model round-trip. **Default ON since 2026-11-11** (`cc-post-edit-verify.enabled: true`; opt out with `false`). With the default empty `rules` array the listener is inert — nothing runs until you declare at least one rule.
 
 ## How it works
 
@@ -14,7 +14,7 @@ Key `cc-post-edit-verify` in the **user-layer** `settings.json` (the harness-hom
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | Master flag, **opt-in**. |
+| `enabled` | `true` | Master flag; default ON since 2026-11-11 (opt out with `false`). |
 | `rules` | `[]` | Array of `{ glob, command, timeout-ms? }`; first match wins. |
 | `debounce-ms` | `5000` | Burst **labeling** window only — every matching edit still runs; a run inside the window gets a `burst — result may overlap edits` label. |
 | `max-output-bytes` | `4096` | Tail-keeping capture budget for the verify output. |

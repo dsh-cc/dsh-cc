@@ -418,11 +418,11 @@
       }
     },
     "engine.completion-gate": {
-      "title": "Completion gate (opt-in runtime-verified completion)",
+      "title": "Completion gate (runtime-verified completion)",
       "category": "engine",
       "plane": "preset",
       "upstream": {
-        "summary": "Not an upstream CC surface: a dsh-cc extension. An opt-in gate at agent/turn-stopping that withholds the completion while declared completion claims lack verified evidence, delivering an evidence nudge instead, and keeps a per-session receipts ledger with lineage lift. Ships dark (cc-completion-gate.enabled: false).",
+        "summary": "Not an upstream CC surface: a dsh-cc extension. A gate at agent/turn-stopping that withholds the completion while declared completion claims lack verified evidence, delivering an evidence nudge instead, and keeps a per-session receipts ledger with lineage lift. Default ON since 2026-11-11 (cc-completion-gate.enabled: true; opt out with false).",
         "refs": []
       },
       "dimensions": {
@@ -464,7 +464,7 @@
       ],
       "deviation": {
         "kind": "divergent",
-        "summary": "dsh-cc extension: no CC counterpart exists. An opt-in runtime-verified completion gate (receipts ledger + evidence nudge + lineage lift), default off."
+        "summary": "dsh-cc extension: no CC counterpart exists. A runtime-verified completion gate (receipts ledger + evidence nudge + lineage lift), default on since 2026-11-11."
       }
     },
     "engine.config-snapshot": {
@@ -849,7 +849,7 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "Two paths. Production: Serena MCP via user-scope ~/.claude.json (v1.7.0 pin) — symbol-level retrieval/editing/diagnostics, ~30 tools deferred through ToolSearch; gaps: no hover tool, no call hierarchy, no push diagnostics. Native dsh-lsp/dsh-lsp-stdio/dsh-tool-lsp exist with a closed 4-operation read-only seam but are NOT mounted by any shipped composition (no lsp rows in cordis.patch.yml/agent.cordis.yml). cc-plugin-loader does not parse lspServers/.lsp.json manifests; PreToolUse hooks ignore additionalContext. /ide and editor pods remain host-shell scope; headless does not apply. Diagnostics-on-write is now mounted (lsp-on-write preset row) but depends on the user's serena MCP mount, is settings-gated and dark by default (`cc-lsp-on-write.enabled`, user layer), and is diagnostics-only — no navigation surface."
+        "summary": "Two paths. Production: Serena MCP via user-scope ~/.claude.json (v1.7.0 pin) — symbol-level retrieval/editing/diagnostics, ~30 tools deferred through ToolSearch; gaps: no hover tool, no call hierarchy, no push diagnostics. Native dsh-lsp/dsh-lsp-stdio/dsh-tool-lsp exist with a closed 4-operation read-only seam but are NOT mounted by any shipped composition (no lsp rows in cordis.patch.yml/agent.cordis.yml). cc-plugin-loader does not parse lspServers/.lsp.json manifests; PreToolUse hooks ignore additionalContext. /ide and editor pods remain host-shell scope; headless does not apply. Diagnostics-on-write is now mounted (lsp-on-write preset row) but depends on the user's serena MCP mount, is settings-gated with default ON since 2026-11-11 (`cc-lsp-on-write.enabled`, user layer; inert without a serena mount), and is diagnostics-only — no navigation surface."
       }
     },
     "engine.microcompact": {
@@ -1203,7 +1203,7 @@
       ],
       "deviation": {
         "kind": "divergent",
-        "summary": "dsh-cc extension (user-layer-only setting cc-post-edit-verify, rules {glob, command, timeout-ms}): after an accepted edit/write result, a fast POSIX-shell verification command runs through the harness ShellExecutor and its outcome is APPENDED to the same tool result as an `[auto-verify]` text block — one observation covers both events, no extra model round-trip. Appended text, not replacement: divergent vs PostToolUse `updatedToolOutput`. Default off; burst labeling via debounce-ms, tail-only capture bounded by max-output-bytes."
+        "summary": "dsh-cc extension (user-layer-only setting cc-post-edit-verify, rules {glob, command, timeout-ms}): after an accepted edit/write result, a fast POSIX-shell verification command runs through the harness ShellExecutor and its outcome is APPENDED to the same tool result as an `[auto-verify]` text block — one observation covers both events, no extra model round-trip. Appended text, not replacement: divergent vs PostToolUse `updatedToolOutput`. Default ON since 2026-11-11 (inert until the user declares at least one rule); burst labeling via debounce-ms, tail-only capture bounded by max-output-bytes."
       }
     },
     "engine.prompt-suggest": {

@@ -5,9 +5,9 @@ import { join } from 'node:path'
 import { SettingsSchema, DEFAULT_RULES_SETTINGS, readUserRules, rulesOf, DEFAULT_RECOVERY_HINT_SETTINGS, RecoveryHintSettingsSchema, readUserEnabled } from '../src/settings.ts'
 
 describe('SettingsSchema', () => {
-  it('materializes defaults for a full object', () => {
+  it('materializes defaults for a full object (enabled: ON since 2026-11-11)', () => {
     const resolved = SettingsSchema({} as unknown as Record<string, never>) as Record<string, unknown>
-    expect(resolved.enabled).toBe(false)
+    expect(resolved.enabled).toBe(true)
     expect(resolved['debounce-ms']).toBe(5000)
     expect(resolved['max-output-bytes']).toBe(4096)
     expect(resolved['verbose-on-success']).toBe(false)

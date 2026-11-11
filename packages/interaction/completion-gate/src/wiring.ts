@@ -25,7 +25,7 @@ import { RECEIPT_EVENT, type Receipt } from './events.ts'
 import { buildReceipt } from './receipts.ts'
 import { appendLedgerRow, ledgerFileFor, ledgerRowOf } from './ledger.ts'
 import { LineageRegistry, type SessionLike } from './lineage.ts'
-import { readUserSettingsSync, type GateSettings } from './settings.ts'
+import { DEFAULT_GATE_SETTINGS, readUserSettingsSync, type GateSettings } from './settings.ts'
 import {
   evaluateTurnStopping,
   maybeResolveOnReceipt,
@@ -192,7 +192,7 @@ export function registerListeners(ctx: Context): void {
     readSettings: () => {
       const dshHome = dshHomeOf(ctx)
       return dshHome === undefined
-        ? { enabled: false, 'nudges-per-session': 1 }
+        ? DEFAULT_GATE_SETTINGS
         : readUserSettingsSync(dshHome)
     },
     lineage,

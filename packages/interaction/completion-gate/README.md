@@ -7,9 +7,11 @@ session at `agent/turn-stopping` when the final assistant message claims
 done-ness ("tests pass", "committed", "pushed", "build succeeded") with no
 matching executed evidence since the last genuine user message.
 
-- Default OFF (`cc-completion-gate.enabled`): receipts (hashed fields) are
-  always recorded; privacy-scrubbed bash command heads (≤200 bytes, six-step
-  scrubber) are captured only while enabled, and never reach the ledger file.
+- Default ON since 2026-11-11 (`cc-completion-gate.enabled`: `true`, promoted
+  from ship-dark after the production dogfood; opt out with `false`): receipts
+  (hashed fields) are always recorded; privacy-scrubbed bash command heads
+  (≤200 bytes, six-step scrubber) are captured only while enabled, and never
+  reach the ledger file.
 - The nudge budget is `nudges-per-session` (default 1). Both keys are
   user-layer only (harness-home `settings.json`), re-read per event.
 - Delegated work: child-session receipts lift to the top-level session's

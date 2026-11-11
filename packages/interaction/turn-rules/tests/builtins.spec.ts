@@ -129,14 +129,26 @@ function rig(home: string, settings: Record<string, unknown>): Rig {
 const nextAccept = async (): Promise<PostToolDecision> => ({ kind: 'accept' }) as unknown as PostToolDecision
 
 describe('repeat-reminder wiring', () => {
-  it('default-off: no fire without the enabling settings', async () => {
+  it('explicit opt-out (repeat-reminder.enabled: false): no fire', async () => {
     const home = tempHome()
-    const r = rig(home, { enabled: true })
+    const r = rig(home, { enabled: true, 'repeat-reminder': { enabled: false } })
     const a = agent()
     for (let i = 0; i < 5; i++) {
       const decision = await r.post(execWith('edit', {}, a), results(), nextAccept)
       expect(decision.additionalContexts).toBeUndefined()
     }
+  })
+
+  it('default ON since 2026-11-11: fires with no repeat-reminder section at all', async () => {
+    const home = tempHome()
+    const r = rig(home, { enabled: true })
+    const a = agent()
+    for (let i = 0; i < 2; i++) {
+      const decision = await r.post(execWith('edit', {}, a), results(), nextAccept)
+      expect(decision.additionalContexts).toBeUndefined()
+    }
+    const fired = await r.post(execWith('edit', {}, a), results(), nextAccept)
+    expect((fired.additionalContexts![0] as unknown as { content: { text: string }[] }).content[0].text).toBe('edit × 3')
   })
 
   it('enabled: fires on the third consecutive call as an additionalContext with source kind turn-rules; cap-aware; reset on user pre-step', async () => {
@@ -174,12 +186,15 @@ describe('repeat-reminder wiring', () => {
   it('readUserSettings resolves the repeat-reminder section with defaults', async () => {
     const home = tempHome()
     const resolved = await readUserSettings(home)
-    expect(resolved.repeatReminder).toEqual({ enabled: false, thresholds: [3, 5, 8], include: [], exclude: [], argumentsPreviewChars: 500 })
+    // Promoted default (ON) since 2026-11-11; thresholds/preview stay at their defaults.
+    expect(resolved.repeatReminder).toEqual({ enabled: true, thresholds: [3, 5, 8], include: [], exclude: [], argumentsPreviewChars: 500 })
+    expect(resolved.judgedEnabled).toBe(true)
     writeFileSync(join(home, 'settings.json'), JSON.stringify({
-      'cc-turn-rules': { enabled: true, 'repeat-reminder': { enabled: true, 'arguments-preview-chars': 20 } },
+      'cc-turn-rules': { enabled: true, judged: { enabled: false }, 'repeat-reminder': { 'arguments-preview-chars': 20 } },
     }), 'utf8')
     const hot = await readUserSettings(home)
     expect(hot.repeatReminder.enabled).toBe(true)
+    expect(hot.judgedEnabled).toBe(false) // explicit opt-out still honored
     expect(hot.repeatReminder.argumentsPreviewChars).toBe(20)
     expect(hot.repeatReminder.thresholds).toEqual([3, 5, 8])
   })

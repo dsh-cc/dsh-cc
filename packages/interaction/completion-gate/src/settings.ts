@@ -10,7 +10,8 @@
  *    (sync reader on the trigger side — the post-execute handler must run
  *    synchronously up to hash capture).
  *
- * DEFAULT OFF (`cc-completion-gate.enabled` false — dogfood-first, §3.5).
+ * DEFAULT ON since 2026-11-11 (promoted from ship-dark after the production
+ * dogfood run; opt out with `cc-completion-gate.enabled: false`).
  *
  * @module
  */
@@ -36,7 +37,7 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
 
 /** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
 const SettingsObject = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   'nudges-per-session': z.number().min(0).max(64).default(1),
 })
 
@@ -48,9 +49,9 @@ const SettingsObject = z.object({
 export const SettingsSchema: z<Record<string, unknown>> =
   opt(SettingsObject) as unknown as z<Record<string, unknown>>
 
-/** Ship-dark defaults (§3.5): enabled false, one nudge per session. */
+/** Promoted defaults (default ON since 2026-11-11): one nudge per session. */
 export const DEFAULT_GATE_SETTINGS: GateSettings = {
-  enabled: false,
+  enabled: true,
   'nudges-per-session': 1,
 }
 

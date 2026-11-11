@@ -4,7 +4,7 @@
 
 （中文说明，与英文版实质等价。）
 
-Turn rules：一个非中断式规则引擎，只在模型越轨时触发。携带 `trigger` 的 Cursor 插件规则在正则匹配到已完成的工具调用/结果或用户提示之前不占用任何上下文；首次匹配时，规则正文在恰好该接缝处作为**建议性提醒**注入。**默认开启但零影响**（`cc-turn-rules.enabled: true`）——默认不存在任何携带触发器的规则，开启即行为中立。
+Turn rules：一个非中断式规则引擎，只在模型越轨时触发。携带 `trigger` 的 Cursor 插件规则在正则匹配到已完成的工具调用/结果或用户提示之前不占用任何上下文；首次匹配时，规则正文在恰好该接缝处作为**建议性提醒**注入。**默认开启但零影响**（`cc-turn-rules.enabled: true`）——默认不存在任何携带触发器的规则，规则引擎本身即行为中立。其两个内置提醒子特性（`judged`、`repeat-reminder`）已于 2026-11-11 转为默认开启，可各自单独关闭。
 
 ## 工作方式
 
@@ -41,8 +41,8 @@ repeatGap: 10                   # 重新武装前的轮次间隔；默认 10
 | `enabled` | `true` | 总开关。 |
 | `max-result-bytes` | `200000` | 匹配单元的 UTF-8 截断上限。 |
 | `regex-cache-size` | `64` | 编译正则 LRU 容量。 |
-| `judged.enabled` | `false` | 第二阶段 LLM 评判规则；默认关闭。 |
-| `repeat-reminder.enabled` | `false` | 内置提醒：同一顶层代理连续 N 次完全相同的调用（同工具 + 规范化参数）时触发。 |
+| `judged.enabled` | `true` | 第二阶段 LLM 评判规则；2026-11-11 起默认开启（设 `false` 关闭）。 |
+| `repeat-reminder.enabled` | `true` | 内置提醒：同一顶层代理连续 N 次完全相同的调用（同工具 + 规范化参数）时触发；2026-11-11 起默认开启（设 `false` 关闭）。 |
 | `repeat-reminder.thresholds` | `[3, 5, 8]` | 触发提醒的连续次数。 |
 | `repeat-reminder.include` / `repeat-reminder.exclude` | `[]` | 工具名通配（允许 `*`）；exclude 优先于 include。 |
 | `repeat-reminder.arguments-preview-chars` | `500` | 提醒文本中参数预览的字符数。 |

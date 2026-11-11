@@ -4,7 +4,7 @@
 
 （中文说明，与英文版实质等价。）
 
-编辑后自动验证：在 `edit`/`write` 工具结果被接受之后，插件通过 harness ShellExecutor 运行用户声明的快速校验命令，并把其结果（`[auto-verify]` 文本块）**追加**到**同一条**工具结果上——一次观察同时覆盖编辑与校验两个事件，校验失败无需额外的模型往返。**默认关闭**（`cc-post-edit-verify.enabled: false`，需主动开启）。
+编辑后自动验证：在 `edit`/`write` 工具结果被接受之后，插件通过 harness ShellExecutor 运行用户声明的快速校验命令，并把其结果（`[auto-verify]` 文本块）**追加**到**同一条**工具结果上——一次观察同时覆盖编辑与校验两个事件，校验失败无需额外的模型往返。**2026-11-11 起默认开启**（`cc-post-edit-verify.enabled: true`；如需关闭设 `false`）。`rules` 默认为空数组，因此声明第一条规则之前监听器保持惰性——不会执行任何命令。
 
 ## 工作方式
 
@@ -16,7 +16,7 @@
 
 | 键 | 默认值 | 含义 |
 |---|---|---|
-| `enabled` | `false` | 总开关，**需主动开启**。 |
+| `enabled` | `true` | 总开关；2026-11-11 起默认开启（设 `false` 关闭）。 |
 | `rules` | `[]` | `{ glob, command, timeout-ms? }` 数组；首个匹配生效。 |
 | `debounce-ms` | `5000` | 仅用于 burst **标注**窗口——每个匹配的编辑仍然运行；窗口内的运行会带 `burst — result may overlap edits` 标签。 |
 | `max-output-bytes` | `4096` | 校验输出的保留尾部的捕获预算。 |
@@ -37,4 +37,4 @@
 
 ## Dogfood（dsh-cc 贡献者）
 
-仅个人 opt-in —— 用户层开启方式、故意失败复现与锁定 `[auto-verify]` 可观测性的单测见 [docs/dogfood/post-edit-verify.md](../../../docs/dogfood/post-edit-verify.md)。
+个人生产力配置 —— 规则声明方式、故意失败复现与锁定 `[auto-verify]` 可观测性的单测见 [docs/dogfood/post-edit-verify.md](../../../docs/dogfood/post-edit-verify.md)。
