@@ -389,6 +389,17 @@ jobs:
         timeout-minutes: 6
         run: pnpm smoke:profile-boot
 
+      # Issue #380: the ACP lane rotted invisibly because no gate ran smoke:acp
+      # (the acp-cc row swap, dsh-cc branding, and the preset header stamp —
+      # reduced mode, zero LLM cost). Needs the harness build:lib output
+      # above; zstd ships on ubuntu runners, the guard is belt-and-braces.
+      - name: ACP lane smoke (smoke:acp)
+        working-directory: dsh-cc
+        timeout-minutes: 8
+        run: |
+          command -v zstd >/dev/null || sudo apt-get install -y zstd
+          pnpm smoke:acp
+
       # Boot first so startup failures surface before the slower npm-pack checks.
       # Every packed artifact must resolve its own relative imports (issue
       # #249: lib/classes.js imported ../data/classes.json, never packed).

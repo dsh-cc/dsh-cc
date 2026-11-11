@@ -60,8 +60,9 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import { supportsAcpImagePrompts } from './content.ts'
 import { AcpMcpConfigError } from './mcp.ts'
 import { AcpModelConfigError } from './model-control.ts'
-import { AcpSession, type AcpPresetsService } from './session.ts'
+import { AcpSession } from './session.ts'
 import { installAgentLifecycleListeners } from './lifecycle.ts'
+import { presetRosterResolver, settleComposition } from './preset-roster.ts'
 import { readOwnVersion } from './version.ts'
 
 const DEFAULT_SESSION_LIST_PAGE_SIZE = 100
@@ -69,10 +70,12 @@ const DEFAULT_SESSION_LIST_PAGE_SIZE = 100
 export const name = 'acp-cc'
 /** Core services required by the standard automation controls. */
 // Inject deliberately mirrors the upstream set WITHOUT 'agentPresets':
-// cordis re-composes an injected service in this plugin's own scope, which
-// re-applies the preset-cc row and double-registers the roster (live-acceptance
-// finding, 2026-10-09). The roster is resolved via ctx.get() in apply instead —
-// the TUI preset.ts rosterOf pattern / the upstream `subagents` duck-type.
+// inject couples this plugin's fiber lifecycle to the registry's, so a
+// registry fiber restart would re-apply acp-cc and drop every live ACP
+// session (the sessions map is apply-scoped). The roster is resolved per
+// use instead (src/preset-roster.ts, issue #380). The 2026-10-09
+// double-registration claim predates the PR-B module-split fix and does
+// not reproduce; the lifecycle coupling is the standing rationale.
 export const inject = ['agents', 'llm', 'sessionPersistence', 'sessions']
 
 /** Preserve invalid-parameter detail in the SDK wire error message. */
@@ -115,18 +118,11 @@ export function apply(ctx: Context, config: AcpConfig): void {
   // ACP handlers execute outside this plugin's injection scope, so capture the
   // injected service during apply rather than reading it lazily in a callback.
   const persistence = ctx.sessionPersistence
-  // Resolved during apply like `persistence` is captured (ACP handlers run
-  // outside this plugin's injection scope, so a lazy ctx.get() inside a
-  // handler could miss the service). Unlike `persistence` it is NOT
-  // inject-declared (see the inject comment above) — plain ctx.get at apply
-  // time reads the already-activated registry without re-composing it.
-  const roster = ctx.get('agentPresets')
-  if (roster === undefined) {
-    throw new Error(
-      'acp-cc requires an agent-preset registry in the composition (the cc-acp profile provides it via @dsh-cc/bundle-acp row B)',
-    )
-  }
-  const presets: AcpPresetsService = roster
+  // Issue #380: the roster is resolved per use (preset-roster.ts), never
+  // captured at apply time — the loader mounts group siblings concurrently
+  // and an eager read raced the registry's async Service.init, killing the
+  // ACP lane on a lost race. The join runs behind the admission gate below.
+  const resolvePresets = presetRosterResolver(ctx, internalError)
   // §5.2 revised (live acceptance 2026-10-09): join stamped agents via the
   // serial `agent/created` event + registry select() instead of mounting in
   // the create setup. Guards: only agents whose frozen session header
@@ -144,6 +140,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
     // sessions carry their original stamp) — presetless agents are skipped.
     const stamped = agent?.session?.header?.agentPreset
     if (typeof stamped !== 'string' || stamped === '' || agent?.ctx === undefined) return undefined
+    const presets = resolvePresets()
     if (presets.composedPreset(agent.ctx) !== undefined) return undefined
     return presets
       .select(agent as never, stamped)
@@ -171,6 +168,11 @@ export function apply(ctx: Context, config: AcpConfig): void {
   const assertOpen = (): void => {
     if (closed) throw internalError('the ACP bridge has been disposed')
   }
+
+  // Issue #380: session admission waits for the loader tree to settle
+  // (preset-roster.ts) so the per-use roster read observes the registry's
+  // final state even when a client races past an early initialize.
+  const settle = settleComposition(ctx)
 
   const requireSession = (sessionId: SessionId): AcpSession => {
     const record = sessions.get(sessionId)
@@ -251,6 +253,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
     async newSession(params: NewSessionRequest, signal: AbortSignal): Promise<NewSessionResponse> {
       assertOpen()
       validateWorkspaceParams(params)
+      await settle()
       const sessionId = brandString<SessionId>(randomUUID())
       // The preset composition itself happens on the serial `agent/created`
       // join above (§5.2); the create path only stamps the requested identity
@@ -293,6 +296,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
     async resumeSession(params: ResumeSessionRequest, signal: AbortSignal): Promise<ResumeSessionResponse> {
       assertOpen()
       validateWorkspaceParams(params)
+      await settle()
       const sessionId = brandString<SessionId>(params.sessionId)
       if (sessions.has(sessionId) || activating.has(sessionId) || ctx.sessions.get(sessionId) !== undefined) {
         throw invalidParams(`session is already active: ${sessionId}`)
