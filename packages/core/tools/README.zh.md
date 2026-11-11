@@ -17,7 +17,7 @@
 4. **Code Mode 分发遥测**——`types` 模块承载 `tool/code-dispatch-start` / `tool/code-dispatch` 会话事件，并在模块加载时把两者注册进已知事件集合；`events` 模块声明实时的 `tools/code-dispatch-log` waterfall，结算事件携带分发 `meta` 写入。
 5. **程序工作目录**——`run_code` 通过 `ctx.workingDirectory` 解析工作目录。
 6. **Schema 方言容错**——接受 `$schema` 方言注解，值校验器抽取到独立模块并由 `json-schema` 重新导出。
-7. **呈现模式**——fork 的 `ToolExecutor` 插件（`cc-executor`，导出为 `@dsh-cc/tools/executor`）在共享批量流水线上实现 `native` / `code` / `both`，承载 `run_code` 传输与 SDK／协议 section；`both` 不声明「只能调用 run_code」的规则，因为它的原生调用确实会执行。
+7. **呈现模式**——fork 的 `ToolExecutor` 插件（`cc-executor`，导出为 `@dsh-cc/tools/executor`）在共享批量流水线上实现 `native` / `code` / `both`，承载 `run_code` 传输与 SDK／协议 section；`both` 不声明「只能调用 run_code」的规则，因为它的原生调用确实会执行。SDK 渲染器本体经 `src/ptc-renderers.ts` 在运行时从上游 `@deepseek-ai/dsh-tool-executor-ptc` 导入（宽化动态导入——静态导入为何结构性不可行见该文件头注），配两个 fork 自有件：`src/sdk-schema.ts`（`ToolSdkSchema` 声明，同因）与渲染边界上的 `$schema` 注解剥除（delta 6 的容差在 SDK 路径上的延续，让 MCP schema 全量渲染）。TS 指令文案跟随 `runtime.programFormat`（切换 PR 的 delta c）；Python 渲染器上游无 format 参数。一个刻意的残留分叉：`run_code` 传输的 flavor 文案保持 function-body，而 SDK section 跟随运行时 format——上游本身就是这个并存，传输 schema 归运行时定义。
 8. **注册 tripwire**——扁平参数规格在测试模式下硬失败、在生产环境告警，即工具 schema 门禁的 CI 分支。
 9. **审批接缝拒绝文案**——`pipeline` 中的 ask 原因清洗与环境／权限指引尾句，每次 harness 版本升级都要保留。
 

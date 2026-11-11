@@ -43,10 +43,8 @@ import type {
 } from './executor.ts'
 import type { ToolsService } from './index.ts'
 import { ToolExecutionPipeline, executeToolBatch, toolErrorMessage } from './pipeline.ts'
-import { renderToolsSdkPy } from './py-sdk-doc.ts'
-import { jsonSchemaToPy } from './py-types.ts'
+import { hasSdkRenderer, renderSdkSection, stripSchemaAnnotations, type ToolSdkSchema } from './ptc-renderers.ts'
 import { defineTool, parameterSchemaSpecToJsonSchema, projectToolSchema } from './schema.ts'
-import { jsonSchemaToTs, renderToolsSdk, type ToolSdkSchema } from './ts-types.ts'
 import { CODE_DISPATCH_EVENT, CODE_DISPATCH_START_EVENT } from './types.ts'
 // Type-only: resolves `ctx.workingDirectory` and `ctx.systemPrompt` augmentations.
 import type {} from '@deepseek-ai/dsh-working-directory'
@@ -136,11 +134,6 @@ const RUN_CODE_FLAVORS: Record<string, RunCodeFlavor> = {
   python: PYTHON_FLAVOR,
 } satisfies Record<CodeSdkLanguage, RunCodeFlavor>
 
-const SDK_RENDERERS: Record<string, (schemas: ToolSdkSchema[]) => string> = {
-  typescript: renderToolsSdk,
-  python: renderToolsSdkPy,
-} satisfies Record<CodeSdkLanguage, (schemas: ToolSdkSchema[]) => string>
-
 /**
  * Resolve the {@link RunCodeFlavor} for the loaded runtime's language, read at
  * schema-emission time so the model-visible `run_code` schema always matches
@@ -175,9 +168,8 @@ export function requirePtcRuntime(ctx: Context, mode: ToolPresentationMode): Ptc
   if (!runtime) {
     throw new Error(`dsh-tools: mode "${mode}" requires a PTC runtime — load a ctx.ptcRuntime implementation (e.g. @deepseek-ai/dsh-ptc-runtime-node) or set tools mode to "native"`)
   }
-  if (!Object.hasOwn(SDK_RENDERERS, runtime.language)) {
-    const known = Object.keys(SDK_RENDERERS).map(name => JSON.stringify(name)).join(', ')
-    throw new Error(`dsh-tools: no SDK renderer registered for runtime language ${JSON.stringify(runtime.language)} (known: ${known})`)
+  if (!hasSdkRenderer(runtime.language)) {
+    throw new Error(`dsh-tools: no SDK renderer registered for runtime language ${JSON.stringify(runtime.language)}`)
   }
   return runtime
 }
@@ -854,17 +846,16 @@ export class CcToolExecutor implements ToolExecutor {
   /** Regenerate the generated-SDK section from the calling step's visible tools. */
   private renderSdk(definitions: readonly ToolDefinition[]): string {
     const runtime = requirePtcRuntime(this.ctx, this.mode)
-    const render = SDK_RENDERERS[runtime.language]
-    /* v8 ignore next -- requirePtcRuntime rejects an unknown language before this runs. */
-    if (render === undefined) throw new Error(`dsh-tools: no SDK renderer for ${runtime.language}`)
-    return render(definitions
+    const schemas = definitions
       .filter(definition => definition.name !== RUN_CODE_NAME)
       .map((definition): ToolSdkSchema => {
         const output = snapshotJsonValue(definition.output.schema)
         /* v8 ignore next -- registration already validated and retained this schema as lossless JSON. */
         if (output === undefined) throw new Error(`tool "${definition.name}" output schema must be lossless JSON before SDK projection`)
-        return { ...projectToolSchema(definition, true), output }
-      }))
+        const parameters = stripSchemaAnnotations(projectToolSchema(definition, true))
+        return { ...parameters, output: stripSchemaAnnotations(output) }
+      })
+    return renderSdkSection(runtime.language, runtime.programFormat, schemas)
   }
 
   /** Execute a complete batch through the shared pipeline. */
@@ -884,7 +875,7 @@ export class CcToolExecutor implements ToolExecutor {
 }
 
 export { RUN_CODE_NAME, CODE_DISPATCH_EVENT, CODE_DISPATCH_START_EVENT }
-export { jsonSchemaToPy, jsonSchemaToTs, renderToolsSdk, renderToolsSdkPy }
+export { jsonSchemaToPy, jsonSchemaToTs, renderToolsSdk, renderToolsSdkPy } from './ptc-renderers.ts'
 export type { ToolSdkSchema }
 
 /** Cordis plugin name. */

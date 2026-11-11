@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { jsonSchemaToTs, renderToolsSdk } from '@dsh-cc/tools/src/ts-types.ts'
-import type { ToolSdkSchema } from '@dsh-cc/tools/src/ts-types.ts'
 import { parameterSchemaSpecToJsonSchema } from '@dsh-cc/tools'
+import { jsonSchemaToTs, renderToolsSdk } from '../src/ptc-renderers.ts'
+import type { ToolSdkSchema } from '../src/sdk-schema.ts'
 
 describe('jsonSchemaToTs', () => {
   it('maps every unified schema construct', () => {

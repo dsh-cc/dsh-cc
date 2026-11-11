@@ -1123,7 +1123,14 @@ capabilities:
         (@dsh-cc/tools/executor) registers at root; `DSH_TOOLS_MODE` still
         selects the mode, now through the executor row's yml expression
         (absent ⇒ native) because the registry's own `mode` config is gone
-        upstream.
+        upstream. The SDK renderers are imported from upstream
+        @deepseek-ai/dsh-tool-executor-ptc at runtime (instruction copy and
+        the bash example follow upstream); `$schema` annotations are stripped
+        at the render boundary so MCP schemas render at full fidelity, and
+        the TypeScript instruction copy follows
+        runtime.programFormat (default per-call deployments stay
+        function-body; persistent-in-memory/vm-script runtimes get program
+        wording).
 
   engine.tool-ordering:
     title: Tool ordering / request-prefix stability
