@@ -14,7 +14,7 @@ import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 // registry stays PENDING (and `ctx.agents` is undefined) without this service.
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import * as ccOutputStyles from '../src/index.ts'
+import * as ccOutputStyles from '../src/output-styles.ts'
 import { styleSectionText } from '../src/styles.ts'
 
 /** In-memory settings provider exercising the real write/commit path. */
@@ -102,7 +102,7 @@ async function runOutputStyle(h: Harness, suffix = ''): Promise<{ kind: string; 
   return execution.result as { kind: string; text: string }
 }
 
-describe('@dsh-cc/output-styles registration', () => {
+describe('@dsh-cc/prompt-extras/output-styles registration', () => {
   it('is a function plugin with commands + systemPrompt injection and no default export', async () => {
     expect(ccOutputStyles.name).toBe('cc-output-styles')
     expect(ccOutputStyles.inject).toEqual(['systemPrompt', 'commands'])

@@ -10,5 +10,6 @@
   "references": [
     {
       "path": "../../settings/settings-provider"
-    },]
+    }
+  ]
 }

@@ -3834,7 +3834,7 @@
         },
         {
           "type": "test",
-          "path": "packages/compat/cc-output-styles/tests/output-styles.spec.ts"
+          "path": "packages/compat/cc-prompt-extras/tests/output-styles.spec.ts"
         }
       ],
       "deviation": {
@@ -5351,7 +5351,7 @@
         },
         {
           "type": "test",
-          "path": "packages/compat/cc-serena-first/tests/serena-first.spec.ts"
+          "path": "packages/compat/cc-prompt-extras/tests/serena-first.spec.ts"
         }
       ],
       "deviation": {
@@ -6595,7 +6595,7 @@
         },
         {
           "type": "test",
-          "path": "packages/compat/cc-output-styles/tests/styles.spec.ts"
+          "path": "packages/compat/cc-prompt-extras/tests/styles.spec.ts"
         }
       ],
       "deviation": {

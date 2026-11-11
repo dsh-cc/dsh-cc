@@ -173,6 +173,48 @@ if (!anchor) {
   )
 }
 
+/** Repo packages by name, for gates that must read a manifest they do not own. */
+let repoPackages: Map<string, any> | undefined
+
+/**
+ * Read a repo package's manifest by name (cached).
+ * @param name - package name.
+ * @returns the parsed manifest.
+ */
+function repoPackage(name: string): any {
+  if (repoPackages === undefined) {
+    repoPackages = new Map()
+    const repoRoot = join(dirname(agentCordisPath), '..', '..', '..')
+    for (const group of readdirSync(join(repoRoot, 'packages'))) {
+      const groupDir = join(repoRoot, 'packages', group)
+      if (!statSync(groupDir).isDirectory()) continue
+      for (const pkg of readdirSync(groupDir)) {
+        const manifestPath = join(groupDir, pkg, 'package.json')
+        if (!existsSync(manifestPath)) continue
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+        repoPackages.set(manifest.name, { ...manifest, __dir: join(groupDir, pkg) })
+      }
+    }
+  }
+  const manifest = repoPackages.get(name)
+  if (manifest === undefined) throw new Error(`no repo package named ${name}`)
+  return manifest
+}
+
+/**
+ * Row specifiers may carry a subpath (`@dsh-cc/prompt-extras/serena-first`), a
+ * form `package.json` dependencies cannot hold — only the package part is a
+ * legal dependency key. These two gates therefore compare the PACKAGE part, and
+ * separately prove the subpath is really exported so the row cannot name an
+ * entry point the package never published.
+ */
+function splitSpecifier(specifier: string): { pkg: string, subpath: string | undefined } {
+  const parts = specifier.split('/')
+  const pkg = parts.slice(0, 2).join('/')
+  const rest = parts.slice(2).join('/')
+  return { pkg, subpath: rest.length > 0 ? `./${rest}` : undefined }
+}
+
 describe('agent.cordis.yml composition', () => {
   it('parses with the entryListSchema and carries string ids/names', () => {
     expect(Array.isArray(doc)).toBe(true)
@@ -502,7 +544,15 @@ describe('agent.cordis.yml composition', () => {
     }
     const dshCcRows = rows.filter((r) => r.name && r.name.startsWith('@dsh-cc/'))
     for (const row of dshCcRows) {
-      expect(deps, `${row.id} -> ${row.name}`).toContain(row.name)
+      const { pkg, subpath } = splitSpecifier(row.name)
+      expect(deps, `${row.id} -> ${row.name}`).toContain(pkg)
+      if (subpath !== undefined) {
+        // A subpath row resolves only if the package actually exports it.
+        expect(
+          Object.keys(repoPackage(pkg).exports ?? {}),
+          `${row.id} -> ${row.name}: ${pkg} does not export ${subpath}`,
+        ).toContain(subpath)
+      }
     }
   })
 
@@ -562,11 +612,12 @@ describe('agent.cordis.yml composition', () => {
     const dshCcRows = rows.filter((r) => r.name && r.name.startsWith('@dsh-cc/'))
     expect(dshCcRows.length).toBeGreaterThan(0)
     for (const row of dshCcRows) {
+      const { pkg } = splitSpecifier(row.name)
       expect(
         reachable,
         `${row.id} -> ${row.name} is not installed by any package in the launcher bootstrap closure; `
         + 'add it to @dsh-cc/preset-cc dependencies and ensure @dsh-cc/tui depends on preset-cc',
-      ).toContain(row.name)
+      ).toContain(pkg)
     }
 
     // Peers must be provided by the closure too: an @dsh-cc peer is resolved

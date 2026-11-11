@@ -495,7 +495,7 @@
     # `serverName` config (default 'serena') drives detection and every
     # emitted `mcp__<serverName>__*` name.
     - id: serena-first
-      name: '@dsh-cc/serena-first'
+      name: '@dsh-cc/prompt-extras/serena-first'
 
     # /doctor reads the root-published mcpConnections, and the in-realm
     # ccModelRoutes and hookBridgeStatus, so it lives inside the group.
@@ -761,7 +761,7 @@
 
 # Render CLAUDE.md-style output styles to the system prompt.
 - id: cc-output-styles
-  name: '@dsh-cc/output-styles'
+  name: '@dsh-cc/prompt-extras/output-styles'
 
 # Coordinator mode: DSH_COORDINATOR_MODE=1 or config enabled.
 - id: coordinator
