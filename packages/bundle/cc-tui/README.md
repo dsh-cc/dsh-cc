@@ -2,9 +2,10 @@
 
 English | [中文](README.zh.md)
 
-Surface bundle for the `tui` profile: disable host copies of agent-plane rows
-(same list as `dsh-web-app`), insert the agent-preset roster, and mount
-`@dsh-cc/tui`. The roster has two presets: `cc` (order 5, the default) and `vwa`
+Surface bundle for the `tui` profile: disable `hmr`, insert the agent-preset
+roster, and mount `@dsh-cc/tui`. The host agent-plane rows are vacated by
+[`@dsh-cc/bundle-shell`](../cc-shell/README.md), shared with the ACP lane, so
+this bundle does not restate that roster. The roster has two presets: `cc` (order 5, the default) and `vwa`
 (order 6), both composed from `@dsh-cc/preset-cc` (`cordis.patch.yml` rows
 `preset-cc` and `preset-vwa`). The bundle pins the TUI `uiMode` to `fullscreen`.
 

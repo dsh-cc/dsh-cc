@@ -8,19 +8,28 @@ type Row = { id?: string, name?: string, disabled?: boolean, insert?: Row[] }
 const rows = yaml.load(readFileSync(fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)), 'utf8')) as Row[]
 
 describe('cc-acp bundle patch', () => {
-  it('disables the host agent-plane roster, no hmr row', () => {
+  it('disables only the two acp-owned rows', () => {
     const disabled = rows.filter(r => r.disabled === true && r.insert === undefined).map(r => r.id)
-    expect(disabled).toEqual([
+    expect(disabled).toEqual(['acp', 'session-title-llm-cc'])
+    // hmr is deliberately absent: the retained dsh-acp-app bundle owns it.
+    expect(rows.some(r => r.id === 'hmr')).toBe(false)
+  })
+
+  it('no longer restates the host agent-plane roster (bundle-shell owns it)', () => {
+    // The vacating moved to @dsh-cc/bundle-shell so the TUI and ACP lanes
+    // cannot drift apart; a row reappearing here would be a second, silent
+    // author of the same list.
+    const ids = rows.map(r => r.id)
+    for (const id of [
       'tool-bash', 'tool-pwsh', 'tool-jobs', 'tool-fs', 'tool-fs-search',
       'tool-str-replace-editor', 'skill-filesystem', 'tool-skill', 'tool-goal',
       'plan-mode', 'compaction-basic', 'command-compact', 'tool-result-pruner',
-      'tool-subagent-control', 'tool-subagent',
-      'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow',
-      'tool-ralph', 'agent-instructions', 'tool-todo', 'tool-web',
-      'acp', 'session-title-llm-cc',
-    ])
-    // hmr is deliberately absent: the retained dsh-acp-app bundle owns it.
-    expect(rows.some(r => r.id === 'hmr')).toBe(false)
+      'tool-subagent-control', 'tool-subagent', 'tool-subagent-fork',
+      'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
+      'agent-instructions', 'tool-todo', 'tool-web',
+    ]) {
+      expect(ids, id).not.toContain(id)
+    }
   })
 
   it('inserts the cc preset roster and the acp-cc driver, in order', () => {
