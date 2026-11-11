@@ -101,6 +101,59 @@ export function planReleaseVersionWrites(rootDir, targetVersion) {
   return planned;
 }
 
+/* ---- bundled release notes (pure, exported for tests) ---- */
+
+/**
+ * `/release-notes` ships a CHANGELOG string constant whose newest `## <version>`
+ * section must equal the package version (pinned by
+ * command-release-notes.spec.ts). A bump that only rewrites manifests leaves
+ * the newest section one release behind and fails PreSubmit on the release
+ * PR (v0.9.5-rc.1, #394), so release.mjs writes the section in the same
+ * commit.
+ */
+export const RELEASE_NOTES_REL =
+  "packages/interaction/command-release-notes/src/release-notes.ts";
+
+const SECTION_RE = /^## (\S+)/mu;
+const USER_FACING_RE = /^(?:feat|fix|perf)(?:\([^)]*\))?!?: /u;
+
+/** Version of the newest `## <version>` section, or undefined when none. */
+export function newestReleaseNotesVersion(src) {
+  return findNewestSection(src)?.[1];
+}
+
+// Search only the CHANGELOG constant, so a `## ` line elsewhere in the file
+// (doc comments) can never be mistaken for a section.
+const CHANGELOG_MARKER = "export const CHANGELOG = `";
+function findNewestSection(src) {
+  const start = src.indexOf(CHANGELOG_MARKER);
+  if (start === -1) return null;
+  const re = new RegExp(SECTION_RE.source, "gmu");
+  re.lastIndex = start;
+  return re.exec(src);
+}
+
+/**
+ * Plan the new section: one bullet per user-facing conventional-commit
+ * subject (feat, fix, perf), oldest first. Returns null when the newest
+ * section already names `targetVersion` (idempotent rerun). Subjects are
+ * escaped for the enclosing template literal.
+ */
+export function planReleaseNotesSection(src, targetVersion, subjectsNewestFirst) {
+  const match = findNewestSection(src);
+  if (!match) throw new Error(`no "## <version>" section in the CHANGELOG constant of ${RELEASE_NOTES_REL}`);
+  const from = match[1];
+  if (from === targetVersion) return null;
+  const escape = (line) => line.replace(/[\\`]/gu, "\\$&").replace(/\$\{/gu, "\\${");
+  const bullets = subjectsNewestFirst
+    .filter((subject) => USER_FACING_RE.test(subject))
+    .reverse()
+    .map((subject) => `- ${escape(subject)}`);
+  if (bullets.length === 0) bullets.push(`- No user-facing changes since ${escape(from)}.`);
+  const section = `## ${targetVersion}\n\n${bullets.join("\n")}\n\n`;
+  return { from, to: targetVersion, src: src.slice(0, match.index) + section + src.slice(match.index) };
+}
+
 /* ---- validation (CLI entry; skipped on import by tests) ---- */
 
 const isDirectRun = process.argv[1] && process.argv[1].endsWith("release.mjs");
@@ -183,12 +236,37 @@ const fallbacks = FALLBACK_FILES.map(({ rel }) => {
   return { rel, path, src, from };
 });
 
+// Bundled release notes: commits since the tag of the newest section's
+// version (falling back to the newest reachable tag when that tag is gone).
+const releaseNotesPath = join(ROOT, RELEASE_NOTES_REL);
+const releaseNotesSrc = readFileSync(releaseNotesPath, "utf8");
+const notesFrom = newestReleaseNotesVersion(releaseNotesSrc);
+if (notesFrom === undefined) {
+  fail(`could not locate a "## <version>" section in ${RELEASE_NOTES_REL} — update release.mjs alongside it`);
+}
+let notesBase = `v${notesFrom}`;
+try {
+  git("rev-parse", "-q", "--verify", `refs/tags/${notesBase}`);
+} catch {
+  notesBase = git("describe", "--tags", "--abbrev=0", "HEAD");
+}
+const notesSubjects = git("log", "--no-merges", "--format=%s", `${notesBase}..HEAD`)
+  .split("\n")
+  .filter(Boolean);
+const releaseNotes = planReleaseNotesSection(releaseNotesSrc, argVersion, notesSubjects);
+
 console.log(`  [${label}] planned version writes (${planned.length}):`);
 for (const p of planned) {
   console.log(`    ${p.name}: ${p.from} -> ${p.to}  (${join("..", p.path).replace(join("..", ROOT), ".")})`);
 }
 for (const f of fallbacks) {
   console.log(`    FALLBACK_VERSION: ${f.from} -> ${argVersion}  (${f.rel})`);
+}
+if (releaseNotes) {
+  const count = releaseNotes.src.length - releaseNotesSrc.length;
+  console.log(
+    `    release notes: new "## ${argVersion}" section from ${notesBase}..HEAD (+${count} chars)  (${RELEASE_NOTES_REL})`,
+  );
 }
 console.log(`  [${label}] commit message: chore(release): ${tag}`);
 
@@ -211,6 +289,8 @@ for (const f of fallbacks) {
     "utf8",
   );
 }
+
+if (releaseNotes) writeFileSync(releaseNotesPath, releaseNotes.src, "utf8");
 
 git("add", "-A");
 git("commit", "-m", `chore(release): ${tag}`);

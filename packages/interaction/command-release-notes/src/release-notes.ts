@@ -6,7 +6,10 @@
  *
  * The newest section's version MUST equal this package's `package.json`
  * version; `tests/command-release-notes.spec.ts` pins that pairing so the
- * snapshot cannot silently age into a wrong report again.
+ * snapshot cannot silently age into a wrong report again. `scripts/release.mjs`
+ * prepends that section (user-facing commit subjects since the previous
+ * section's tag) in the same commit as the version bump; edit it in the
+ * release PR when the subjects need a rewrite.
  *
  * @module @dsh-cc/command-release-notes/release-notes
  */

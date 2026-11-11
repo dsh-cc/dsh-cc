@@ -12,6 +12,9 @@
  *  - check-release-version.mjs's gate: a nested plugin.json drifting from
  *    the enforced version fails with a diagnostic naming the package; a
  *    matched nested manifest passes.
+ *  - the bundled `/release-notes` CHANGELOG: a bump also plans a newest
+ *    `## <version>` section equal to the target version (the pairing
+ *    command-release-notes.spec.ts pins), from user-facing commit subjects.
  */
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
@@ -21,6 +24,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { planReleaseVersionWrites } from "./release.mjs";
+// Namespace import: helpers missing from an older release.mjs surface as a
+// [FAIL] line instead of a link-time SyntaxError.
+import * as release from "./release.mjs";
 import { collectVersions, canonicalTag } from "./check-release-version.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -172,6 +178,64 @@ try {
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
+
+/* ---- bundled release notes ---- */
+
+// Same regex as command-release-notes.spec.ts's drift tripwire, applied to
+// the evaluated CHANGELOG constant.
+function changelogOf(src) {
+  const body = src.split("export const CHANGELOG = `")[1].split("\n`\n")[0];
+  return Function(`return \`${body}\n\``)();
+}
+function newestOf(changelog) {
+  return /^## (\S+)/mu.exec(changelog)?.[1];
+}
+
+const REAL_NOTES = readFileSync(
+  join(__dirname, "..", "packages/interaction/command-release-notes/src/release-notes.ts"),
+  "utf8",
+);
+const SUBJECTS = [
+  "refactor(bridge): one authored source (#392)",
+  "fix(moa): keep `routing.jsonl` rows in order, cost ${x} \\ path (#393)",
+  "ci: cache the pnpm store (#354)",
+  "feat(defaults): enable CCR measurement by default (#390)",
+];
+
+check("release notes: bump plans a newest section equal to the target version", () => {
+  const before = newestOf(changelogOf(REAL_NOTES));
+  const plan = release.planReleaseNotesSection(REAL_NOTES, "9.9.9-rc.1", SUBJECTS);
+  assert.ok(plan, "no release-notes plan for a version bump");
+  const after = changelogOf(plan.src);
+  assert.equal(newestOf(after), "9.9.9-rc.1");
+  assert.equal(plan.from, before);
+  // the previous section survives below the new one
+  assert.ok(after.includes(`## ${before}`), "previous section dropped");
+});
+
+check("release notes: only feat/fix/perf subjects, oldest first, escaped verbatim", () => {
+  const plan = release.planReleaseNotesSection(REAL_NOTES, "9.9.9-rc.1", SUBJECTS);
+  // [0] is the "# Release notes" title; [1] is the newest section.
+  const section = changelogOf(plan.src).split("\n## ")[1];
+  assert.match(section, /^- feat\(defaults\): enable CCR measurement by default \(#390\)$/mu);
+  assert.ok(
+    section.includes("- fix(moa): keep `routing.jsonl` rows in order, cost ${x} \\ path (#393)"),
+    `subject not preserved verbatim:\n${section}`,
+  );
+  assert.ok(section.indexOf("feat(defaults)") < section.indexOf("fix(moa)"), "not oldest first");
+  assert.ok(!section.includes("refactor(bridge)") && !section.includes("ci: cache"), "non-user-facing subject kept");
+});
+
+check("release notes: no user-facing commits still yields a section", () => {
+  const plan = release.planReleaseNotesSection(REAL_NOTES, "9.9.9-rc.1", ["chore: tidy"]);
+  assert.equal(newestOf(changelogOf(plan.src)), "9.9.9-rc.1");
+});
+
+check("release notes: rerun at the same version plans nothing", () => {
+  const plan = release.planReleaseNotesSection(REAL_NOTES, "9.9.9-rc.1", SUBJECTS);
+  assert.equal(release.planReleaseNotesSection(plan.src, "9.9.9-rc.1", SUBJECTS), null);
+  assert.equal(release.newestReleaseNotesVersion(plan.src), "9.9.9-rc.1");
+});
 
 if (failures > 0) {
   console.error(`\n${failures} case(s) failed.`);
