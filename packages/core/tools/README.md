@@ -22,7 +22,6 @@ Repository: <https://github.com/dsh-cc/dsh-cc>. Source: `packages/core/tools`.
 7. **Presentation modes** — the fork `ToolExecutor` plugin (`cc-executor`, exported as `@dsh-cc/tools/executor`) implements `native` / `code` / `both` over the shared batch pipeline, carrying the `run_code` transport and the SDK/protocol sections; `both` states no code-only rule because its native calls do execute.
 8. **Registration tripwire** — a flat parameter spec hard-fails in test mode and warns in production, which is the CI arm of the tool-schema gate.
 9. **Approval-seam denial copy** — ask-reason hygiene plus the environment/permission guidance tails in `pipeline`, carried across every harness bump.
-10. **Retired append-order helper (test support only)** — `test-support.ts`, exported as `@dsh-cc/tools/test-support`, keeps the deleted `@dsh-cc/tool-append-order` plugin's `appendStable` algorithm and per-scope memory as executable documentation: the assemble-waterfall `tools` array it hooked no longer exists, so ordering is host `systemPrompt.toolOrder` constructor state and the unlisted rest bucket now re-sorts lexicographically.
 
 Not re-applied, because upstream absorbed them: nested `presentationMeta` support, and the staged-scheduler shim (executors own scheduling).
 
