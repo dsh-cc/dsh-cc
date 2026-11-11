@@ -17,10 +17,6 @@
       "types": "./lib/frontmatter.d.ts",
       "default": "./lib/frontmatter.js"
     },
-    "./render": {
-      "types": "./lib/render.d.ts",
-      "default": "./lib/render.js"
-    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },

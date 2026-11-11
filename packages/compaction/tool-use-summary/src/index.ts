@@ -23,7 +23,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { PostToolDecision, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
 import { runSideQuery } from '@dsh-cc/side-query'
 import { dshHomeFn, type HomeFn } from '@dsh-cc/sidecar-io'
-import { appendLedgerRow, loadSummaries, sweepLedgers } from './ledger.ts'
+import { appendLedgerRow, sweepLedgers } from './ledger.ts'
 import { registerTusSettings, type TusSettings } from './settings.ts'
 import { clampSummary, TUS_SYSTEM, tusPrompt } from './summary.ts'
 import { SummaryStore } from './store.ts'
@@ -213,4 +213,3 @@ export const name = 'cc-tool-use-summary'
 export const inject = ['llm']
 
 // Re-exported for the compaction-micro consumer (pure reader over the ledger).
-export { loadSummaries as loadTusSummaries }

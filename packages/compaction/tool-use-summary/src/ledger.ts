@@ -8,8 +8,8 @@
  * @module @dsh-cc/tool-use-summary/ledger
  */
 
-import { readdir, stat, rm, utimes, writeFile, mkdir } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readdir, stat, rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import { appendJsonl, readJsonl } from '@dsh-cc/sidecar-io'
 import type { SummaryRow } from './types.ts'
 
@@ -64,12 +64,4 @@ export async function sweepLedgers(dshHome: string, retentionDays: number): Prom
     }
   }
   return removed
-}
-
-/** Force an aged mtime on a ledger file (test seam: "fake mtime"). */
-export async function ageLedgerFile(dshHome: string, sessionId: string, at: Date): Promise<void> {
-  const file = join(dshHome, 'tool-use-summary', `${sessionId}.jsonl`)
-  await mkdir(dirname(file), { recursive: true })
-  await writeFile(file, '', 'utf8')
-  await utimes(file, at, at)
 }

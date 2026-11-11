@@ -64,13 +64,8 @@ Provider 随包提供一个 Claude Code 自带 bundled skills 的可移植子集
 
 CC 的 `verify` 与 `stuck` bundled skill **未移植**：两者都仅限 `USER_TYPE === 'ant'`，且 `verify` 的伴随正文/示例在 Claude Code 构建面中缺失，无法忠实复现。
 
-## 渲染
-
-`renderSkillBody` 替换 `$ARGUMENTS`、`$ARGUMENTS[n]`、`$n`、命名 `$name` 占位符以及 `${CLAUDE_SKILL_DIR}` / `${CLAUDE_SESSION_ID}`，并将内联 shell `` !`...` `` 命令分段供调用方执行（由 `allowInlineShell` 门控，MCP 来源的 skill 必须强制关闭）。`estimateFrontmatterTokens` 只统计 name、description 与 `when_to_use` —— 发现期间从不统计正文。
-
 ## 已知限制与待办
 
 - **多数语义翻译在消费方完成** —— `allowed-tools`、`context: fork` 与 `argument-hint` 以元数据和辅助函数形式呈现，由消费方应用，因为 Provider 在加载时没有 agent 引用。`paths` 条件激活是例外，由本 Provider 应用。
-- **本包不执行内联 shell** —— 命令被提取并返回，执行是调用方的职责。
 - **单层发现** —— 仅识别 `<root>/<name>/SKILL.md` 与旧的顶层 `.claude/commands/*.md`。
 - **Bundled 子集不完整** —— 省略 `verify` 与 `stuck`（ant-only / 内容缺失）；`batch` 与 `debug` 的运行时注入值（工具名、日志路径）保留为其原文的占位符，而非在调用时解析。

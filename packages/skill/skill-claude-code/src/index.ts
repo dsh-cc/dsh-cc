@@ -41,7 +41,6 @@ import type { CcInvocationPolicy, CcSkillMetadata } from './types.ts'
 
 export type { CcSkillMetadata, CcInvocationPolicy } from './types.ts'
 export { parseCcFrontmatter, parseCcFrontmatterDocument, type ParsedCcFrontmatter } from './frontmatter.ts'
-export { estimateFrontmatterTokens, renderSkillBody, substituteArguments, extractInlineShell } from './render.ts'
 export { ccRestriction, ccPathMatcher, registerPathActivator } from './translate.ts'
 export { discoverCcRoots, discoverCcSkills, type CcSkillFile, type CcRoot, type CcSkillSource } from './discovery.ts'
 export { discoverBundledSkills, type BundledSkillFile } from './bundled/index.ts'
