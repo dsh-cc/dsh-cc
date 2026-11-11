@@ -108,7 +108,8 @@ jobs:
           fetch-depth: 1
 
       # Keep equal to `.nvmrc` (primary line; deviation #5 in presubmit.yml).
-      # Literal, not `node-version-file`: TARGET may be an older commit that
+      # Literal, not `node-version-file`: this workflow runs from the default
+      # branch but checks out TARGET, which may be an older commit that
       # predates the file.
       - uses: actions/setup-node@v4
         with:

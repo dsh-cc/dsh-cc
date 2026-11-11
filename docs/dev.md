@@ -7,21 +7,28 @@
 `static-gates` and `unit-tests`, both `formal-design` jobs,
 `parity-freshness`, and `daily-release` (which only ever checks out main).
 
-`publish` and `release-tag` keep a literal `node-version: 24` instead. They
-can check out an older release tag that predates `.nvmrc`, and a republish or
-re-tag of an old release must not fail on a missing version file. Keep those
-two literals equal to `.nvmrc`.
+`publish` and `release-tag` keep a literal `node-version: 24` instead. Both can
+be dispatched against an older tag or commit that predates `.nvmrc` (`publish`
+rerun with an existing tag, `release-tag` with an older `TARGET`), and a
+republish must not fail on a missing version file. Keep those two literals
+equal to `.nvmrc`.
 
-presubmit `quality-gates` deliberately stays on Node 22. `engines` is
+presubmit `quality-gates` deliberately stays on Node 22: `engines` is
 `^22.19 || >=24`, and a declared range that no job ever runs stops being a
-guarantee — that job is where the 22.19 floor is proven to still install,
-typecheck, bundle, boot and pack. Keep both lines green before merging.
+guarantee. That job covers install, typecheck, bundle, exports, pack and the
+profile-boot smoke; it does not run the vitest suite, which runs on the primary
+line only. The floor claim is therefore "still builds and boots", not "still
+passes every test". It also builds the pinned harness, which declares
+`>=24.9.0` — the `[WARN] Unsupported engine` logged there is expected and
+accepted, and it is the reason the floor claim is scoped to this repo's own
+code. Keep both lines green before merging.
 
 `scripts/check-workflow-node.mjs` enforces the mechanical half of this in the
-static prefix and in pre-commit: every `actions/setup-node` step must pin a
-line, and a `node-version:` literal must be `.nvmrc` or the engines floor. A
-new workflow that inherits the runner image's Node, or a harness pin bumped
-without its runtime, fails there.
+static prefix and in pre-commit: every job must carry an `actions/setup-node`
+step (a job without one inherits the runner image's Node), each such step must
+pin exactly one line, and a `node-version:` literal must be `.nvmrc` or the
+engines floor. A new job that skips the pin, or a harness pin bumped without
+its runtime, fails there.
 
 Why 24 is the primary line: the pinned sibling harness declares
 `engines.node >=24.9.0` and runs its own CI on 24, so building it on Node 22

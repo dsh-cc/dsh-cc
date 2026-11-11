@@ -98,9 +98,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           # Keep equal to `.nvmrc` (primary line; deviation #5 in presubmit.yml).
-          # Deliberately a literal instead of `node-version-file`: this job
-          # checks out the release TAG, and republishing an older tag must not
-          # fail because that commit predates `.nvmrc`.
+          # Deliberately a literal instead of `node-version-file`: a
+          # workflow_dispatch rerun executes this workflow file from main but
+          # checks out an older TAG, which need not carry `.nvmrc`. (A tag push
+          # runs the workflow as of the tag commit, so it gets that commit's
+          # pin either way.)
           node-version: 24   # deliberately no registry-url: token vs OIDC is decided explicitly in the publish step
           cache: pnpm
           cache-dependency-path: |

@@ -58,14 +58,19 @@
 #   5. Node line policy (2026-11): `.nvmrc` holds the *primary* runtime line
 #      (24 — the Active LTS, and the floor the pinned sibling harness itself
 #      declares: harness `engines.node` is `>=24.9.0`, so building it on 22
-#      prints `[WARN] Unsupported engine`). `static-gates`, `unit-tests` and
-#      publish resolve that file via `node-version-file`; `quality-gates`
-#      deliberately stays on Node 22 as the *floor* verification of this
-#      repo's own `engines: ^22.19 || >=24` — a declared range that no job
-#      ever runs is a claim, not a guarantee. Both lines must be green.
-#      Enforced by scripts/check-workflow-node.mjs (static-gates): every
-#      setup-node must pin a line, and a `node-version:` literal must be
-#      `.nvmrc` or the engines floor.
+#      prints `[WARN] Unsupported engine`). `static-gates`, `unit-tests`,
+#      `formal-design`, `parity-freshness` and `daily-release` resolve that
+#      file via `node-version-file`; `quality-gates` deliberately stays on
+#      Node 22 as the *floor* verification of this repo's own
+#      `engines: ^22.19 || >=24`, where a declared range that no job runs is
+#      a claim rather than a guarantee. That job covers install, typecheck,
+#      bundle, exports, pack and the profile-boot smoke; the vitest suite runs
+#      on the primary line only, so the floor claim is "still builds and
+#      boots", not "still passes every test". publish and release-tag carry a
+#      literal 24 instead of the file, because they can be dispatched against
+#      an older tag or commit that predates it. Enforced by
+#      scripts/check-workflow-node.mjs (static-gates): every job pins a line,
+#      and a `node-version:` literal must be `.nvmrc` or the engines floor.
 #
 # deepseek-harness pin upgrade flow: once harness master checks out, update
 # DSH_HARNESS_REF in the env block above to the new SHA and commit it
