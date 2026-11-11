@@ -1,11 +1,12 @@
 # Dogfood: post-edit auto-verify (`cc-post-edit-verify`)
 
-Personal opt-in for **dsh-cc** contributors. After an accepted `edit` /
+Personal productivity for **dsh-cc** contributors. After an accepted `edit` /
 `write`, the `@dsh-cc/post-edit-verify` plugin can run a fast check and append
 an `[auto-verify]` block onto **the same** tool result.
 
-**Product default stays OFF.** This page never asks you to change the shipped
-default (`enabled: false`). Anything below is **user-layer only**.
+**Product default is ON since 2026-11-11**, but the listener is inert until at
+least one rule is declared — an empty `rules` array runs nothing. Anything below
+is **user-layer only**; opt out with `"cc-post-edit-verify": { "enabled": false }`.
 
 Design: [`docs/plans/2026-09-20-post-edit-auto-verify.md`](../plans/2026-09-20-post-edit-auto-verify.md)  
 Package README: [`packages/interaction/post-edit-verify/README.md`](../../packages/interaction/post-edit-verify/README.md)
@@ -93,13 +94,14 @@ single line like:
 Covered by the same package tests (`wiring.spec.ts` success case;
 `compose.spec.ts` one-liner success).
 
-### Default stays opt-in
+### Default is ON, rules are not
 
-`enabled` defaults to `false` (`DEFAULT_RULES_SETTINGS` /
-`SettingsSchema`). Absent or malformed user sections fail soft to defaults —
-verify stays dark unless you opt in.
+`enabled` defaults to `true` (`DEFAULT_RULES_SETTINGS` / `SettingsSchema`), while
+`rules` defaults to `[]` — so a fresh profile verifies nothing until you declare
+a rule. Absent or malformed user sections fail soft to those defaults; the
+explicit opt-out (`enabled: false`) is honoured.
 
 ## Out of scope
 
-- Do not commit `enabled: true` into project settings expecting it to apply.
-- Do not change the package default to force ON for all users.
+- Do not commit rules (or `enabled`) into project settings expecting them to
+  apply — project scope is structurally never read.

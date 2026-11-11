@@ -334,13 +334,22 @@ describe('listener behavior', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('disabled by default → untouched even with a live registry', async () => {
+  it('explicit opt-out (enabled: false) → untouched even with a live registry', async () => {
     const home = tempHome()
-    writeFileSync(join(home, 'settings.json'), JSON.stringify({})) // no cc-lsp-on-write section → enabled: false
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({ 'cc-lsp-on-write': { enabled: false } }))
     const { listener, calls } = rig({ home, respond: async () => textResult(cannedMap()) })
     const downstream = await listener(editExec(), result(), nextAccept())
     expect(downstream).toEqual({ kind: 'accept', content: [{ type: 'text', text: 'downstream' }] })
     expect(calls).toHaveLength(0)
+  })
+
+  it('default ON (no settings section at all) → pulls diagnostics', async () => {
+    const home = tempHome()
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({})) // no cc-lsp-on-write section → default true
+    const { listener, calls } = rig({ home, respond: async () => textResult(cannedMap()) })
+    const downstream = await listener(editExec(), result(), nextAccept())
+    expect(calls).toHaveLength(1)
+    expect(JSON.stringify(downstream.content)).toContain('[lsp]')
   })
 
   it('compose is exported and composes content-accept only (unit pin)', () => {

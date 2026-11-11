@@ -40,7 +40,7 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
 
 /** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
 const SettingsObject = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   rules: z.array(z.object({
     glob: z.string(),
     command: z.string(),
@@ -59,9 +59,9 @@ const SettingsObject = z.object({
 export const SettingsSchema: z<Record<string, unknown>> =
   opt(SettingsObject) as unknown as z<Record<string, unknown>>
 
-/** Ship-dark defaults, used when the user file is absent or malformed. */
+/** Promoted defaults (default ON since 2026-11-11), used when the user file is absent or malformed. */
 export const DEFAULT_RULES_SETTINGS: RulesSettings = {
-  enabled: false,
+  enabled: true,
   rules: [],
   debounceMs: 5000,
   maxOutputBytes: 4096,
@@ -197,7 +197,7 @@ export function registerSettings(ctx: Context): (() => RulesSettings) | undefine
       const value = read()
       return value === undefined ? DEFAULT_RULES_SETTINGS : resolveRules(value)
     } catch {
-      // Malformed live scope → ship-dark defaults; never throw into a hot path.
+      // Malformed live scope → promoted defaults; never throw into a hot path.
       return DEFAULT_RULES_SETTINGS
     }
   }

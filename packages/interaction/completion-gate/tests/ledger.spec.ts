@@ -89,13 +89,17 @@ function readdirSafe(dir: string): string[] {
 }
 
 describe('settings (§3.5 / §3.2 dual-half)', () => {
-  it('defaults: enabled false, one nudge per session', () => {
-    expect(DEFAULT_GATE_SETTINGS).toEqual({ enabled: false, 'nudges-per-session': 1 })
+  it('defaults: enabled true (default ON since 2026-11-11), one nudge per session', () => {
+    expect(DEFAULT_GATE_SETTINGS).toEqual({ enabled: true, 'nudges-per-session': 1 })
     expect(readUserSettingsSync(join(tmpdir(), 'no-such-home-xyz'))).toEqual(DEFAULT_GATE_SETTINGS)
   })
 
   it('raw user file is read live (hot read)', async () => {
     const home = tempDir()
+    // An absent section resolves to the promoted default (ON); the explicit
+    // opt-out below is the real hot-toggle check.
+    expect(readUserSettingsSync(home).enabled).toBe(true)
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({ 'cc-completion-gate': { enabled: false } }), 'utf8')
     expect(readUserSettingsSync(home).enabled).toBe(false)
     writeFileSync(join(home, 'settings.json'), JSON.stringify({ 'cc-completion-gate': { enabled: true, 'nudges-per-session': 3 } }), 'utf8')
     expect(readUserSettingsSync(home).enabled).toBe(true)

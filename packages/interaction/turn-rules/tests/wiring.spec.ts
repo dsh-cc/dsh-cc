@@ -192,7 +192,13 @@ describe('agent/pre-step channel', () => {
 
 describe('agent/turn-stopping counter', () => {
   it('advances the counter so after-gap re-arms exactly at the gap; subagents never bump', async () => {
-    const r = rig({ rules: [rule({ repeat: 'after-gap', repeatGap: 2 })] })
+    // Isolate the after-gap arithmetic from the built-in repeat reminder, which
+    // is default ON since 2026-11-11 and would otherwise co-fire on the 3rd call.
+    const home = tempHome()
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({
+      'cc-turn-rules': { 'repeat-reminder': { enabled: false } },
+    }), 'utf8')
+    const r = rig({ home, rules: [rule({ repeat: 'after-gap', repeatGap: 2 })] })
     const main = agentWithInject()
     // Fire on the tool channel (counter = 0).
     const first = await r.post(execWith({ code: 'FORBIDDEN_PATTERN' }, main), result('out'), nextAccept())

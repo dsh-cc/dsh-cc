@@ -363,14 +363,14 @@ describe('agent.cordis.yml composition', () => {
     // The completion-gate row (plan docs/plans/2026-10-09-runtime-verified-completion.md)
     // publishes no Service (plain plugin) and sits inside the group at the
     // cc-services tail, after advisor-watchdog, with NO new isolate key.
-    // DEFAULT OFF (cc-completion-gate.enabled=false).
+    // DEFAULT ON since 2026-11-11 (cc-completion-gate.enabled=true).
     expect(configIds).toContain('completion-gate')
     expect(topIds).not.toContain('completion-gate')
     expect(configIds.indexOf('completion-gate')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))
     // The completion-gate row (plan docs/plans/2026-10-09-runtime-verified-completion.md)
     // publishes no Service (plain plugin) and sits inside the group at the
     // cc-services tail, after advisor-watchdog, with NO new isolate key.
-    // DEFAULT OFF (cc-completion-gate.enabled=false).
+    // DEFAULT ON since 2026-11-11 (cc-completion-gate.enabled=true).
     expect(configIds).toContain('completion-gate')
     expect(topIds).not.toContain('completion-gate')
     expect(configIds.indexOf('completion-gate')).toBeGreaterThan(configIds.indexOf('advisor-watchdog'))

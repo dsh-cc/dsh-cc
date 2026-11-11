@@ -8,8 +8,9 @@
  *
  * Plain plugin (not a Service): `apply(ctx)`, no isolate key (twelve-key
  * isolate map untouched). Settings are registered for /config UX only;
- * trigger logic reads the raw user file per event (§4.6). Ships dark:
- * `cc-lsp-on-write.enabled` defaults to false.
+ * trigger logic reads the raw user file per event (§4.6). Default ON since
+ * 2026-11-11: `cc-lsp-on-write.enabled` defaults to true (opt out with
+ * `false`; the listener stays inert when no `serena` server is mounted).
  *
  * @module @dsh-cc/lsp-on-write
  */

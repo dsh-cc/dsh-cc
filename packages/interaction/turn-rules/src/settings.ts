@@ -44,9 +44,9 @@ const SettingsObject = z.object({
   enabled: z.boolean().default(true),
   'max-result-bytes': z.number().default(200_000),
   'regex-cache-size': z.number().default(64),
-  judged: opt(z.object({ enabled: z.boolean().default(false) })),
+  judged: opt(z.object({ enabled: z.boolean().default(true) })),
   'repeat-reminder': opt(z.object({
-    enabled: z.boolean().default(false),
+    enabled: z.boolean().default(true),
     thresholds: z.array(z.number()).default([3, 5, 8]),
     include: z.array(z.string()).default([]),
     exclude: z.array(z.string()).default([]),
@@ -62,13 +62,17 @@ const SettingsObject = z.object({
 export const SettingsSchema: z<Record<string, unknown>> =
   opt(SettingsObject) as unknown as z<Record<string, unknown>>
 
-/** Ship-on defaults: zero trigger-bearing rules exist by default, so enabling is behavior-neutral. */
+/**
+ * Ship-on defaults: zero trigger-bearing rules exist by default, so enabling is
+ * behavior-neutral. The two built-in reminder sub-features were promoted to
+ * default ON on 2026-11-11 (opt out per key).
+ */
 export const DEFAULT_TURN_RULES_SETTINGS: TurnRulesSettings = {
   enabled: true,
   maxResultBytes: 200_000,
   regexCacheSize: 64,
-  judgedEnabled: false,
-  repeatReminder: { enabled: false, thresholds: [3, 5, 8], include: [], exclude: [], argumentsPreviewChars: 500 },
+  judgedEnabled: true,
+  repeatReminder: { enabled: true, thresholds: [3, 5, 8], include: [], exclude: [], argumentsPreviewChars: 500 },
 }
 
 /**
@@ -101,13 +105,18 @@ function resolveSection(section: Record<string, unknown>): TurnRulesSettings {
   const resolved = SettingsObject(section as unknown as Record<string, never>) as unknown as Record<string, unknown>
   const judged = resolved.judged as Record<string, unknown> | undefined
   const repeat = (resolved['repeat-reminder'] ?? {}) as Record<string, unknown>
+  // Absent / non-boolean sub-flags fall back to the documented default (the
+  // built-in reminder shipped dark originally, so `=== true` was correct then;
+  // now the fallback must be the default, not `false`).
+  const asBool = (value: unknown, fallback: boolean): boolean =>
+    typeof value === 'boolean' ? value : fallback
   return {
     enabled: resolved.enabled as boolean,
     maxResultBytes: resolved['max-result-bytes'] as number,
     regexCacheSize: resolved['regex-cache-size'] as number,
-    judgedEnabled: judged?.enabled === true,
+    judgedEnabled: asBool(judged?.enabled, DEFAULT_TURN_RULES_SETTINGS.judgedEnabled),
     repeatReminder: {
-      enabled: repeat.enabled === true,
+      enabled: asBool(repeat.enabled, DEFAULT_TURN_RULES_SETTINGS.repeatReminder.enabled),
       thresholds: (repeat.thresholds as number[] | undefined) ?? DEFAULT_TURN_RULES_SETTINGS.repeatReminder.thresholds,
       include: (repeat.include as string[] | undefined) ?? [],
       exclude: (repeat.exclude as string[] | undefined) ?? [],

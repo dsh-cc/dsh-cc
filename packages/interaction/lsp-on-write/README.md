@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-LSP diagnostics-on-write: after a successful `edit`/`write`/`NotebookEdit`, the plugin pulls the touched file's current diagnostics from the **running serena language servers** (via the `mcpConnections` registry, one uncached `tools/call`) and appends a compact `[lsp]` block to the **same** tool result — the model sees "argument of type X is not assignable" immediately and self-corrects next step, instead of finding out at test time. **Default OFF** (`cc-lsp-on-write.enabled: false`, opt-in).
+LSP diagnostics-on-write: after a successful `edit`/`write`/`NotebookEdit`, the plugin pulls the touched file's current diagnostics from the **running serena language servers** (via the `mcpConnections` registry, one uncached `tools/call`) and appends a compact `[lsp]` block to the **same** tool result — the model sees "argument of type X is not assignable" immediately and self-corrects next step, instead of finding out at test time. **Default ON since 2026-11-11** (`cc-lsp-on-write.enabled: true`; opt out with `false`). It stays inert when no `serena` MCP server is mounted (one lazy warn, passthrough).
 
 ## How it works
 
@@ -16,7 +16,7 @@ Key `cc-lsp-on-write` in the **user-layer** `settings.json` (the harness-home fi
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | Master flag, **opt-in** (ships dark). |
+| `enabled` | `true` | Master flag; default ON since 2026-11-11 (opt out with `false`). |
 | `server-name` | `serena` | The MCP connection name to call; a renamed serena mount yields zero diagnostics (one lazy warn). |
 | `timeout-ms` | `1500` | Hard latency budget per call; timeout → drop, never a failed tool result. |
 | `max-diagnostics` | `8` | Rendered-entry cap (errors before warnings). |

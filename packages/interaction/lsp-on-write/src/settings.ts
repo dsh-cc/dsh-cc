@@ -43,7 +43,7 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
 
 /** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
 const SettingsObject = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   'server-name': z.string().default('serena'),
   'timeout-ms': z.number().default(1500),
   'max-diagnostics': z.number().default(8),
@@ -59,9 +59,9 @@ const SettingsObject = z.object({
 export const SettingsSchema: z<Record<string, unknown>> =
   opt(SettingsObject) as unknown as z<Record<string, unknown>>
 
-/** Ship-dark defaults, used when the user file is absent or malformed. */
+/** Promoted defaults (default ON since 2026-11-11), used when the user file is absent or malformed. */
 export const DEFAULT_LSP_SETTINGS: LspOnWriteSettings = {
-  enabled: false,
+  enabled: true,
   serverName: 'serena',
   timeoutMs: 1500,
   maxDiagnostics: 8,
@@ -97,7 +97,7 @@ export function registerSettings(ctx: Context): void {
 /**
  * Read settings DIRECTLY from `<dshHome>/settings.json`, bypassing the merged
  * cascade (design doc §4.6). Fail-soft: absent file, parse error, or a
- * malformed section yields the ship-dark defaults. Project scope is never
+ * malformed section yields the promoted (default ON) defaults. Project scope is never
  * read — invisible, not refused.
  */
 export async function readUserSettings(dshHome: string): Promise<LspOnWriteSettings> {

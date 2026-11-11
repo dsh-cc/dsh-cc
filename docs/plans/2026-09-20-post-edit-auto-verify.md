@@ -10,6 +10,8 @@ verify commands routed through the harness shell service — then miscategorized
 "cc-shell seam" and corrected by the second review — burst-debounce inversion documented
 with an explicit skip marker; all baked in below).
 
+**Default promotion (2026-11-11):** `enabled` now defaults to **true** (opt out with `false`); the listener stays inert until at least one rule is declared. Design-time text below is kept as the record.
+
 Origin: SoL-Pi (arXiv:2609.20519) Action Fusion — merge a file edit with the build/test
 command that customarily follows it into one tool request returning one observation,
 saving a full model round-trip (the paper measures 3→2 API calls per edit-verify cycle; it
@@ -194,7 +196,7 @@ run. `debounce-ms` only labels, never skips.
 ```jsonc
 {
   "cc-post-edit-verify": {
-    "enabled": false,                    // ship dark
+    "enabled": true,                     // default ON since 2026-11-11
     "rules": [
       { "glob": "packages/**/*.ts", "command": "node_modules/.bin/tsc -b --pretty false 2>&1 | tail -5", "timeout-ms": 60000 }
     ],

@@ -9,6 +9,9 @@ full new-package checklist added.
 **Date:** 2026-09-23
 **Worktree:** `.claude/worktrees/oh-my-pi` (branch `worktree-oh-my-pi`)
 
+**Default promotion (2026-11-11):** `enabled` now defaults to **true** (opt out with `false`). Design-time text below is kept as the record; where it says the feature ships dark, the shipped default is the promoted one.
+
+
 ## 1. Problem
 
 Edit/write errors surface late. dsh-cc already has post-edit-verify
@@ -244,8 +247,10 @@ precedent). Debug output is plain ungated `ctx.logger.debug`
 (post-edit-verify precedent, `wiring.ts:50` etc.), no env gate; drop counters
 are included in the debug line.
 
-- `enabled` default **false** (ships dark; dogfood opt-in at user layer,
-  same graduation posture as post-edit-verify, `docs/dogfood/post-edit-verify.md`);
+- `enabled` default **true** since 2026-11-11 (was `false` — dogfood opt-in at
+  user layer, same graduation posture as post-edit-verify,
+  `docs/dogfood/post-edit-verify.md`; the listener stays inert without a
+  `serena` mount);
 - `serverName` default `'serena'`; connection names come from the user's MCP
   config key, so a renamed serena mount yields zero diagnostics — the
   "no server named <serverName> registered" line (logger.warn) is LAZY: emitted
@@ -353,7 +358,7 @@ dependency, settings-gated, dark default). Regenerate docs via
 
 | Risk | Mitigation |
 | --- | --- |
-| Serena adds tail latency to every edit | §4.3 budget + crash-loop breaker + ships dark |
+| Serena adds tail latency to every edit | §4.3 budget + crash-loop breaker + one `tools/call` per edit (default ON since 2026-11-11; opt out or unmount serena) |
 | Diagnostics stale for just-written content | pull-based lookup (§4.2); omp guards via `expectedDocumentVersions` (`writethrough.ts:355,427`); our design accepts the known-stale mode (serena pulls post-write from its own file view; its file-watcher lag can yield pre-edit diagnostics labeled post-edit), no version guard in this phase; a spec asserts drop-not-stale-render on call failure |
 | MCP connection churn mid-session | registry is optional-seam by contract; every call re-resolves and degrades silent |
 | Firehose bloat of context | caps in §4.5; crusher ordering keeps externalization intact |

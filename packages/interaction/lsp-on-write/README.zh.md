@@ -4,7 +4,7 @@
 
 （中文说明，与英文版实质等价。）
 
-LSP 诊断随写入返回：在 `edit`/`write`/`NotebookEdit` 成功之后，插件通过 `mcpConnections` 注册表（一次未缓存的 `tools/call`）从**正在运行的 serena 语言服务器**拉取被编辑文件的当前诊断，并把紧凑的 `[lsp]` 块**追加**到**同一条**工具结果上——模型立即看到"argument of type X is not assignable"，下一步即自我纠正，而不用等到测试时才发现。**默认关闭**（`cc-lsp-on-write.enabled: false`，需主动开启）。
+LSP 诊断随写入返回：在 `edit`/`write`/`NotebookEdit` 成功之后，插件通过 `mcpConnections` 注册表（一次未缓存的 `tools/call`）从**正在运行的 serena 语言服务器**拉取被编辑文件的当前诊断，并把紧凑的 `[lsp]` 块**追加**到**同一条**工具结果上——模型立即看到"argument of type X is not assignable"，下一步即自我纠正，而不用等到测试时才发现。**2026-11-11 起默认开启**（`cc-lsp-on-write.enabled: true`；如需关闭设 `false`）。未挂载 `serena` MCP 服务器时保持惰性（一次惰性警告后透传）。
 
 ## 工作方式
 
@@ -18,7 +18,7 @@ LSP 诊断随写入返回：在 `edit`/`write`/`NotebookEdit` 成功之后，插
 
 | 键 | 默认值 | 含义 |
 |---|---|---|
-| `enabled` | `false` | 总开关，**需主动开启**（默认暗发布）。 |
+| `enabled` | `true` | 总开关；2026-11-11 起默认开启（设 `false` 关闭）。 |
 | `server-name` | `serena` | 要调用的 MCP 连接名；serena 挂载改名后诊断为零（一次惰性警告）。 |
 | `timeout-ms` | `1500` | 每次调用的硬延迟预算；超时即丢弃，绝不会让工具结果失败。 |
 | `max-diagnostics` | `8` | 渲染条目上限（错误在前，警告在后）。 |

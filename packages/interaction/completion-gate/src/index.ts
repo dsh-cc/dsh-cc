@@ -7,9 +7,9 @@
  *
  * Plain plugin (not a Service): `apply(ctx)`, no isolate key. Settings are
  * registered for /config UX only; the listeners read the raw user file per
- * use. Ship-dark: `cc-completion-gate.enabled` defaults to false — receipts
- * (hashed fields) are always recorded, command heads only while enabled
- * (§3.5).
+ * use. Default ON since 2026-11-11: `cc-completion-gate.enabled` defaults to
+ * true — receipts (hashed fields) are always recorded, command heads and the
+ * turn-stopping nudge only while enabled (§3.5); opt out with `false`.
  *
  * @module @dsh-cc/completion-gate
  */
