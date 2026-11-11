@@ -1,3 +1,5 @@
+// GENERATED FILE — do not edit. Source: scripts/lib/bridge-lane/lexer.mjs
+// Regenerate: node scripts/generate-bridge-lane-lib.mjs
 /**
  * §3.2-a mini POSIX-shell lexer for the codex-rescue-bridge matcher.
  *

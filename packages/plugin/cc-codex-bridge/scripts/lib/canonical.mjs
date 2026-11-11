@@ -1,17 +1,26 @@
+// GENERATED FILE — do not edit. Source: scripts/lib/bridge-lane/canonical.mjs
+// Regenerate: node scripts/generate-bridge-lane-lib.mjs
 /**
- * canonical.mjs — the single arming/derivation source for the
- * codex-rescue-bridge hooks (plan §9 S3, §5 anchor-lint "one source").
+ * canonical.mjs — the single arming/derivation source for both bridge lanes.
+ *
+ * AUTHORED at scripts/lib/bridge-lane/canonical.mjs and GENERATED into each
+ * bridge's scripts/lib/ by scripts/generate-bridge-lane-lib.mjs. The two
+ * shipped copies are byte-identical; every lane-specific value comes from
+ * `./lane.mjs`.
  *
  * Every hook (PreToolUse allow, SessionStart context) derives the canonical
  * anchor pair and the refusal/arming verdict through THIS module only; the
  * specs pin that no hook re-implements the derivation.
  *
- * Canonical anchors (§3.1): `realpath(process.execPath)` of the calling hook
- * process plus the realpath of the sibling `scripts/codex-rescue-run.mjs`
- * resolved from the hook's own `import.meta.url`. Refusal set (§3.2-e): the
+ * Canonical anchors: `realpath(process.execPath)` of the calling hook
+ * process plus the realpath of the sibling `scripts/grok-review-run.mjs`
+ * resolved from the hook's own `import.meta.url`. Refusal set: the
  * canonicalized session cwd plus the canonical tmp roots, unrealpathable
- * entries skipped.
+ * entries skipped. Both lanes also refuse win32, because both launchers do —
+ * an armed hook on a platform the launcher rejects would hand the model an
+ * invocation that cannot run.
  */
+import { LANE } from './lane.mjs'
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -37,24 +46,25 @@ export const posixSingleQuote = (s) => `'` + String(s).replaceAll(`'`, `'\\''`) 
  */
 export function deriveAnchors(hookUrl) {
   const node = safeReal(process.execPath)
-  const launcher = safeReal(fileURLToPath(new URL('../scripts/codex-rescue-run.mjs', hookUrl)))
+  const launcher = safeReal(fileURLToPath(new URL(`../scripts/${LANE.launcherFile}`, hookUrl)))
   if (node === null || launcher === null) return null
   return { node, launcher }
 }
 
-/** Refusal set (§3.2-e): session cwd plus canonical tmp roots. */
+/** Refusal set: session cwd plus canonical tmp roots. */
 export function refusalRoots(cwdRaw) {
   return [safeReal(cwdRaw), safeReal(tmpdir()), safeReal('/tmp')].filter((p) => p !== null)
 }
 
 /**
  * Arming predicate with machine-readable reasons. `hookUrl` is the calling
- * hook's `import.meta.url`; `env` defaults to `process.env` (the hooks pass
- * nothing and inherit it).
+ * hook's `import.meta.url`; `env` defaults to `process.env` and `platform`
+ * to `process.platform` (the hooks pass nothing and inherit both).
  */
-export function arming(cwdRaw, { hookUrl, env = process.env } = {}) {
+export function arming(cwdRaw, { hookUrl, env = process.env, platform = process.platform } = {}) {
   const anchors = deriveAnchors(hookUrl)
   if (anchors === null) return { armed: false, reason: 'anchor-unrealpathable' }
+  if (platform === 'win32') return { armed: false, reason: 'platform-win32' }
   const cwd = safeReal(typeof cwdRaw === 'string' && cwdRaw !== '' ? cwdRaw : process.cwd())
   if (cwd === null) return { armed: false, reason: 'anchor-unrealpathable' }
   const roots = refusalRoots(cwd)
@@ -74,11 +84,11 @@ export function arming(cwdRaw, { hookUrl, env = process.env } = {}) {
 export function armedText({ node, launcher }) {
   const q = posixSingleQuote
   return [
-    'cc-codex-bridge: the Codex rescue lane is ARMED. Use EXACTLY this canonical invocation for a rescue:',
-    `${q(node)} ${q(launcher)} -- 'the rescue prompt, single line'`,
-    'For a multi-line prompt, write the text to a file inside this workspace (or the canonical tmpdir), then run:',
+    `${LANE.name}: ${LANE.headline} is ARMED. Use EXACTLY this canonical invocation for a ${LANE.invocationSubject}:`,
+    `${q(node)} ${q(launcher)} -- '${LANE.promptExample}'`,
+    LANE.multiLineNote,
     `${q(node)} ${q(launcher)} --prompt-file 'the prompt file path'`,
-    'Add --last ONLY when the user explicitly asks to continue the previous rescue (it resumes the most recent rescue thread).',
+    `Add --last ONLY when the user explicitly asks to continue ${LANE.lastClause}.`,
   ].join('\n')
 }
 
@@ -91,9 +101,11 @@ export function refusedText(reason) {
         ? 'the ambient BASH_ENV variable is non-empty (shell-function takeover defense)'
         : reason === 'env-set'
           ? 'the ambient ENV variable is non-empty (shell-function takeover defense)'
-          : 'the plugin\'s canonical anchors could not be resolved in this environment'
+          : reason === 'platform-win32'
+            ? 'platform win32 is unsupported — the launcher refuses it too'
+            : 'the plugin\'s canonical anchors could not be resolved in this environment'
   return [
-    `cc-codex-bridge: the Codex rescue lane is NOT armed (reason: ${reason} — ${words}).`,
-    'Codex rescue today goes through the normal, approval-requiring path; do NOT guess or construct the bridge\'s canonical bash invocation manually.',
+    `${LANE.name}: ${LANE.headline} is NOT armed (reason: ${reason} — ${words}).`,
+    `${LANE.action} today goes through the normal, approval-requiring path; do NOT guess or construct the bridge's canonical bash invocation manually.`,
   ].join('\n')
 }

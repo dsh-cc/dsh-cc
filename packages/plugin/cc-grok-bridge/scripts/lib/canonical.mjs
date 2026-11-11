@@ -1,6 +1,12 @@
+// GENERATED FILE — do not edit. Source: scripts/lib/bridge-lane/canonical.mjs
+// Regenerate: node scripts/generate-bridge-lane-lib.mjs
 /**
- * canonical.mjs — the single arming/derivation source for the
- * cc-grok-bridge hooks.
+ * canonical.mjs — the single arming/derivation source for both bridge lanes.
+ *
+ * AUTHORED at scripts/lib/bridge-lane/canonical.mjs and GENERATED into each
+ * bridge's scripts/lib/ by scripts/generate-bridge-lane-lib.mjs. The two
+ * shipped copies are byte-identical; every lane-specific value comes from
+ * `./lane.mjs`.
  *
  * Every hook (PreToolUse allow, SessionStart context) derives the canonical
  * anchor pair and the refusal/arming verdict through THIS module only; the
@@ -10,9 +16,11 @@
  * process plus the realpath of the sibling `scripts/grok-review-run.mjs`
  * resolved from the hook's own `import.meta.url`. Refusal set: the
  * canonicalized session cwd plus the canonical tmp roots, unrealpathable
- * entries skipped. The Grok review lane also refuses win32 (the launcher
- * refuses it too).
+ * entries skipped. Both lanes also refuse win32, because both launchers do —
+ * an armed hook on a platform the launcher rejects would hand the model an
+ * invocation that cannot run.
  */
+import { LANE } from './lane.mjs'
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -38,7 +46,7 @@ export const posixSingleQuote = (s) => `'` + String(s).replaceAll(`'`, `'\\''`) 
  */
 export function deriveAnchors(hookUrl) {
   const node = safeReal(process.execPath)
-  const launcher = safeReal(fileURLToPath(new URL('../scripts/grok-review-run.mjs', hookUrl)))
+  const launcher = safeReal(fileURLToPath(new URL(`../scripts/${LANE.launcherFile}`, hookUrl)))
   if (node === null || launcher === null) return null
   return { node, launcher }
 }
@@ -76,11 +84,11 @@ export function arming(cwdRaw, { hookUrl, env = process.env, platform = process.
 export function armedText({ node, launcher }) {
   const q = posixSingleQuote
   return [
-    'cc-grok-bridge: the Grok review lane is ARMED. Use EXACTLY this canonical invocation for a Grok review:',
-    `${q(node)} ${q(launcher)} -- 'the review request, single line'`,
-    'For a multi-line prompt (or any request whose first character is `-` — dash-leading inline prompts are rejected by the launcher), write the text to a file inside this workspace (or the canonical tmpdir), then run:',
+    `${LANE.name}: ${LANE.headline} is ARMED. Use EXACTLY this canonical invocation for a ${LANE.invocationSubject}:`,
+    `${q(node)} ${q(launcher)} -- '${LANE.promptExample}'`,
+    LANE.multiLineNote,
     `${q(node)} ${q(launcher)} --prompt-file 'the prompt file path'`,
-    'Add --last ONLY when the user explicitly asks to continue the previous review (it resumes the most recent review thread for this workspace).',
+    `Add --last ONLY when the user explicitly asks to continue ${LANE.lastClause}.`,
   ].join('\n')
 }
 
@@ -97,7 +105,7 @@ export function refusedText(reason) {
             ? 'platform win32 is unsupported — the launcher refuses it too'
             : 'the plugin\'s canonical anchors could not be resolved in this environment'
   return [
-    `cc-grok-bridge: the Grok review lane is NOT armed (reason: ${reason} — ${words}).`,
-    'Grok review today goes through the normal, approval-requiring path; do NOT guess or construct the bridge\'s canonical bash invocation manually.',
+    `${LANE.name}: ${LANE.headline} is NOT armed (reason: ${reason} — ${words}).`,
+    `${LANE.action} today goes through the normal, approval-requiring path; do NOT guess or construct the bridge's canonical bash invocation manually.`,
   ].join('\n')
 }
