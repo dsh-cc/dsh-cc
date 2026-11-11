@@ -107,6 +107,17 @@ describe('codex-rescue-context.mjs — armed payload', () => {
 })
 
 describe('quoting round-trip — hostile launcher path through the escaping helper', () => {
+  it('refuses to arm on win32, matching the launcher\'s own platform gate', () => {
+    // The launcher dies with 'unsupported platform win32'; an armed hook there
+    // would hand the model an invocation that cannot run. Grok's lane carried
+    // this check first; the Codex lane was missing it.
+    const verdict = arming('/workspace/project', {
+      hookUrl: pathToFileURL(CONTEXT_HOOK).href,
+      platform: 'win32',
+    })
+    expect(verdict).toMatchObject({ armed: false, reason: 'platform-win32' })
+  })
+
   it('unit: the escaping helper output lexes back byte-equal (spaces + quote)', () => {
     const hostile = "/opt/dsh space/quote's/cc-codex-bridge/scripts/codex-rescue-run.mjs"
     const line = `${posixSingleQuote(process.execPath)} ${posixSingleQuote(hostile)} -- 'review the failing spec'`
