@@ -72,6 +72,12 @@ jobs:
           ref: main
           fetch-depth: 0   # ancestry check + tag --merged need full history
 
+      # Primary line (deviation #5 in presubmit.yml). Safe as a file here:
+      # this workflow only ever checks out main, which always carries it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
       # checkout@v4 leaves a detached HEAD; release.mjs requires branch == main.
       # --force --tags: tag listing and ancestry need a complete tag set.
       - name: Sync main (undetach + tags)

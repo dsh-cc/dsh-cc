@@ -219,13 +219,20 @@ describe('SystemOneRecallDecisionSelector: mode gating and request shape', () =>
 
   it('dispatches one exact DecisionRequest per batch and selects the high-probability rows', async () => {
     const probabilities = { m0000: 0.25, m0001: 0.75, m0002: 0.91 }
-    const { runner, requests } = harness({
+    // Fixed clock: this leg asserts the exact wire request, and `timeoutMs` is
+    // the batch's slice of the deadline (`Math.floor(deadline - now)`). On the
+    // real clock that value is 1499 whenever the two reads straddle a
+    // millisecond boundary, which made the assertion racy. The remaining-slice
+    // arithmetic has its own legs below.
+    const clock = { value: 0 }
+    const { runner, requests, now } = harness({
+      clock,
       decide: request => noul(Object.fromEntries(
         Object.keys(request.questions).map(id => [id, probabilities[id as keyof typeof probabilities]]),
       )),
     })
     const recallSignal = signal()
-    const selector = new SystemOneRecallDecisionSelector(runner, settings())
+    const selector = new SystemOneRecallDecisionSelector(runner, settings(), { now })
     const selection = await selector.select(input(3), scope, recallSignal)
 
     // 0.25 is an explicit exclusion, 0.75/0.91 explicit inclusions, ordered by
