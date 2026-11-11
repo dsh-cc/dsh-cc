@@ -39,7 +39,7 @@ Key `cc-turn-rules` in the **user-layer** `settings.json` (the harness-home file
 | `enabled` | `true` | Master flag. |
 | `max-result-bytes` | `200000` | UTF-8 truncation cap for the matching unit. |
 | `regex-cache-size` | `64` | Compiled-regex LRU capacity. |
-| `judged.enabled` | `true` | Phase-2 LLM-judged rules; default ON since 2026-11-11 (opt out with `false`). |
+| `judged.enabled` | `true` | Phase-2 LLM-judged rules; default ON since 2026-11-11 (opt out with `false`). **Currently inert**: the judged engine is design-only, so nothing consumes this flag yet. |
 | `repeat-reminder.enabled` | `true` | Built-in reminder on N consecutive identical calls (same tool + canonical args); default ON since 2026-11-11 (opt out with `false`). |
 | `repeat-reminder.thresholds` | `[3, 5, 8]` | Run lengths that fire a reminder. |
 | `repeat-reminder.include` / `repeat-reminder.exclude` | `[]` | Tool-name wildcards (`*` allowed); exclude wins over include. |

@@ -41,7 +41,7 @@ repeatGap: 10                   # 重新武装前的轮次间隔；默认 10
 | `enabled` | `true` | 总开关。 |
 | `max-result-bytes` | `200000` | 匹配单元的 UTF-8 截断上限。 |
 | `regex-cache-size` | `64` | 编译正则 LRU 容量。 |
-| `judged.enabled` | `true` | 第二阶段 LLM 评判规则；2026-11-11 起默认开启（设 `false` 关闭）。 |
+| `judged.enabled` | `true` | 第二阶段 LLM 评判规则；2026-11-11 起默认开启（设 `false` 关闭）。**当前为空转**：评判引擎仅有设计、尚未实现，没有任何代码消费该开关。 |
 | `repeat-reminder.enabled` | `true` | 内置提醒：同一顶层代理连续 N 次完全相同的调用（同工具 + 规范化参数）时触发；2026-11-11 起默认开启（设 `false` 关闭）。 |
 | `repeat-reminder.thresholds` | `[3, 5, 8]` | 触发提醒的连续次数。 |
 | `repeat-reminder.include` / `repeat-reminder.exclude` | `[]` | 工具名通配（允许 `*`）；exclude 优先于 include。 |

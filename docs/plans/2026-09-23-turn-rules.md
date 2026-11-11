@@ -4,7 +4,7 @@
 **Date:** 2026-09-23
 **Worktree:** `.claude/worktrees/oh-my-pi` (branch `worktree-oh-my-pi`) — doc origin; implementation worktree `.claude/worktrees/turn-rules`.
 
-**Default promotion (2026-11-11):** the two built-in reminder sub-features — Phase-2 `judged` and the later `repeat-reminder` — now default to **true** (opt out per key with `false`). The trigger-rule engine's own default is unchanged (`enabled: true`, zero trigger-bearing rules by default).
+**Default promotion (2026-11-11):** the two built-in reminder sub-features — Phase-2 `judged` and the later `repeat-reminder` — now default to **true** (opt out per key with `false`). The trigger-rule engine's own default is unchanged (`enabled: true`, zero trigger-bearing rules by default). Note that `judged` is **inert today**: §4.7 was never implemented, so no code consumes the flag — the flip is config/documentation only.
 
 ## 1. Problem
 

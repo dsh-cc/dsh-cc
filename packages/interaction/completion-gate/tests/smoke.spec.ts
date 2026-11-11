@@ -33,12 +33,14 @@ afterEach(() => {
   for (const root of roots.splice(0)) rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
-async function boot(): Promise<{ ctx: Context; agent: Agent; mock: MockAdapter }> {
+async function boot(options: { writeSettings?: boolean } = {}): Promise<{ ctx: Context; agent: Agent; mock: MockAdapter }> {
   const root = await mkdtemp(join(tmpdir(), 'cg-smoke-'))
   roots.push(root)
   const home = root
   await mkdir(join(home, 'completion-gate'), { recursive: true })
-  await writeFile(join(home, 'settings.json'), JSON.stringify({ 'cc-completion-gate': { enabled: true, 'nudges-per-session': 2 } }), 'utf8')
+  if (options.writeSettings ?? true) {
+    await writeFile(join(home, 'settings.json'), JSON.stringify({ 'cc-completion-gate': { enabled: true, 'nudges-per-session': 2 } }), 'utf8')
+  }
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   // Real JsonlSessionPersistence with the DEFAULT (zstd) compression — §5.8
@@ -110,6 +112,17 @@ describe('@dsh-cc/completion-gate smoke (§5.6, real loop)', () => {
     const ends = events.filter(event => event.type === 'turn/end' && event.data?.turn === claimTurn)
     expect(ends).toHaveLength(1)
     expect(ends[0]!.seq!).toBeGreaterThan(continuation!.seq!)
+  }, 30_000)
+
+  it('no settings file at all → the promoted default (ON) still nudges', async () => {
+    const { agent } = await boot({ writeSettings: false })
+    await turn(agent, 'run the tests please')
+    const events = agent.session.snapshotEvents() as Array<{ type: string; data: any }>
+    const nudges = events.filter(event => event.type === NUDGE_EVENT)
+    // The default flipped to ON on 2026-11-11; an absent user file must not
+    // silently keep the gate dark (fail-soft resolves to DEFAULT_GATE_SETTINGS).
+    expect(nudges).toHaveLength(1)
+    expect(nudges[0]!.data).toMatchObject({ claim: 'tests-green', missingReceipt: true })
   }, 30_000)
 
   it('a followup genuine turn still evaluates (followup/next-turn does not suppress)', async () => {
