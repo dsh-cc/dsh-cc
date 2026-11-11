@@ -59,6 +59,7 @@
     "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
     "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
     "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-agent-preset-registry": "link:../../../../deepseek-harness/packages/preset/agent-preset-registry",
     "@deepseek-ai/dsh-bash-local": "link:../../../../deepseek-harness/packages/shell/bash-local",
     "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
     "@deepseek-ai/dsh-fs-local": "link:../../../../deepseek-harness/packages/fs/fs-local",

@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it } from 'vitest'
+import { leakedServices } from '@deepseek-ai/dsh-agent-preset-registry'
 import { Context } from '@deepseek-ai/cordis'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import LlmRuntime, { LlmAdapter } from '@deepseek-ai/dsh-llm'
@@ -56,29 +57,6 @@ interface FiberLike {
   parent: { fiber: FiberLike }
 }
 
-/** Local copy of agent-preset-registry `leakedServices` (cc-shell leaked-services.spec precedent). */
-function leakedServices(ctx: Context, mount: FiberLike): string[] {
-  const store = ctx.reflect.store
-  const rootIsolate = ctx.root[Context.isolate]
-  const leaked: string[] = []
-  for (const key of Object.getOwnPropertySymbols(store)) {
-    const impl = store[key]
-    if (impl === undefined) continue
-    let current = impl.ctx.fiber as FiberLike
-    let within = false
-    while (true) {
-      if (current === mount) {
-        within = true
-        break
-      }
-      const parent = current.parent.fiber
-      if (parent === current) break
-      current = parent
-    }
-    if (within && rootIsolate[impl.name] === key) leaked.push(impl.name)
-  }
-  return leaked.sort()
-}
 
 /** Provider-boundary fake reviewer: answers the forced `respond` call from the envelope. */
 class EnvelopeReviewer extends LlmAdapter {

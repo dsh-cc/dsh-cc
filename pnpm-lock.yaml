@@ -236,6 +236,9 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
         version: link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
+        version: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
       '@deepseek-ai/dsh-bash-local':
         specifier: link:../../../../deepseek-harness/packages/shell/bash-local
         version: link:../../../../deepseek-harness/packages/shell/bash-local
@@ -3201,6 +3204,9 @@ importers:
       '@deepseek-ai/cordis-plugin-include':
         specifier: link:../../../../deepseek-harness/vendor/include
         version: link:../../../../deepseek-harness/vendor/include
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
+        version: link:../../../../deepseek-harness/packages/preset/agent-preset-registry
       '@deepseek-ai/dsh-jobs-local':
         specifier: link:../../../../deepseek-harness/packages/jobs/jobs-local
         version: link:../../../../deepseek-harness/packages/jobs/jobs-local

@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { apply } from '../src/index.ts'
+import { leakedServices } from '@deepseek-ai/dsh-agent-preset-registry'
 import * as HooksClaude from '@dsh-cc/hooks-claude-code'
 
 /**
@@ -30,41 +31,7 @@ const CC_SERVICES_ISOLATE = [
   'rules',
 ] as const
 
-interface FiberLike {
-  parent: { fiber: FiberLike }
-}
-
-/**
- * Local copy of `@deepseek-ai/dsh-agent-preset-registry` `leakedServices` +
- * `withinFiber` (cc-shell has no agent-preset-registry dependency). Keep in
- * lockstep with harness `packages/preset/agent-preset-registry/src/mount.ts`
- * (the deleted agent-presets package moved there in 0.1.7-rc.2).
- */
-function leakedServices(ctx: Context, mount: FiberLike): string[] {
-  const store = ctx.reflect.store
-  const rootIsolate = ctx.root[Context.isolate]
-  const leaked: string[] = []
-  for (const key of Object.getOwnPropertySymbols(store)) {
-    const impl = store[key]
-    if (impl === undefined) continue
-    // Harness 0.2.2-rc.1: the reflected store entry carries its context, so the
-    // owning fiber is read through it (lockstep with agent-preset-registry mount.ts).
-    if (!withinFiber(impl.ctx.fiber, mount)) continue
-    if (rootIsolate[impl.name] === key) leaked.push(impl.name)
-  }
-  return leaked.sort((left, right) => left.localeCompare(right))
-}
-
-function withinFiber(fiber: FiberLike, root: FiberLike): boolean {
-  let current = fiber
-  while (true) {
-    if (current === root) return true
-    const parent = current.parent.fiber
-    if (parent === current) return false
-    current = parent
-  }
-}
-
+/** Compose the isolate realm chain for the given service names. */
 function isolateGroup(root: Context, names: readonly string[]): Context {
   let group = root
   for (const name of names) group = group.isolate(name)

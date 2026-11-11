@@ -97,6 +97,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
     "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
+    "@deepseek-ai/dsh-agent-preset-registry": "link:../../../../deepseek-harness/packages/preset/agent-preset-registry",
     "@deepseek-ai/dsh-jobs-local": "link:../../../../deepseek-harness/packages/jobs/jobs-local",
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-tool-schedule": "link:../../../../deepseek-harness/packages/schedule/tool-schedule",
