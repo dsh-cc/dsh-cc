@@ -64,13 +64,8 @@ The provider ships a portable subset of Claude Code's own bundled skills as in-p
 
 CC's `verify` and `stuck` bundled skills are **not** ported: both are `USER_TYPE === 'ant'`-only, and `verify`'s companion body/examples are absent from the Claude Code build surface, so they cannot be reproduced faithfully.
 
-## Rendering
-
-`renderSkillBody` substitutes `$ARGUMENTS`, `$ARGUMENTS[n]`, `$n`, named `$name` placeholders, and `${CLAUDE_SKILL_DIR}` / `${CLAUDE_SESSION_ID}`, and segments inline-shell `` !`...` `` commands for the caller to execute (guarded by `allowInlineShell`, which MCP-sourced skills must force off). `estimateFrontmatterTokens` counts only name, description, and `when_to_use` — the body is never counted during discovery.
-
 ## Known Limitations and Deferred Work
 
 - **Most semantic translation is consumer-side** — `allowed-tools`, `context: fork`, and `argument-hint` are surfaced as metadata and helpers and applied by the consumer, because a provider has no agent reference at load time. `paths` conditional activation is the exception and is applied by this provider.
-- **Inline shell is not executed by this package** — commands are extracted and returned; execution is the caller's responsibility.
 - **One-level discovery** — only `<root>/<name>/SKILL.md` and legacy top-level `.claude/commands/*.md` are recognized.
 - **Bundled subset is partial** — `verify` and `stuck` are omitted (ant-only / missing content); `batch`'s and `debug`'s runtime-injected values (tool names, log paths) are kept as authored literal placeholders rather than resolved at invocation.
