@@ -32,7 +32,8 @@
     "@deepseek-ai/dsh-session": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-user-approval": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-user-questions": ">=0.2.2-rc.1",
-    "@deepseek-ai/schemastery": ">=3.18.1"
+    "@deepseek-ai/schemastery": ">=3.18.1",
+    "@dsh-cc/settings": "workspace:^"
   },
   "dependencies": {
     "@dsh-cc/command-agents": "workspace:^",
@@ -46,7 +47,7 @@
     "@dsh-cc/preset-cc": "workspace:^",
     "@dsh-cc/prompt-suggest": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/subagent-task": "workspace:^",
     "@dsh-cc/tool-git-worktree": "workspace:^",
     "highlight.js": "11.12.0"
@@ -64,11 +65,11 @@
     "@deepseek-ai/dsh-plan-mode": "link:../../../../deepseek-harness/packages/plan/plan-mode",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
-    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/dsh-user-approval": "link:../../../../deepseek-harness/packages/interaction/user-approval",
     "@deepseek-ai/dsh-user-questions": "link:../../../../deepseek-harness/packages/interaction/user-questions",
     "@deepseek-ai/dsh-workflow": "link:../../../../deepseek-harness/packages/workflow/workflow",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/settings": "workspace:^",
     "@xterm/headless": "5.5.0"
   },
   "publishConfig": {

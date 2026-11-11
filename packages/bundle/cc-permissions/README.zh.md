@@ -17,7 +17,7 @@ bundle:
 
 该 patch 按注册顺序完成三处挂载：
 
-- `settings-cc` — `@dsh-cc/settings-cascade` 提供者，遵循 `$DSH_HOME/settings.json` 与项目的 `.claude` 设置文件。内置设置行按 ID 被禁用，避免双重挂载。
+- `settings-cc` — `@dsh-cc/settings/cascade` 提供者，遵循 `$DSH_HOME/settings.json` 与项目的 `.claude` 设置文件。内置设置行按 ID 被禁用，避免双重挂载。
 - `permission-rules` — `@dsh-cc/permission-rules` 的 allow/deny/ask 规则引擎，惰性读取 `permissions` 设置命名空间。bypass-immune 规则走单调守卫层。
 - `command-permissions` — `/permissions` 命令及目录包装的 host 侧挂载；空的 host fiber 是 dsh-client-modules 扫描 popupSelect 浏览器侧的依据。
 

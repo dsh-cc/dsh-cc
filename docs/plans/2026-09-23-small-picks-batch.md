@@ -162,7 +162,7 @@ surface (provider payload rebuilds) is harness-side.
 **Implementation.** Redactor is pure with the stats return above; unit-tested
 against a fixture transcript containing canary values. No network or settings
 read at match time. Settings namespace `cc-secrets` registered via
-`registerNamespaceSafe` (`@dsh-cc/settings-ns`, precedent
+`registerNamespaceSafe` (`@dsh-cc/settings/ns`, precedent
 `cc-context-compression` in `packages/context/context-crusher/src/settings.ts:14`)
 with schema `{ extraPatterns: z.array(z.string()).default([]), redactCrusherStore: z.boolean().default(true) }`.
 `extraPatterns` are caller-supplied regex SOURCE strings, compiled once at
@@ -397,7 +397,7 @@ next turn). The status row toast idiom is the existing
 exists.
 
 **Settings.** Namespace `cc-model-cycling` registered via
-`registerNamespaceSafe` (`@dsh-cc/settings-ns`) with
+`registerNamespaceSafe` (`@dsh-cc/settings/ns`) with
 `{ cycleOrder: z.array(z.string()).default([]) }`. Read LIVE per keypress,
 never cached at boot (the `cc-model-aliases` service re-reads per call;
 hot reload rides the settings-cascade republish for free — the PR #127

@@ -5893,17 +5893,17 @@
       "evidence": [
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/watcher.spec.ts",
+          "path": "packages/settings/settings/tests/watcher.spec.ts",
           "anchor": "hot-reloads an external edit"
         },
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/watcher.spec.ts",
+          "path": "packages/settings/settings/tests/watcher.spec.ts",
           "anchor": "keeps the last good document"
         },
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/edit-user-section.spec.ts"
+          "path": "packages/settings/settings/tests/edit-user-section.spec.ts"
         }
       ],
       "deviation": {
@@ -5969,12 +5969,12 @@
       "evidence": [
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/cascade.spec.ts",
+          "path": "packages/settings/settings/tests/cascade.spec.ts",
           "anchor": "dsh-cascade-"
         },
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/merge.spec.ts"
+          "path": "packages/settings/settings/tests/merge.spec.ts"
         }
       ],
       "deviation": {
@@ -6048,7 +6048,7 @@
         },
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/auto-mode.spec.ts"
+          "path": "packages/settings/settings/tests/auto-mode.spec.ts"
         },
         {
           "type": "test",
@@ -6060,7 +6060,7 @@
         },
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/edit-user-section.spec.ts"
+          "path": "packages/settings/settings/tests/edit-user-section.spec.ts"
         },
         {
           "type": "test",
@@ -6168,7 +6168,7 @@
         },
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/trusted-scope.spec.ts"
+          "path": "packages/settings/settings/tests/trusted-scope.spec.ts"
         },
         {
           "type": "source",
@@ -6647,7 +6647,7 @@
         },
         {
           "type": "source",
-          "path": "packages/settings/settings-cascade/src/cc-key-aliases.ts",
+          "path": "packages/settings/settings/src/cascade/cc-key-aliases.ts",
           "anchor": "CC_KEY_ALIASES"
         },
         {
@@ -6687,7 +6687,7 @@
         },
         {
           "type": "test",
-          "path": "packages/settings/settings-cascade/tests/cc-key-aliases.spec.ts"
+          "path": "packages/settings/settings/tests/cc-key-aliases.spec.ts"
         }
       ],
       "deviation": {

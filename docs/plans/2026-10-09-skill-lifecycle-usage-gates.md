@@ -368,7 +368,7 @@ This is the honest version of Progressive Crystallization: we implement the
 ### 3.5 Configuration
 
 Namespace `cc-skill-usage` (D-G), dual-half pattern (D-F; registration
-precedent `packages/settings/settings-ns/src/index.ts:127` and
+precedent `packages/settings/settings/src/ns/src/index.ts:127` and
 `packages/interaction/advisor-watchdog/src/settings.ts:23,90`; raw user-layer
 re-read precedent `readUserSettingsSync`,
 `packages/interaction/advisor-watchdog/src/settings.ts:161-175`):

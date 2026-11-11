@@ -19,8 +19,8 @@ import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import type { SettingsNamespace, SettingsProvider } from '@dsh-cc/settings-provider'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import type { SettingsNamespace, SettingsProvider } from '@dsh-cc/settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 // Type-only: pull in the declaration-merged Context `agents` member and the
 // `subagent/start` lifecycle event so the spawn-path listener typechecks.
 import type {} from '@deepseek-ai/dsh-agent'

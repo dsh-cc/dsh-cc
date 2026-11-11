@@ -48,7 +48,7 @@ import { isUnknownOptionFailure, lockWorktree, resolveBaseRef, sessionLockReason
 import { copyIncludedFiles } from './include.ts'
 import { runWorktreeCreateHook, runWorktreeRemoveHook } from './hooks.ts'
 import { branchOfAdopted, headOfAdopted, resolveAdoptPath } from './pathform.ts'
-import { worktreeSettings, WorktreeSchema, type Worktree } from '@dsh-cc/settings-cascade'
+import { worktreeSettings, WorktreeSchema, type Worktree } from '@dsh-cc/settings/cascade'
 
 export const name = 'tool-git-worktree'
 export const inject = ['tools', 'shell', 'systemPrompt', 'fs']

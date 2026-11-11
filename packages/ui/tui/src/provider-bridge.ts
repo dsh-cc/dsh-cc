@@ -24,7 +24,7 @@
  * @module @dsh-cc/tui/provider-bridge
  */
 import { isDeepStrictEqual } from 'node:util'
-import { AnySchema, readUserSection } from '@dsh-cc/settings-ns'
+import { AnySchema, readUserSection } from '@dsh-cc/settings/ns'
 import { DEFAULT_MODEL_ENTRY_ID, PROVIDER_ENTRY_ID } from './bridge-ids.ts'
 import { PROVIDER_SETTINGS_NAMESPACE, type SettingsDescribeLike } from './provider-read.ts'
 

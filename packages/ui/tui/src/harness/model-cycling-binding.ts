@@ -7,9 +7,9 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe, type SettingsReader } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe, type SettingsReader } from '@dsh-cc/settings/ns'
 import { resolveAlias } from '@dsh-cc/model-aliases'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import {
   createModelCyclingSection,
   type ModelCyclingDeps,

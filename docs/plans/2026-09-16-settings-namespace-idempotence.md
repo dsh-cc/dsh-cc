@@ -54,9 +54,9 @@ hole with lazy re-acquisition.
 
 ## 2. Design
 
-### 2.1 New package: `@dsh-cc/settings-ns`
+### 2.1 New package: `@dsh-cc/settings/ns`
 
-Location `packages/settings/settings-ns/`, version `0.7.1`, publishable,
+Location `packages/settings/settings/src/ns/`, version `0.7.1`, publishable,
 README trio, same package shape as `@dsh-cc/side-query`. Dependencies: peer
 `@deepseek-ai/cordis` + `@deepseek-ai/dsh-settings` (floor `>=0.1.5-rc.1`);
 devDependencies link the harness local copies via the established
@@ -180,7 +180,7 @@ against each site's code during migration, not taken from this table (critic M3)
 `compaction-micro` delegates to `registerTusSettings` — covered via
 tool-use-summary, no separate site (critic m5).
 
-Dependency direction: each migrator gains `@dsh-cc/settings-ns` in
+Dependency direction: each migrator gains `@dsh-cc/settings/ns` in
 **dependencies** (`workspace:^`) — the #77 lesson: preset-row packages must be
 provided by the launcher closure, and `dependencies` (not `peerDependencies`)
 is the precedent that guarantees it.

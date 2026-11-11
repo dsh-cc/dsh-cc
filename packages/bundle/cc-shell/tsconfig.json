@@ -4,16 +4,30 @@
     "rootDir": "src",
     "outDir": "lib"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../compat/cc-model-aliases"
     },
-    { "path": "../../compat/cc-plugin-loader" },
-    { "path": "../../compat/cc-plugin-manager" },
-    { "path": "../../compat/cc-model-aliases" },
-    { "path": "../../preset/claude-code-agents" },
-    { "path": "../../mcp/mcp-client" },
-    { "path": "../../mcp/mcp-config" }
+    {
+      "path": "../../compat/cc-plugin-loader"
+    },
+    {
+      "path": "../../compat/cc-plugin-manager"
+    },
+    {
+      "path": "../../mcp/mcp-client"
+    },
+    {
+      "path": "../../mcp/mcp-config"
+    },
+    {
+      "path": "../../preset/claude-code-agents"
+    },
+    {
+      "path": "../../settings/settings"
+    }
   ]
 }

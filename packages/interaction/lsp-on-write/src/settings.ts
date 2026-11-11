@@ -1,7 +1,7 @@
 /**
  * Settings for LSP diagnostics-on-write (design doc §4.6), two halves:
  *
- * 1. namespace registration via `@dsh-cc/settings-ns` (schema uses the kebab
+ * 1. namespace registration via `@dsh-cc/settings/ns` (schema uses the kebab
  *    keys users author in settings.json, context-crusher convention);
  * 2. a RAW user-layer read of `<dshHome>/settings.json` that bypasses the
  *    merged cascade entirely, so project scope is structurally invisible —
@@ -9,7 +9,7 @@
  *    which also gives free hot reload.
  *
  * The raw reader is local: `readUserFile` is not a package-root export of
- * `@dsh-cc/settings-cascade`, and it throws on a parse error where this seam
+ * `@dsh-cc/settings/cascade`, and it throws on a parse error where this seam
  * must fail soft (post-edit-verify settings.ts precedent).
  *
  * @module
@@ -18,9 +18,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the feature flag and knobs. */
 export const SETTINGS_NAMESPACE = 'cc-lsp-on-write' as SettingsNamespace

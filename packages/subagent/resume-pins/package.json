@@ -54,12 +54,13 @@
     "@deepseek-ai/dsh-subagent": ">=0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@dsh-cc/claude-code-agents": "workspace:^",
-    "@dsh-cc/model-aliases": "workspace:^"
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/settings": "workspace:^"
   },
   "dependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^"
+    "@dsh-cc/settings": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
@@ -68,12 +69,11 @@
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-persistence": "link:../../../../deepseek-harness/packages/session/session-persistence",
     "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
-    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/dsh-tools": "link:../../../../deepseek-harness/packages/core/tools",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/claude-code-agents": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^"
+    "@dsh-cc/settings": "workspace:^"
   },
   "publishConfig": {
     "access": "public"

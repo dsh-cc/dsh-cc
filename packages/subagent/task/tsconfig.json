@@ -9,15 +9,31 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../compat/cc-model-aliases"
     },
-    { "path": "../../core/tools" },
-    { "path": "../../preset/claude-code-agents" },
-    { "path": "../../compat/cc-model-aliases" },
-    { "path": "../resume-pins" },
-    { "path": "../../interaction/command-agents" },
-    { "path": "../../memory/memory" },
-    { "path": "../../workspace/tool-git-worktree" },
-    { "path": "../../workspace/session-cwd" }
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../interaction/command-agents"
+    },
+    {
+      "path": "../../memory/memory"
+    },
+    {
+      "path": "../../preset/claude-code-agents"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../workspace/session-cwd"
+    },
+    {
+      "path": "../../workspace/tool-git-worktree"
+    },
+    {
+      "path": "../resume-pins"
+    }
   ]
 }

@@ -1,7 +1,7 @@
 /**
  * Settings for post-edit auto-verify (design doc §3.4/§3.6), two halves:
  *
- * 1. namespace registration via `@dsh-cc/settings-ns` (schema uses the kebab
+ * 1. namespace registration via `@dsh-cc/settings/ns` (schema uses the kebab
  *    keys users author in settings.json, context-crusher convention);
  * 2. a RAW user-layer read of `<dshHome>/settings.json` that bypasses the
  *    merged cascade entirely, so project-scope rules are structurally
@@ -10,7 +10,7 @@
  *    gives free hot reload.
  *
  * The raw reader is local: `readUserFile` is not a package-root export of
- * `@dsh-cc/settings-cascade` (it lives in persist.ts), and it throws on a
+ * `@dsh-cc/settings/cascade` (it lives in persist.ts), and it throws on a
  * parse error where this seam must fail soft.
  *
  * @module
@@ -19,9 +19,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 import type { VerifyRule } from './rules.ts'
 
 /** The settings namespace carrying the feature flag and rules. */

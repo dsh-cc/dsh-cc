@@ -9,22 +9,19 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../tool-use-summary"
-    },
-    {
-      "path": "../compaction-basic-cc"
-    },
-    {
-      "path": "../../settings/settings-ns"
+      "path": "../../observability/sidecar-io"
     },
     {
       "path": "../../session/command-cost"
     },
     {
-      "path": "../../observability/sidecar-io"
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../compaction-basic-cc"
+    },
+    {
+      "path": "../tool-use-summary"
     }
   ]
 }

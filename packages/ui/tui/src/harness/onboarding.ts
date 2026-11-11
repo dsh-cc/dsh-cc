@@ -11,7 +11,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import type { DriverModelSelection } from '../state/driver-types.ts'
 import type { TuiState } from '../store.ts'
 import { upsertRow } from '../store.ts'

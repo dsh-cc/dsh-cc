@@ -16,7 +16,7 @@ import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { extractEnabledPluginKeys } from './enabled-plugins.ts'
-import { resolveLocalSettingsDir } from '@dsh-cc/settings-cascade/local-root'
+import { resolveLocalSettingsDir } from '@dsh-cc/settings/cascade/local-root'
 
 /** One discovered plugin root plus the name used to match marketplace overlays. */
 export interface DiscoveredCcPlugin {

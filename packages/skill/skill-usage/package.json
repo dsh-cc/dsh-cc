@@ -22,12 +22,13 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/settings": "workspace:^"
   },
   "dependencies": {
     "@dsh-cc/handoff-store": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/sidecar-io": "workspace:^",
     "@dsh-cc/skill-loader": "workspace:^"
   },
@@ -45,8 +46,7 @@
     "@dsh-cc/agent-loop-mock": "workspace:^",
     "@dsh-cc/handoff-store": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
-    "@dsh-cc/settings-provider": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/sidecar-io": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "vitest": "^4.1.8"

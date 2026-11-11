@@ -13,9 +13,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the VWA evidence flags (§4.4). */
 export const SETTINGS_NAMESPACE = 'vwa-evidence'

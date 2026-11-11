@@ -35,7 +35,7 @@ export const WORKTREE_BRANCH_PREFIX = 'worktree-'
 
 /**
  * The settings files the cascade reads for user → project → local, mirrored
- * from packages/settings/settings-cascade/src/index.ts (userSettings =
+ * from packages/settings/settings/src/cascade/index.ts (userSettings =
  * `<home>/settings.json`, projectSettings = `<project>/.claude/settings.json`,
  * localSettings = `<project>/.claude/settings.local.json`). The launcher
  * cannot load the cascade (pre-build, dependency-free) — this is the

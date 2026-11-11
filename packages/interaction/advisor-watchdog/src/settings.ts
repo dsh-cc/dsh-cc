@@ -3,7 +3,7 @@
  * docs/plans/2026-09-23-advisor-watchdog.md §4.9), two halves — the turn-rules
  * dual-half pattern (packages/interaction/turn-rules/src/settings.ts):
  *
- * 1. namespace registration via `@dsh-cc/settings-ns` (kebab keys, for /config
+ * 1. namespace registration via `@dsh-cc/settings/ns` (kebab keys, for /config
  *    UX and validation only);
  * 2. a RAW user-layer read of `<dshHome>/settings.json` re-read per use, so a
  *    turn never depends on cascade timing.
@@ -18,9 +18,9 @@ import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the advisor flags. */
 export const SETTINGS_NAMESPACE = 'cc-advisor' as SettingsNamespace

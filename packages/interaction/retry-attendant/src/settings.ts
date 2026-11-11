@@ -6,7 +6,7 @@
  * misfires). Two halves, mirroring
  * post-edit-verify/turn-rules:
  *
- * 1. namespace registration via `@dsh-cc/settings-ns` (for /config UX and
+ * 1. namespace registration via `@dsh-cc/settings/ns` (for /config UX and
  *    validation only);
  * 2. a RAW user-layer read of `<dshHome>/settings.json` per use — hot reload
  *    for free, and project-scope values are invisible. Fail-soft everywhere:
@@ -19,9 +19,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the feature flags. */
 export const SETTINGS_NAMESPACE = 'retry-attendant' as SettingsNamespace

@@ -9,19 +9,16 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
       "path": "../../core/tools"
     },
     {
       "path": "../../llm-tuning/side-query"
     },
     {
-      "path": "../../settings/settings-ns"
+      "path": "../../observability/sidecar-io"
     },
     {
-      "path": "../../observability/sidecar-io"
+      "path": "../../settings/settings"
     }
   ]
 }

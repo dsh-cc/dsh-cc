@@ -264,7 +264,7 @@ One executor, TDD, each step green on the package suite before the next:
 
 Hard constraints: English comments/docs; TSDoc on public API; ≤500 lines per source file
 (extract modules, never ratchet the baseline); no new runtime dependencies (zod from
-existing graph; types from `@dsh-cc/command-cost`, helpers from `@dsh-cc/settings-ns` —
+existing graph; types from `@dsh-cc/command-cost`, helpers from `@dsh-cc/settings/ns` —
 declare in devDependencies/peer per the link-closure rule and verify with
 check-spec-deps); lockfile untouched; **never run git — orchestrator commits**.
 

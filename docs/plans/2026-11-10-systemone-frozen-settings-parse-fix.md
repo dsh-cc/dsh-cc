@@ -95,7 +95,7 @@ never exercised. Third instance of the "fixture never walks the real wiring" cla
 
 ### 3.1 Structure-preserving deep copy (the core fix)
 
-A single helper exported from **`@dsh-cc/settings-ns`** (all three affected packages already declare
+A single helper exported from **`@dsh-cc/settings/ns`** (all three affected packages already declare
 it as a dependency; one definition + one property test beats three drifting copies):
 
 ```ts
@@ -195,7 +195,7 @@ claimed as done.
 
 ### 3.4 Placement
 
-`copyForMutation` lives in `@dsh-cc/settings-ns` (new export, additive; one property test there).
+`copyForMutation` lives in `@dsh-cc/settings/ns` (new export, additive; one property test there).
 The three consumers import it — no new package edges (all three already depend on settings-ns).
 
 ## 4. Test matrix (TDD)

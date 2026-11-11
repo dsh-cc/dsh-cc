@@ -10,19 +10,16 @@
   ],
   "references": [
     {
-      "path": "../vwa-evidence"
+      "path": "../../compat/cc-model-aliases"
+    },
+    {
+      "path": "../../settings/settings"
     },
     {
       "path": "../command-usage"
     },
     {
-      "path": "../../settings/settings-ns"
-    },
-    {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../compat/cc-model-aliases"
+      "path": "../vwa-evidence"
     }
   ]
 }

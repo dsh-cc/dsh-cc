@@ -8,9 +8,17 @@
     "src"
   ],
   "references": [
-    { "path": "../memory" },
-    { "path": "../../llm-tuning/systemone" },
-    { "path": "../../settings/settings-ns" },
-    { "path": "../../observability/decision-usage" }
+    {
+      "path": "../../llm-tuning/systemone"
+    },
+    {
+      "path": "../../observability/decision-usage"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../memory"
+    }
   ]
 }

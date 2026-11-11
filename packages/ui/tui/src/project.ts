@@ -78,7 +78,7 @@ export interface ProjectInfo {
  * not collapse onto their superproject.
  *
  * Keep in sync with `isLinkedWorktree` in
- * `packages/settings/settings-cascade/src/local-root.ts`, which replicates
+ * `packages/settings/settings/src/cascade/local-root.ts`, which replicates
  * this detector for local-settings hoisting (see its module doc).
  */
 function isLinkedWorktree(commonDir: string, top: string): boolean {

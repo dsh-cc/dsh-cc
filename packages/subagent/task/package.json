@@ -37,7 +37,8 @@
     "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-subagent": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-system-prompt": ">=0.2.2-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/settings": "workspace:^"
   },
   "dependencies": {
     "@dsh-cc/claude-code-agents": "workspace:^",
@@ -45,7 +46,7 @@
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/tool-git-worktree": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
@@ -80,8 +81,7 @@
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/plugin-loader": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
-    "@dsh-cc/settings-provider": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/tool-search": "workspace:*",
     "@dsh-cc/tools": "workspace:^"

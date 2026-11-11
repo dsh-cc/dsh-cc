@@ -167,7 +167,7 @@ already exists as the revision marker. Recorded here so nobody re-investigates.
 
 ### W6 (P2, optional filler): parallelize the settings-cascade reads
 
-`packages/settings/settings-cascade/src/index.ts:259–264` — `load()` awaits
+`packages/settings/settings/src/cascade/index.ts:259–264` — `load()` awaits
 five independent reads serially; make them `Promise.all`. Merge order
 (user→project→local→flag→policy, index.ts:266–272) and the constructor-time
 local-settings git probe (index.ts:122–140) are untouched. One behavioral

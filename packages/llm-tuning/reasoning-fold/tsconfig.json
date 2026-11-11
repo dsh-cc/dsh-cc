@@ -9,13 +9,10 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-ns"
-    },
-    {
-      "path": "../../settings/settings-provider"
-    },
-    {
       "path": "../../observability/sidecar-io"
+    },
+    {
+      "path": "../../settings/settings"
     }
   ]
 }

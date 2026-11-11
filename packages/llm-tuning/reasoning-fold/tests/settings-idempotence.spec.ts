@@ -36,7 +36,7 @@ describe('registerProbeSetting duplicate-registration tolerance', () => {
 
   it('a second module copy of the helper degrades on duplicate registration', async () => {
     const provider = fakeProvider({ probe: false })
-    const { registerNamespaceSafe } = await import('@dsh-cc/settings-ns/src/index.ts?copy2')
+    const { registerNamespaceSafe } = await import('@dsh-cc/settings/src/ns/index.ts?copy2')
     expect(() => registerNamespaceSafe(fakeCtx(provider) as never, SETTINGS_NAMESPACE, SettingsSchema)).not.toThrow()
   })
 

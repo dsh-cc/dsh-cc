@@ -2,7 +2,7 @@
  * Settings for the turn-rules engine (plan docs/plans/2026-09-23-turn-rules.md
  * §4.8), two halves — same split as edit-recovery-hint:
  *
- * 1. namespace registration via `@dsh-cc/settings-ns` (schema uses the kebab
+ * 1. namespace registration via `@dsh-cc/settings/ns` (schema uses the kebab
  *    keys users author in settings.json), for /config UX and validation only;
  * 2. a RAW user-layer read of `<dshHome>/settings.json` that bypasses the
  *    merged cascade entirely, re-read per use (a few KB) — free hot reload.
@@ -13,9 +13,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the engine flags. */
 export const SETTINGS_NAMESPACE = 'cc-turn-rules' as SettingsNamespace

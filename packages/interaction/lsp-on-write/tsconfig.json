@@ -9,19 +9,16 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../settings/settings-ns"
-    },
-    {
       "path": "../../core/tools"
     },
     {
-      "path": "../../workspace/session-cwd"
+      "path": "../../mcp/mcp-client"
     },
     {
-      "path": "../../mcp/mcp-client"
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../workspace/session-cwd"
     }
   ]
 }

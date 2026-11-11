@@ -2,7 +2,7 @@
  * Settings for moa (design docs/plans/2026-10-09-moa-tiered-cascade-routing.md
  * §3.1/§3.7), the advisor-watchdog pattern
  * (packages/interaction/advisor-watchdog/src/settings.ts): namespace
- * registration via `@dsh-cc/settings-ns` for /config UX + validation, plus a
+ * registration via `@dsh-cc/settings/ns` for /config UX + validation, plus a
  * resolved-shape reader re-read per use so a turn never depends on cascade
  * timing.
  *
@@ -14,9 +14,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the moa flags. */
 export const SETTINGS_NAMESPACE = 'moa' as SettingsNamespace

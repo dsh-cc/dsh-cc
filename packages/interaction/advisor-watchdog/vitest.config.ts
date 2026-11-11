@@ -12,10 +12,10 @@ const WORKSPACE: Record<string, string> = {
   '@dsh-cc/side-query': '../../llm-tuning/side-query/src/index.ts',
   '@dsh-cc/permission-rules': '../permission-rules/src/index.ts',
   '@dsh-cc/model-aliases': '../../compat/cc-model-aliases/src/index.ts',
-  '@dsh-cc/settings-ns': '../../settings/settings-ns/src/index.ts',
+  '@dsh-cc/settings/ns': '../../settings/settings-ns/src/index.ts',
   '@dsh-cc/tools': '../../core/tools/src/index.ts',
   '@dsh-cc/session-cwd': '../../workspace/session-cwd/src/index.ts',
-  '@dsh-cc/settings-cascade': '../../settings/settings-cascade/src/index.ts',
+  '@dsh-cc/settings/cascade': '../../settings/settings-cascade/src/index.ts',
 }
 
 function workspaceAlias(): Plugin {

@@ -20,7 +20,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /**
  * Branded namespace id, derived from the registrar's own signature so this

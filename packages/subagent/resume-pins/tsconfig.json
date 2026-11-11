@@ -9,19 +9,16 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../preset/claude-code-agents"
-    },
-    {
       "path": "../../compat/cc-model-aliases"
     },
     {
       "path": "../../core/tools"
     },
     {
-      "path": "../../settings/settings-ns"
+      "path": "../../preset/claude-code-agents"
+    },
+    {
+      "path": "../../settings/settings"
     }
   ]
 }

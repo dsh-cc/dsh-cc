@@ -327,7 +327,7 @@ shunt lesson, workspace memory `dsh-cc-shunt-plugin-pr14`).
 ### 4.8 Settings
 
 New kebab namespace `cc-turn-rules` (registered idempotently via
-`registerNamespaceSafe` from `@dsh-cc/settings-ns`; precedent in
+`registerNamespaceSafe` from `@dsh-cc/settings/ns`; precedent in
 `packages/interaction/post-edit-verify/src/settings.ts:24,110`; kebab rule per
 workspace memory `kebab-namespace-settings-delivery`):
 
