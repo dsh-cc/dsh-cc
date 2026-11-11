@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** Compile-time fallback, kept in sync with package.json `version`. */
-export const FALLBACK_VERSION = '0.9.0-rc.3'
+export const FALLBACK_VERSION = '0.9.4'
 
 /**
  * Read this plugin's own version from its `package.json`.

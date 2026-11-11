@@ -88,9 +88,6 @@ export class HandoffStore {
   async get(projectKey: string, id: string): Promise<HandoffResult> {
     if (!ID_RE.test(id)) return { ok: false, error: 'unknown_id' }
     const file = join(this.root, projectKey, `${id}.md`)
-    // Belt-and-suspenders against future shape changes: the id must name a
-    // direct child of the project directory, never anything outside it.
-    if (join(file) !== join(this.root, projectKey, `${id}.md`)) return { ok: false, error: 'unknown_id' }
     let body: string
     try {
       body = await readFile(file, 'utf8')

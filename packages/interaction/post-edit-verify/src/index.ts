@@ -49,13 +49,14 @@ export {
 } from './settings.ts'
 export { registerRecoveryListener } from './recovery-wiring.ts'
 
-export const inject = ['shell']
-
 /**
  * Mount the plugin: register both settings namespaces, then the
  * post-execute listeners. The verify listener is inert without the `shell`
  * service; the recovery-hint listener needs no shell and is registered
- * regardless.
+ * regardless. No `inject: ['shell']` here on purpose: the shell is an optional
+ * seam read through the guarded `ctx.get` below, so declaring it required
+ * would both contradict the documented degrade and break hosts that mount this
+ * plugin without a shell service.
  * @param ctx - the plug context.
  */
 export function apply(ctx: Context): void {

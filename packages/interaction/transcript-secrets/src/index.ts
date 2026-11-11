@@ -19,12 +19,12 @@ const REDACTED = '[REDACTED]'
  * `sk-ant-` is not eaten by the OpenAI pattern); each has a ≥20-character
  * body floor baked into the quantifier, except the fixed-shape AWS keys.
  */
-const BUILT_IN_PATTERNS: readonly { name: string; source: string }[] = [
-  { name: 'anthropic', source: 'sk-ant-[A-Za-z0-9_-]{20,}' },
-  { name: 'openai', source: 'sk-(?:proj-)?[A-Za-z0-9_-]{20,}' },
-  { name: 'github', source: 'gh[pousr]_[A-Za-z0-9]{20,}' },
-  { name: 'aws', source: '(?:AKIA|ASIA)[0-9A-Z]{16}' },
-  { name: 'bearer', source: 'Bearer\\s+[A-Za-z0-9._~+/=-]{20,}' },
+const BUILT_IN_PATTERNS: readonly { name: string; regex: RegExp }[] = [
+  { name: 'anthropic', regex: /sk-ant-[A-Za-z0-9_-]{20,}/gu },
+  { name: 'openai', regex: /sk-(?:proj-)?[A-Za-z0-9_-]{20,}/gu },
+  { name: 'github', regex: /gh[pousr]_[A-Za-z0-9]{20,}/gu },
+  { name: 'aws', regex: /(?:AKIA|ASIA)[0-9A-Z]{16}/gu },
+  { name: 'bearer', regex: /Bearer\s+[A-Za-z0-9._~+/=-]{20,}/gu },
 ]
 
 /**
@@ -109,8 +109,9 @@ export function redact(text: string, opts: RedactOptions = {}): RedactResult {
   let out = text
   let matches = 0
   const envNames: string[] = []
-  for (const { source } of BUILT_IN_PATTERNS) {
-    const regex = new RegExp(source, 'gu')
+  for (const { regex } of BUILT_IN_PATTERNS) {
+    // Shared module-level regexes: reset the stateful `g` cursor before reuse.
+    regex.lastIndex = 0
     out = out.replace(regex, () => {
       matches += 1
       return REDACTED
