@@ -44,6 +44,18 @@ export function projectKeyOf(cwd: string, width = 16): string {
   return shortHash(cwd, width)
 }
 
+/**
+ * UTF-8-safe byte truncation: operates at the byte level, so a split
+ * multi-byte sequence degrades to a replacement character instead of
+ * corrupting earlier bytes. Shared because prompt/ledger budgets repeat it
+ * (turn-rules matcher, completion-gate scrub) and the variants had already
+ * begun to diverge — a helper that appends an ellipsis is NOT this function.
+ */
+export function truncateUtf8(text: string, maxBytes: number): string {
+  if (maxBytes <= 0) return ''
+  return Buffer.from(text, 'utf8').subarray(0, maxBytes).toString('utf8')
+}
+
 /** Join a ledger file path under a dsh-home root. */
 export function jsonlPath(root: string, ...parts: string[]): string {
   return join(root, ...parts)

@@ -6,6 +6,8 @@
  * @module
  */
 
+import { truncateUtf8 } from '@dsh-cc/sidecar-io'
+
 /** Injected source kinds whose messages NEVER feed the prompt-channel match (recall.ts idiom; self-feed prevention). */
 export const INJECTED_SOURCE_DENYLIST: readonly string[] = [
   'memory',
@@ -26,10 +28,7 @@ export const TURN_RULES_SOURCE_KIND = 'turn-rules'
  * character split at the boundary degrades to a replacement char — harmless
  * for pattern matching.
  */
-export function truncateUtf8(text: string, maxBytes: number): string {
-  if (maxBytes <= 0) return ''
-  return Buffer.from(text, 'utf8').subarray(0, maxBytes).toString('utf8')
-}
+export { truncateUtf8 } from '@dsh-cc/sidecar-io'
 
 /** Text blocks of a content list, joined by newline (non-text blocks skipped). */
 function textBlocks(content: readonly { type: string; text?: string }[]): string {

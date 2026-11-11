@@ -9,17 +9,27 @@
 
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import type { Context } from '@deepseek-ai/cordis'
+import { dshHomeFn as resolveDshHomePath } from '@dsh-cc/sidecar-io'
 import { applyCompactHint, takeCompactHint } from './hint.ts'
 import { applyTusSummaries } from './tus.ts'
 
 export { applyCompactHint, setCompactHint, takeCompactHint } from './hint.ts'
 export { applyTusSummaries, TUS_CONSUMER_PROBE } from './tus.ts'
 
-/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
+/**
+ * Resolve a dsh-home path for this plugin, degrading to `undefined` on any
+ * absence. The property-access seam is shared with `@dsh-cc/sidecar-io`
+ * (which guards cordis's throwing property read); this wrapper adds the two
+ * protections the shared helper does not cover, because the resolver here is
+ * OPTIONAL (`ctx: Context | undefined`) and is actually INVOKED — an invocation
+ * that throws must not escape into the summarize path.
+ */
 function dshHomeFn(ctx: Context | undefined): string | undefined {
   if (ctx === undefined) return undefined
+  const resolve = resolveDshHomePath(ctx)
+  if (resolve === undefined) return undefined
   try {
-    return (ctx as { dshHomePath?: () => string }).dshHomePath?.()
+    return resolve()
   } catch {
     return undefined
   }

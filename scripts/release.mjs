@@ -163,13 +163,14 @@ if (tagExistsRemote) fail(`tag '${tag}' already exists on origin`);
 
 const planned = planReleaseVersionWrites(ROOT, argVersion);
 
-// FALLBACK_VERSION constants (command-version + config-snapshot) are the
-// display values used when package.json is unreadable at runtime — keep each
-// in lockstep with the release, and fail loudly if a constant ever
-// moves/renames rather than shipping stale.
+// FALLBACK_VERSION in @dsh-cc/version-info is the display value used when
+// package.json is unreadable at runtime. Every consumer re-exports it from
+// there, so this single constant is the only one to keep in lockstep — and a
+// moved/renamed constant must fail loudly rather than ship stale. (The earlier
+// per-package copies are gone: cc-acp's had already drifted four releases
+// because it was never listed here.)
 const FALLBACK_FILES = [
-  { rel: "packages/interaction/command-version/src/version.ts" },
-  { rel: "packages/observability/config-snapshot/src/version.ts" },
+  { rel: "packages/observability/version-info/src/index.ts" },
 ];
 const fallbackRe = /export const FALLBACK_VERSION = (['"])([^'"]+)\1/;
 const fallbacks = FALLBACK_FILES.map(({ rel }) => {

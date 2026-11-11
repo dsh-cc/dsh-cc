@@ -9,16 +9,19 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../settings/settings-ns"
+      "path": "../../compat/cc-plugin-loader"
     },
     {
       "path": "../../core/tools"
     },
     {
-      "path": "../../compat/cc-plugin-loader"
+      "path": "../../observability/sidecar-io"
+    },
+    {
+      "path": "../../settings/settings-ns"
+    },
+    {
+      "path": "../../settings/settings-provider"
     }
   ]
 }

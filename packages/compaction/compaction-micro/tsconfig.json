@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../observability/sidecar-io"
+    },
+    {
       "path": "../tool-use-summary"
     }
   ]

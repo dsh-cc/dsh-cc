@@ -31,6 +31,7 @@ import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-compaction'
 // Type-only: the `ctx.tokenMeter` Context merge for the declared injection.
 import type {} from '@deepseek-ai/dsh-token-meter'
+import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { isCrusherStub, tusFramedSummary } from '@dsh-cc/tool-use-summary'
 import type { SummaryRow } from '@dsh-cc/tool-use-summary'
 import { registerTusSettings, loadSummaries } from '@dsh-cc/tool-use-summary'
@@ -84,17 +85,6 @@ interface FailureState {
 interface AutoPassAgent {
   readonly session: Session
   inject(message: UserMessage): void
-}
-
-/** dshHomePath seam, read defensively (a providerless host must not crash the plugin). */
-type HomeFn = (...segments: string[]) => string
-
-function dshHomeFn(ctx: Context): HomeFn | undefined {
-  try {
-    return ctx.dshHomePath
-  } catch {
-    return undefined
-  }
 }
 
 /**

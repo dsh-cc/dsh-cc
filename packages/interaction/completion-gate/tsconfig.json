@@ -11,13 +11,16 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../observability/sidecar-io"
     },
     {
       "path": "../../settings/settings-ns"
     },
     {
-      "path": "../../core/tools"
+      "path": "../../settings/settings-provider"
     }
   ]
 }

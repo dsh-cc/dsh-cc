@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "@dsh-cc/plugin-loader": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^"
+    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/sidecar-io": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
