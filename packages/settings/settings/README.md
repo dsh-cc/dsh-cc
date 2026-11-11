@@ -20,6 +20,37 @@ subpath names are the only thing consumers had to change.
 import instead of the whole cascade: `./cascade/local-root` (which settings
 directory a project resolves to) and `./cascade/permissions`.
 
+## Provenance: a fork, not a vendored copy
+
+This package started as the harness `@deepseek-ai/dsh-settings` contract at pin
+`1ef9c1fa9a` (0.1.5-rc.1). It has drifted since, in both directions:
+
+- **Forward.** `mutate` / `SettingsPathOp` / `applyPathOp` are not 0.1.5 API;
+  they arrived with this repo's 0.1.7-rc.2 retarget (PR #172), so the write
+  surface is the 0.1.7 shape sitting on the 0.1.5 core.
+- **Apart.** `configure()` is a deliberate no-op here (dsh-cc settings are the
+  CC JSON cascade, not profile-patch forms); `register()` carries a
+  schema-callability hardening the harness never had; `redactSecrets` is a
+  local port whose walker matches the *current* upstream algorithm
+  (union/intersect/transform traversal plus secret-path de-duplication).
+
+### Why it cannot be "upgraded"
+
+Upstream replaced the class outright: commit `601d6761e4` (2026-09-21, #4587)
+turned `SettingsProvider` into `SettingsForms` and deleted exactly the half
+this package exists for — `register()`, `installSection()`, `get(ns)`,
+`watch()`, and the `SettingsScope` / `SettingsRegistration` / `SettingsWatcher`
+types. `SettingsForms` derives namespaces from loader entries and resolves
+values from the profile patch document; this fork registers namespaces at
+runtime and resolves from the CC five-layer settings JSON. Moving to it would
+be an architecture change, not a version bump.
+
+Importing the upstream package to reuse a piece of it is also closed, for two
+independent reasons: its root barrel declares `Context.settings: SettingsForms`,
+which collides with this package's own `Context.settings: SettingsProvider`
+augmentation (`TS2717`), and its published `files` carry no source, so a
+deep-source import would work in this repo and fail on a real install.
+
 ## Provider surface
 
 `SettingsProvider` is the vendored contract, decoupled from the harness

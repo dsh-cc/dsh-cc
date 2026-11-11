@@ -14,6 +14,19 @@
 
 `@dsh-cc/settings/cascade` 另带两个更窄的入口，供不需要整条级联的消费方使用：`./cascade/local-root`（项目解析到哪个设置目录）与 `./cascade/permissions`。
 
+## 来历：这是一份 fork，不是 vendored 副本
+
+本包起自 harness `@deepseek-ai/dsh-settings` 在 pin `1ef9c1fa9a`（0.1.5-rc.1）的契约，此后双向漂移：
+
+- **向前。** `mutate` / `SettingsPathOp` / `applyPathOp` 并非 0.1.5 的 API，而是随本仓 0.1.7-rc.2 迁移（PR #172）进来的——写面是 0.1.7 形态，架在 0.1.5 的内核上。
+- **向外。** `configure()` 在此是刻意的 no-op（dsh-cc 的设置是 CC JSON 级联，不是 profile-patch 表单）；`register()` 带一处 harness 从未有过的 schema 可调用性加固；`redactSecrets` 是本地移植，其 walker 对齐**当前**上游算法（穿透 union/intersect/transform 并对 secret 路径去重）。
+
+### 为什么不能「升级」
+
+上游把整个类换掉了：提交 `601d6761e4`（2026-09-21，#4587）把 `SettingsProvider` 变成 `SettingsForms`，并删掉了本包存在所依赖的那一半——`register()`、`installSection()`、`get(ns)`、`watch()` 以及 `SettingsScope` / `SettingsRegistration` / `SettingsWatcher` 三个类型。`SettingsForms` 的命名空间来自 loader entry、取值来自 profile patch 文档；本 fork 在运行时注册命名空间、从 CC 五层 settings JSON 取值。换过去是架构变更，不是版本号前进。
+
+连「引入上游复用其中一块」也关闭了，且有两个独立原因：上游根 barrel 声明 `Context.settings: SettingsForms`，与本包自己的 `Context.settings: SettingsProvider` 增强冲突（`TS2717`）；且它发布的 `files` 不含源码，深引在仓内能解析、在真实安装里必挂。
+
 ## provider 面
 
 `SettingsProvider` 是 vendored 契约，与 harness 设置包解耦，便于 dsh-cc 自行演进。`configure(presentation, owner)` 是刻意的 no-op 门面（dsh-cc 的设置是 CC JSON 级联，不是 rc.2 的 profile-patch 形态），接受参数是为了让上游调用方原样挂载。

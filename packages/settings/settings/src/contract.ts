@@ -1,10 +1,16 @@
 /**
  * Public contract types and pure value helpers of the settings seam.
  *
- * Vendored verbatim from harness `@deepseek-ai/dsh-settings` at pin
- * `1ef9c1fa9a` (0.1.5-rc.1), `packages/settings/settings/src/index.ts`
- * (contract declarations, the conflict error, and the layering/path-op/JSON
- * helper functions).
+ * Forked from harness `@deepseek-ai/dsh-settings` at pin `1ef9c1fa9a`
+ * (0.1.5-rc.1), `packages/settings/settings/src/index.ts` — contract
+ * declarations, the conflict error, and the layering/path-op/JSON helpers.
+ *
+ * Not a verbatim copy: `SettingsPathOp` / `applyPathOp` (and the `mutate`
+ * entry point they serve) arrived with the 0.1.7-rc.2 retarget (PR #172), so
+ * this file carries the 0.1.7 write surface on the 0.1.5 core. See
+ * `./provider.ts` for why the current harness cannot be adopted instead: it
+ * replaced this class with `SettingsForms` in `601d6761e4` (2026-09-21,
+ * #4587), deleting the runtime-registration half.
  *
  * @module @dsh-cc/settings/contract
  */

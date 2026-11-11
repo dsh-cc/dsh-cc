@@ -1,15 +1,18 @@
 /**
- * Abstract settings service for the vendored user-settings seam: providers
- * implement raw-document storage (`load`/`persist`) and push external changes
- * through {@link SettingsProvider.publish}; the base class owns namespace
- * registration, resolution, validation, change detection, and the
- * `settings/updated` commit event.
+ * Abstract settings service for the user-settings seam: providers implement
+ * raw-document storage (`load`/`persist`) and push external changes through
+ * {@link SettingsProvider.publish}; the base class owns namespace registration,
+ * resolution, validation, change detection, and `settings/updated`.
  *
- * Vendored verbatim from harness `@deepseek-ai/dsh-settings` @ pin
- * `1ef9c1fa9a` (0.1.5-rc.1), index.ts:333-855; one deliberate addition: the
- * no-op `configure()` facade (Q3 step 4 / G16). Private commit/event helpers
- * were lifted verbatim into `./events.ts` (semantics unchanged) for the
- * 500-line gate.
+ * **Provenance: a fork, not a vendored copy.** Started from harness
+ * `@deepseek-ai/dsh-settings` at pin `1ef9c1fa9a` (0.1.5-rc.1) and drifted both
+ * ways since: the write surface (`mutate` / `SettingsPathOp`) is the 0.1.7-rc.2
+ * shape (PR #172), while `configure()` is a deliberate no-op here, `register()`
+ * carries a schema hardening, and `redactSecrets` is a local port.
+ *
+ * "Upgrade" is not an option: upstream replaced this class with `SettingsForms`
+ * (`601d6761e4`, 2026-09-21, #4587), deleting the half this package exists for.
+ * Full account: README "Provenance".
  *
  * @module @dsh-cc/settings/provider
  */
