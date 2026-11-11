@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Agent Client Protocol (ACP) profile bundle for dsh, shipped as a single cordis bundle patch: it moves the host agent plane behind the CC preset (same disable roster as the TUI bundle), inserts the cc preset roster, mounts the `@dsh-cc/acp` protocol driver, and swaps out the harness's stock `acp` plugin.
+Agent Client Protocol (ACP) profile bundle for dsh, shipped as a single cordis bundle patch: it inserts the cc preset roster, mounts the `@dsh-cc/acp` protocol driver, and swaps out the harness's stock `acp` plugin. The host agent plane is vacated by [`@dsh-cc/bundle-shell`](../cc-shell/README.md) — the roster is shared with the TUI lane rather than restated here.
 
 ## Usage
 
@@ -17,7 +17,7 @@ bundle:
 
 In registration order:
 
-- Host-plane disable roster — the agent-plane rows the host ships by default (tool-bash, tool-fs, tool-web, subagent tools, workflow rows, …) are disabled by ID so the CC preset owns the tool plane. `hmr` is intentionally absent: the retained `@deepseek-ai/dsh-acp-app` bundle already disables it under an active profile.
+- Host-plane disables — only `acp` and `session-title-llm-cc` (see Swaps). The 22-row agent-plane roster (tool-bash, tool-fs, tool-web, subagent tools, workflow rows, …) is disabled by `@dsh-cc/bundle-shell`, so this bundle declares no agent-plane rows of its own. `hmr` is intentionally absent: the retained `@deepseek-ai/dsh-acp-app` bundle already disables it under an active profile.
 - Preset roster — `agent-preset-registry` (default `cc`) plus `preset-cc`, whose `cc-composition` include row mounts `@dsh-cc/preset-cc/agent.cordis.yml` from the profile's node_modules.
 - `acp-cc` — the `@dsh-cc/acp` plugin with `inject: [acpAppStartup]` (the stdio latch that keeps the plugin from claiming stdout before startup arg parsing) and `presetId: 'cc'`; provider/model route overrides are optional.
 - Swaps — the harness `acp` row is disabled (replaced by `acp-cc`; works because the dsh-acp-app bundle stays in the floor), and `session-title-llm-cc` is disabled so sessions pay no title-model calls.

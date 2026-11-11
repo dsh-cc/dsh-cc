@@ -11,6 +11,8 @@ CC 壳层的 **host-plane infra** 组合包。本包承载真正属于宿主层�
 
 - **运行时级 MCP 单例。** 同一运行时中挂载多个 agent 预设时（`tui` profile 同时挂载 `cc` 与 `vwa`），共享的 `cc-services` 主体及其 glue 行按预设树各组合一次，但所有树共用同一个 root。因此 glue 从 root fiber 发布唯一的 `mcpConnections` 注册表（`ensureMcpConnections`，`src/mcpSingleton.ts:36`），并在 root 下按 `serverName` 只挂载一次各 MCP 服务器（`mountMcpServerOnce`，`src/mcpSingleton.ts:88`），使 `/mcp` 与 `mcp__*` 工具在每个预设的会话中都可用。`mcpConnections` 与 `toolSearch` 有意不放入 `cc-services` 的 isolate 映射。
 
+- **宿主 agent 平面的腾空。** `dsh-base` 为 agent 平面声明的 22 行（tool-bash、tool-fs、tool-web、subagent 工具、workflow/ralph、plan mode、compaction、instructions、todo 等）在此按 ID 禁用，让 CC preset 拥有该平面。这些行放在本 bundle 而非 surface bundle，是因为「腾空」属于 shell 层的性质：TUI 与 ACP 两条车道都挂载本 bundle，且第二个 surface 不应能重新加回宿主平面。选择禁用而非删除，是为了让共享的 base 仍可被非 CC profile 使用。
+
 ### 从 glue 迁出的部分
 
 两个原本住在 `cc-shell-glue` 里的部件迁到了各自的属主包：

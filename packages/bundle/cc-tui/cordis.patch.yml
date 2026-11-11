@@ -1,82 +1,16 @@
-# Terminal surface for the `tui` profile. Host-plane swap only:
-# disable HMR and the host copies of agent-plane rows (same list as
-# dsh-web-app) so the CC preset owns tools. Insert the preset roster
-# (default: cc) and the TUI protocol driver.
+# Terminal surface for the `tui` profile. Host-plane swap only: disable HMR
+# and insert the preset roster (default: cc) plus the TUI protocol driver.
+#
+# The host copies of the agent-plane rows (tools, skills, subagents, plan mode,
+# compaction, workflow/ralph, instructions, todo, web) are vacated by
+# @dsh-cc/bundle-shell, not here — the vacating is a property of the shell
+# layer, and this bundle no longer restates it.
 #
 # Must NOT touch: tools (cc-shell remounts tools-cc), settings /
 # permission-rules (cc-permissions), user-questions (TUI registers a
 # provider), HTTP/webserver/api-gateway.
 
 - id: hmr
-  disabled: true
-
-# ── agent plane moves behind the CC preset ─────────────────────────────────
-# Disabling rather than deleting is deliberate: the base is shared.
-
-- id: tool-bash
-  disabled: true
-
-- id: tool-pwsh
-  disabled: true
-
-- id: tool-jobs
-  disabled: true
-
-- id: tool-fs
-  disabled: true
-
-- id: tool-fs-search
-  disabled: true
-
-- id: tool-str-replace-editor
-  disabled: true
-
-- id: skill-filesystem
-  disabled: true
-
-- id: tool-skill
-  disabled: true
-
-- id: tool-goal
-  disabled: true
-
-- id: plan-mode
-  disabled: true
-
-- id: compaction-basic
-  disabled: true
-
-- id: command-compact
-  disabled: true
-
-- id: tool-result-pruner
-  disabled: true
-
-- id: tool-subagent-control
-  disabled: true
-
-- id: tool-subagent
-  disabled: true
-
-- id: tool-subagent-fork
-  disabled: true
-
-- id: workflow-worker-thread
-  disabled: true
-
-- id: tool-workflow
-  disabled: true
-
-- id: tool-ralph
-  disabled: true
-
-- id: agent-instructions
-  disabled: true
-
-- id: tool-todo
-  disabled: true
-
-- id: tool-web
   disabled: true
 
 - insert:

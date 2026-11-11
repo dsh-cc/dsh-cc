@@ -26,6 +26,7 @@
     "@dsh-cc/preset-cc": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis-plugin-include": "link:../../../../deepseek-harness/vendor/include",
     "js-yaml": "^4.0.9",
     "vitest": "^4.1.8"
   },

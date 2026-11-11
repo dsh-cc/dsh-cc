@@ -10,6 +10,12 @@ const yaml = createRequire(includePkg)('js-yaml') as typeof import('js-yaml')
 const patchPath = new URL('../cordis.patch.yml', import.meta.url).pathname
 const pkgJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 const doc = yaml.load(readFileSync(patchPath, 'utf8'), { schema: entryListSchema }) as any[]
+// The host agent-plane vacating lives in the shell bundle (shared by the TUI
+// and ACP lanes) — assert it there rather than restating it per surface.
+const shellDoc = yaml.load(
+  readFileSync(new URL('../../cc-shell/cordis.patch.yml', import.meta.url), 'utf8'),
+  { schema: entryListSchema },
+) as any[]
 
 const HOST_TOOL_IDS = [
   'tool-bash', 'tool-pwsh', 'tool-jobs', 'tool-fs', 'tool-fs-search',
@@ -30,10 +36,20 @@ function flatten(rows: any[]): any[] {
 }
 
 describe('cc-tui bundle patch', () => {
-  it('disables hmr and the web-app agent-plane host rows', () => {
-    const rows = flatten(doc)
-    const byId = new Map(rows.map(row => [row.id, row]))
+  it('disables hmr only', () => {
+    const byId = new Map(flatten(doc).map(row => [row.id, row]))
     expect(byId.get('hmr')?.disabled).toBe(true)
+  })
+
+  it('leaves the host agent-plane roster to bundle-shell', () => {
+    const ids = flatten(doc).map(row => row.id)
+    for (const id of HOST_TOOL_IDS) {
+      expect(ids, id).not.toContain(id)
+    }
+  })
+
+  it('bundle-shell vacates the whole host agent-plane roster', () => {
+    const byId = new Map(flatten(shellDoc).map(row => [row.id, row]))
     for (const id of HOST_TOOL_IDS) {
       expect(byId.get(id)?.disabled, id).toBe(true)
     }

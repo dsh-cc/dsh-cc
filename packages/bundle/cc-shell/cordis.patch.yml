@@ -133,6 +133,84 @@
   config:
     maxActiveSubagents: 25
 
+# ── host copies of the agent plane ─────────────────────────────────────────
+# The CC preset owns every agent-facing row (tools, skills, subagents, plan
+# mode, compaction, workflow/ralph, instructions, todo, web). The host copies
+# declared by dsh-base must therefore be vacated, or the same surface is
+# mounted twice: once globally and once per preset.
+#
+# These rows live HERE rather than in the surface bundles (cc-tui / cc-acp)
+# because the vacating is a property of the shell layer, not of the surface: a
+# profile that mounts cc-shell with either surface needs it, and a second
+# surface bundle should not be able to re-add the host plane. Disabling rather
+# than deleting is deliberate — the base is shared with non-CC profiles, and a
+# later layer may re-point a row instead of re-declaring it.
+- id: tool-bash
+  disabled: true
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-jobs
+  disabled: true
+
+- id: tool-fs
+  disabled: true
+
+- id: tool-fs-search
+  disabled: true
+
+- id: tool-str-replace-editor
+  disabled: true
+
+- id: skill-filesystem
+  disabled: true
+
+- id: tool-skill
+  disabled: true
+
+- id: tool-goal
+  disabled: true
+
+- id: plan-mode
+  disabled: true
+
+- id: compaction-basic
+  disabled: true
+
+- id: command-compact
+  disabled: true
+
+- id: tool-result-pruner
+  disabled: true
+
+- id: tool-subagent-control
+  disabled: true
+
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
+  disabled: true
+
+- id: workflow-worker-thread
+  disabled: true
+
+- id: tool-workflow
+  disabled: true
+
+- id: tool-ralph
+  disabled: true
+
+- id: agent-instructions
+  disabled: true
+
+- id: tool-todo
+  disabled: true
+
+- id: tool-web
+  disabled: true
+
 - insert:
     # Remount below (in the insert list) with fetch enabled and the fetch provider.
     - id: tools-cc
