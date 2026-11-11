@@ -5,8 +5,17 @@
  * so a configuration surface can render a write-only input without ever
  * receiving the secret itself.
  *
- * Vendored verbatim from harness `@deepseek-ai/dsh-settings` at pin
- * `1ef9c1fa9a` (0.1.5-rc.1), `packages/settings/settings/src/redact.ts`.
+ * Vendored from harness `@deepseek-ai/dsh-settings` at pin `1ef9c1fa9a`
+ * (0.1.5-rc.1), with one deliberate divergence: the walker also traverses
+ * `union` / `intersect` / `transform` branches and de-duplicates repeated
+ * secret paths, matching the current upstream algorithm.
+ *
+ * A straight re-export of the upstream function is not possible: the upstream
+ * package's root barrel declares `Context.settings: SettingsForms`, which
+ * collides with this package's own `Context.settings: SettingsProvider`
+ * augmentation (`TS2717`), and its published files carry no source entry to
+ * import the module in isolation. So the algorithm is ported and the pin is
+ * recorded here.
  *
  * @module @dsh-cc/settings/redact
  */
@@ -22,8 +31,10 @@ interface SchemaNode {
   meta?: { role?: unknown }
   /** `object` properties, keyed by property name. */
   dict?: Record<string, SchemaNode>
-  /** `dict`/`array` element schema. */
+  /** `dict`/`array`/`transform` element schema. */
   inner?: SchemaNode
+  /** `union`/`intersect` branch schemas. */
+  list?: SchemaNode[]
 }
 
 /** One schema-declared secret position inside a redacted value. */
@@ -87,20 +98,27 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
       if (!Array.isArray(value)) return value
       return value.map((entry, index) => walk(node.inner, entry, [...path, String(index)], secrets))
     }
+    case 'union':
+    case 'intersect':
+      // Every branch is walked, so a field any branch declares secret is
+      // removed. Conservative by construction: a union can only ADD removals,
+      // never resurrect one.
+      return (node.list ?? []).reduce<unknown>(
+        (current, child) => walk(child, current, path, secrets),
+        value,
+      )
+    case 'transform':
+      return walk(node.inner, value, path, secrets)
     default:
-      // TODO(settings-wire-redaction): Fail closed instead — a secret reachable
-      // only through a union, intersection, or transform is returned verbatim
-      // here, with nothing recording that it was missed.
       return value
   }
 }
 
 /**
  * Remove every `role('secret')` field a schema declares from a value. The
- * walker follows `object`, `dict`, and `array` containers; a secret must be
- * declared directly on a field reachable through those containers (a secret
- * buried inside a union branch or transform is not reachable and must not be
- * modeled that way). The input is never mutated.
+ * walker follows `object`, `dict`, `array`, `union`, `intersect` and
+ * `transform` nodes; every union branch is visited, so a field declared secret
+ * by any branch is conservatively removed. The input is never mutated.
  * @param schema - live schemastery schema describing the value.
  * @param value - the value to strip; `undefined` yields an empty record with
  *   object-property secret slots still enumerated.
@@ -109,5 +127,13 @@ function walk(node: SchemaNode | undefined, value: unknown, path: string[], secr
 export function redactSecrets(schema: z<never>, value: unknown): RedactedValue {
   const secrets: RedactedSecret[] = []
   const stripped = walk(schema, value, [], secrets)
-  return { value: stripped, secrets }
+  // A path reachable through several union/intersect branches is recorded once,
+  // and `set` stays true if ANY branch saw a value.
+  const positions = new Map<string, RedactedSecret>()
+  for (const secret of secrets) {
+    const key = JSON.stringify(secret.path)
+    const previous = positions.get(key)
+    positions.set(key, { ...secret, set: secret.set || previous?.set === true })
+  }
+  return { value: stripped, secrets: [...positions.values()] }
 }
