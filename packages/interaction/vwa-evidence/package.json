@@ -26,11 +26,12 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-shell": ">=0.2.2-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/settings": "workspace:^"
   },
   "dependencies": {
     "@dsh-cc/session-cwd": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/sidecar-io": "workspace:^",
     "markdown-it": "^14.1.0"
   },
@@ -44,10 +45,10 @@
     "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
     "@deepseek-ai/dsh-shell": "link:../../../../deepseek-harness/packages/shell/shell",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@types/markdown-it": "^14.1.2",
     "@dsh-cc/agent-loop-mock": "workspace:^",
-    "@dsh-cc/settings-provider": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
+    "@types/markdown-it": "^14.1.2",
     "vitest": "^4.1.8"
   },
   "publishConfig": {

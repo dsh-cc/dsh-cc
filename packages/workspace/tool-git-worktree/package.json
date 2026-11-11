@@ -21,18 +21,18 @@
   ],
   "license": "Apache-2.0",
   "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
     "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-fs": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-shell": ">=0.2.2-rc.1",
     "@deepseek-ai/dsh-system-prompt": ">=0.2.2-rc.1",
-    "@dsh-cc/session-cwd": "workspace:^",
-    "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-user-approval": ">=0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@dsh-cc/settings-cascade": "workspace:^",
     "@dsh-cc/hook-protocol": "workspace:^",
-    "@deepseek-ai/dsh-user-approval": ">=0.2.2-rc.1"
+    "@dsh-cc/session-cwd": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
+    "@dsh-cc/tools": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
@@ -51,7 +51,7 @@
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/hook-protocol": "link:../../hooks/hook-protocol",
     "@dsh-cc/session-cwd": "link:../session-cwd",
-    "@dsh-cc/settings-cascade": "link:../../settings/settings-cascade",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/tools": "workspace:^"
   },
   "publishConfig": {

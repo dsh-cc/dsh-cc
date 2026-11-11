@@ -162,9 +162,9 @@ importers:
       '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../../interaction/permission-rules
-      '@dsh-cc/settings-cascade':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-cascade
+        version: link:../../settings/settings
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -181,9 +181,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
@@ -214,9 +211,9 @@ importers:
       '@dsh-cc/session-title-provider':
         specifier: workspace:^
         version: link:../../compat/session-title-provider
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/systemone':
         specifier: workspace:^
         version: link:../../llm-tuning/systemone
@@ -341,9 +338,6 @@ importers:
       '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../../subagent/resume-pins
@@ -476,12 +470,9 @@ importers:
       '@dsh-cc/compaction-basic':
         specifier: workspace:^
         version: link:../compaction-basic-cc
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
 
   packages/compaction/compaction-micro:
     dependencies:
@@ -528,9 +519,9 @@ importers:
 
   packages/compaction/tool-use-summary:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/side-query':
         specifier: workspace:^
         version: link:../../llm-tuning/side-query
@@ -556,9 +547,6 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -567,10 +555,6 @@ importers:
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/compat/cc-model-aliases:
-    dependencies:
-      '@dsh-cc/settings-ns':
-        specifier: workspace:^
-        version: link:../../settings/settings-ns
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -611,9 +595,9 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
 
   packages/compat/cc-plugin-loader:
     dependencies:
@@ -623,12 +607,9 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../cc-model-aliases
-      '@dsh-cc/settings-cascade':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-cascade
-      '@dsh-cc/settings-ns':
-        specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -660,9 +641,6 @@ importers:
       '@dsh-cc/mcp-client':
         specifier: workspace:^
         version: link:../../mcp/mcp-client
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/skill-loader':
         specifier: workspace:^
         version: link:../../skill/skill-claude-code
@@ -722,9 +700,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -759,9 +737,9 @@ importers:
 
   packages/context/context-crusher:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -841,9 +819,6 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/side-query':
         specifier: workspace:^
         version: link:../../llm-tuning/side-query
@@ -862,9 +837,9 @@ importers:
 
   packages/context/progress-rebuild:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -914,9 +889,6 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -981,9 +953,9 @@ importers:
 
   packages/core/tool-search:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/systemone':
         specifier: workspace:^
         version: link:../../llm-tuning/systemone
@@ -1012,9 +984,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../tools
@@ -1338,9 +1307,9 @@ importers:
       '@dsh-cc/permission-rules':
         specifier: workspace:^
         version: link:../permission-rules
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/side-query':
         specifier: workspace:^
         version: link:../../llm-tuning/side-query
@@ -1372,9 +1341,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
@@ -1558,9 +1524,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
 
   packages/interaction/command-diff:
     dependencies:
@@ -1836,12 +1802,9 @@ importers:
       '@dsh-cc/command-usage':
         specifier: workspace:^
         version: link:../command-usage
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2078,9 +2041,9 @@ importers:
 
   packages/interaction/completion-gate:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -2115,9 +2078,6 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
@@ -2127,9 +2087,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2149,9 +2109,6 @@ importers:
       '@dsh-cc/mcp-client':
         specifier: workspace:^
         version: link:../../mcp/mcp-client
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2194,12 +2151,9 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -2211,10 +2165,6 @@ importers:
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/interaction/permission-rules:
-    dependencies:
-      '@dsh-cc/settings-ns':
-        specifier: workspace:^
-        version: link:../../settings/settings-ns
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2264,9 +2214,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: link:../../workspace/session-cwd
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-provider':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
       '@dsh-cc/systemone':
         specifier: workspace:^
         version: link:../../llm-tuning/systemone
@@ -2279,9 +2229,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/skill-loader':
         specifier: workspace:^
         version: link:../../skill/skill-claude-code
@@ -2325,9 +2275,6 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2337,9 +2284,9 @@ importers:
 
   packages/interaction/prompt-suggest:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/side-query':
         specifier: workspace:^
         version: link:../../llm-tuning/side-query
@@ -2356,9 +2303,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
@@ -2368,9 +2312,9 @@ importers:
       '@dsh-cc/post-edit-verify':
         specifier: workspace:^
         version: link:../post-edit-verify
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2384,9 +2328,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2395,10 +2336,6 @@ importers:
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/interaction/transcript-secrets:
-    dependencies:
-      '@dsh-cc/settings-ns':
-        specifier: workspace:^
-        version: link:../../settings/settings-ns
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -2406,18 +2343,18 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
 
   packages/interaction/turn-rules:
     dependencies:
       '@dsh-cc/plugin-loader':
         specifier: workspace:^
         version: link:../../compat/cc-plugin-loader
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -2458,9 +2395,6 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2479,12 +2413,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2531,9 +2462,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -2571,9 +2502,6 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2588,9 +2516,9 @@ importers:
 
   packages/llm-tuning/reasoning-fold:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -2604,9 +2532,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
@@ -2708,9 +2633,9 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/systemone':
         specifier: workspace:^
         version: link:../../llm-tuning/systemone
@@ -2772,18 +2697,15 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
 
   packages/memory/memory-consolidation:
     dependencies:
       '@dsh-cc/memory':
         specifier: workspace:^
         version: link:../memory
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/systemone':
         specifier: workspace:^
         version: link:../../llm-tuning/systemone
@@ -2830,9 +2752,6 @@ importers:
       '@dsh-cc/decision-usage':
         specifier: workspace:^
         version: link:../../observability/decision-usage
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -2876,9 +2795,9 @@ importers:
       '@dsh-cc/plugin-manager':
         specifier: workspace:^
         version: link:../../compat/cc-plugin-manager
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../sidecar-io
@@ -2925,12 +2844,9 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../sidecar-io
@@ -3358,9 +3274,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-provider
+        version: link:../../settings/settings
 
   packages/session/command-stats:
     dependencies:
@@ -3392,11 +3308,8 @@ importers:
 
   packages/session/session-forensics: {}
 
-  packages/settings/settings-cascade:
+  packages/settings/settings:
     dependencies:
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../settings-provider
       chokidar:
         specifier: ^4.0.3
         version: 4.0.3
@@ -3407,37 +3320,15 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../../../../deepseek-harness/packages/util/home-paths
         version: link:../../../../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../../deepseek-harness/vendor/schemastery
-        version: link:../../../../deepseek-harness/vendor/schemastery
-
-  packages/settings/settings-ns:
-    dependencies:
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../settings-provider
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: link:../../../../deepseek-harness/vendor/cordis
-        version: link:../../../../deepseek-harness/vendor/cordis
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../../deepseek-harness/vendor/schemastery
-        version: link:../../../../deepseek-harness/vendor/schemastery
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
-
-  packages/settings/settings-provider:
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: link:../../../../deepseek-harness/vendor/cordis
-        version: link:../../../../deepseek-harness/vendor/cordis
       '@deepseek-ai/dsh-util-values':
         specifier: link:../../../../deepseek-harness/packages/util/values
         version: link:../../../../deepseek-harness/packages/util/values
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/skill/skill-claude-code:
     dependencies:
@@ -3472,9 +3363,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -3515,9 +3406,6 @@ importers:
       '@dsh-cc/agent-loop-mock':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-mock
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -3578,9 +3466,9 @@ importers:
 
   packages/subagent/handoff-store:
     dependencies:
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../../observability/sidecar-io
@@ -3600,9 +3488,6 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools
@@ -3618,9 +3503,9 @@ importers:
       '@dsh-cc/model-aliases':
         specifier: workspace:^
         version: link:../../compat/cc-model-aliases
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../../../../deepseek-harness/vendor/cordis
@@ -3646,9 +3531,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
 
   packages/subagent/task:
     dependencies:
@@ -3667,9 +3549,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/subagent-resume-pins':
         specifier: workspace:^
         version: link:../resume-pins
@@ -3755,9 +3637,6 @@ importers:
       '@dsh-cc/plugin-loader':
         specifier: workspace:^
         version: link:../../compat/cc-plugin-loader
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@dsh-cc/tool-search':
         specifier: workspace:*
         version: link:../../core/tool-search
@@ -3983,9 +3862,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: workspace:^
         version: link:../../workspace/session-cwd
-      '@dsh-cc/settings-ns':
+      '@dsh-cc/settings':
         specifier: workspace:^
-        version: link:../../settings/settings-ns
+        version: link:../../settings/settings
       '@dsh-cc/subagent-task':
         specifier: workspace:^
         version: link:../../subagent/task
@@ -4044,9 +3923,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../../deepseek-harness/vendor/schemastery
         version: link:../../../../deepseek-harness/vendor/schemastery
-      '@dsh-cc/settings-provider':
-        specifier: workspace:^
-        version: link:../../settings/settings-provider
       '@xterm/headless':
         specifier: 5.5.0
         version: 5.5.0
@@ -4131,9 +4007,9 @@ importers:
       '@dsh-cc/session-cwd':
         specifier: link:../session-cwd
         version: link:../session-cwd
-      '@dsh-cc/settings-cascade':
-        specifier: link:../../settings/settings-cascade
-        version: link:../../settings/settings-cascade
+      '@dsh-cc/settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
       '@dsh-cc/tools':
         specifier: workspace:^
         version: link:../../core/tools

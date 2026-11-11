@@ -13,8 +13,8 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
-import { installSectionSafe, registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import type { SettingsNamespace } from '@dsh-cc/settings'
+import { installSectionSafe, registerNamespaceSafe } from '@dsh-cc/settings/ns'
 import './message-source.ts' // declares the 'permission-rules' message kind
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this plugin reads for the sandboxed-bash exemption). No value

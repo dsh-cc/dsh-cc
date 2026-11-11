@@ -104,7 +104,7 @@ Flow per dispatch whose definition has `isolation: 'worktree'`:
 
 ### WS-4 — Lifecycle: settings, locks, sweep, reuse
 
-**Files:** `packages/settings/settings-cascade/src/` (new `worktree.ts` section), `packages/workspace/tool-git-worktree` (lock/unlock/marker), `packages/launcher/tui/bootstrap.mjs` + `bin/dsh-cc.js` (lock, sweep, reuse reset, bespoke settings read), `packages/ui/tui/src/harness/worktree-exit.ts` (unlock on remove).
+**Files:** `packages/settings/settings/src/cascade/` (new `worktree.ts` section), `packages/workspace/tool-git-worktree` (lock/unlock/marker), `packages/launcher/tui/bootstrap.mjs` + `bin/dsh-cc.js` (lock, sweep, reuse reset, bespoke settings read), `packages/ui/tui/src/harness/worktree-exit.ts` (unlock on remove).
 
 1. **Settings section** `worktree`: `{ baseRef: 'fresh' | 'head' = 'fresh', cleanupPeriodDays: number = 30 }` (schemastery; absence-preserving union idiom per the kebab-namespace delivery memory). Registered via `installSection` in `tool-git-worktree`; consumers read through the settings thunk. The launcher cannot load the cascade (pre-build, dependency-free): it performs a documented ~30-line fail-open JSON read of the user/project/local settings files in precedence order — subset behavior, stated in the manifest.
 2. **`baseRef` resolution.** `head` → literal `HEAD` (today's behavior; inside a worktree it resolves to that worktree's HEAD, matching CC). `fresh` → the remote default branch: `git symbolic-ref refs/remotes/origin/HEAD`; if the ref's reflog is older than 24h, `git fetch origin <default>` with a 5s cap, falling back to the cached ref and then to local `HEAD` when no remote exists. Creation commands take a resolved `<base>` parameter instead of the literal `HEAD` at both call sites.

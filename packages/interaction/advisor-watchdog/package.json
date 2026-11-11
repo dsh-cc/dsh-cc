@@ -25,13 +25,14 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1"
+    "@dsh-cc/settings": "workspace:^"
   },
   "dependencies": {
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/permission-rules": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/side-query": "workspace:^",
     "zod": "^4.4.3"
   },
@@ -43,11 +44,10 @@
     "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
-    "@dsh-cc/settings-provider": "workspace:^",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/model-aliases": "workspace:^",
     "@dsh-cc/permission-rules": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/side-query": "workspace:^",
     "vitest": "^4.1.8"
   },

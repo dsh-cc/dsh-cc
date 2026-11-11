@@ -8,8 +8,8 @@ import { defineConfig, type Plugin } from 'vitest/config'
  */
 const WORKSPACE: Record<string, string> = {
   '@dsh-cc/model-aliases': '../../compat/cc-model-aliases/src/index.ts',
-  '@dsh-cc/settings-ns': '../../settings/settings-ns/src/index.ts',
-  '@dsh-cc/settings-provider': '../../settings/settings-provider/src/index.ts',
+  '@dsh-cc/settings/ns': '../../settings/settings-ns/src/index.ts',
+  '@dsh-cc/settings': '../../settings/settings-provider/src/index.ts',
   '@dsh-cc/systemone': '../../llm-tuning/systemone/src/index.ts',
   '@dsh-cc/sidecar-io': '../../observability/sidecar-io/src/index.ts',
 }

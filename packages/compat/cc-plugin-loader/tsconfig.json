@@ -9,28 +9,25 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../skill/skill-claude-code"
-    },
-    {
-      "path": "../../preset/claude-code-agents"
+      "path": "../../core/tools"
     },
     {
       "path": "../../hooks/hook-protocol"
     },
     {
-      "path": "../../core/tools"
-    },
-    {
       "path": "../../mcp/mcp-client"
     },
     {
-      "path": "../cc-model-aliases"
+      "path": "../../preset/claude-code-agents"
     },
     {
-      "path": "../../settings/settings-cascade"
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../skill/skill-claude-code"
+    },
+    {
+      "path": "../cc-model-aliases"
     }
   ]
 }

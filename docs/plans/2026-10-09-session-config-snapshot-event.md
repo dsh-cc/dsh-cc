@@ -380,7 +380,7 @@ import at `packages/interaction/advisor-watchdog/src/settings.ts:23`, call at
   runtime behavior effect; a kill switch exists for minimal-footprint
   consumers. The read happens INSIDE the async writer, NEVER in the sync
   listener: `registerNamespaceSafe`'s reader rethrows non-duplicate register
-  failures (`packages/settings/settings-ns/src/index.ts:166/:179`), and a
+  failures (`packages/settings/settings/src/ns/src/index.ts:166/:179`), and a
   sync throw on `session/created` vetoes session creation (§3.2). The read
   is fail-open `true` on an absent provider, `undefined`, or a throw (the
   advisor wrapper's try/catch-then-defaults precedent,

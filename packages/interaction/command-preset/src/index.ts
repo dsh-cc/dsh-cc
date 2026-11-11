@@ -204,7 +204,7 @@ async function executePreset(
  * wiring bug, not a runtime degrade. The settings service, by contrast, is
  * read LAZILY inside the handler: its host bundle row settles DURING the
  * preset mount sweep (rc.2 mount-order race, documented in
- * @dsh-cc/settings-ns: registerNamespaceSafe self-heals for the namespace
+ * @dsh-cc/settings/ns: registerNamespaceSafe self-heals for the namespace
  * registration below, and the write path must not capture a dead handle).
  * @param ctx - context carrying the command registry and agent-preset registry.
  */

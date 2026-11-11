@@ -9,28 +9,25 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../compat/cc-model-aliases"
     },
     {
       "path": "../../core/tools"
     },
     {
-      "path": "../../compat/cc-model-aliases"
+      "path": "../../interaction/transcript-secrets"
     },
     {
       "path": "../../llm-tuning/side-query"
     },
     {
-      "path": "../../workspace/session-cwd"
-    },
-    {
-      "path": "../../settings/settings-ns"
-    },
-    {
-      "path": "../../interaction/transcript-secrets"
-    },
-    {
       "path": "../../observability/sidecar-io"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../workspace/session-cwd"
     }
   ]
 }

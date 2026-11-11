@@ -17,7 +17,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { AgentSetup } from '@deepseek-ai/dsh-agent'
-import { readUserSection } from '@dsh-cc/settings-ns'
+import { readUserSection } from '@dsh-cc/settings/ns'
 
 const DEFAULT_PRESET = 'cc'
 

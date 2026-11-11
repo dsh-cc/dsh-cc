@@ -46,7 +46,7 @@
     "@deepseek-ai/dsh-session-projection": "link:../../../../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/dsh-system-prompt": "link:../../../../deepseek-harness/packages/core/system-prompt",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
-    "@dsh-cc/settings-provider": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "typescript": "6.0.3"
   },
   "publishConfig": {

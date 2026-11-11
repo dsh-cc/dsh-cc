@@ -19,9 +19,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the memory-recall decision contract. */
 export const SETTINGS_NAMESPACE = 'cc-systemone-memory-recall'

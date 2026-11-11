@@ -23,8 +23,8 @@
 import { globSync, lstatSync, readFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 
 /** Name of the system-prompt section this module owns. */
 export const FOREIGN_RULES_SECTION_NAME = 'cc:foreign-rules'

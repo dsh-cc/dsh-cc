@@ -7,9 +7,9 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 import type { HandoffConfig } from './types.ts'
 
 /** The settings namespace carrying the live handoff overlay. */

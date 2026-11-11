@@ -12,10 +12,7 @@
       "path": "../../observability/sidecar-io"
     },
     {
-      "path": "../../settings/settings-ns"
-    },
-    {
-      "path": "../../settings/settings-provider"
+      "path": "../../settings/settings"
     },
     {
       "path": "../../workspace/session-cwd"

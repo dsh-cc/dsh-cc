@@ -12,10 +12,7 @@
       "path": "../../interaction/command-usage"
     },
     {
-      "path": "../../settings/settings-ns"
-    },
-    {
-      "path": "../../settings/settings-provider"
+      "path": "../../settings/settings"
     }
   ]
 }

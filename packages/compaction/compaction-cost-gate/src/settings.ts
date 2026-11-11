@@ -1,6 +1,6 @@
 /**
  * Settings namespace `cc-compaction-cost-gate` (design §3.6), registered
- * idempotently through the `@dsh-cc/settings-ns` safe helpers (PR #82
+ * idempotently through the `@dsh-cc/settings/ns` safe helpers (PR #82
  * collision rules — mounted inside the cc preset beside ten other settings
  * users). Without a settings provider the schema defaults apply.
  * @module @dsh-cc/compaction-cost-gate/settings
@@ -8,9 +8,9 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import type { ModelPrice } from '@dsh-cc/command-cost'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 import type { CostGateSettings } from './types.ts'
 
 /** The settings namespace carrying the cost-gate settings. */

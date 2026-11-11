@@ -12,16 +12,13 @@
       "path": "../../compat/cc-model-aliases"
     },
     {
-      "path": "../../settings/settings-ns"
+      "path": "../../llm-tuning/systemone"
     },
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../settings/settings"
     },
     {
       "path": "../sidecar-io"
-    },
-    {
-      "path": "../../llm-tuning/systemone"
     }
   ]
 }

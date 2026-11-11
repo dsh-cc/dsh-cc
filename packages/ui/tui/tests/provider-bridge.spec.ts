@@ -13,7 +13,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings'
 import {
   DEFAULT_MODEL_SETTINGS_NAMESPACE,
   PROVIDER_ENTRY_ID,

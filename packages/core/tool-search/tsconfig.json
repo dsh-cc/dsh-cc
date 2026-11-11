@@ -15,10 +15,7 @@
       "path": "../../llm-tuning/systemone"
     },
     {
-      "path": "../../settings/settings-ns"
-    },
-    {
-      "path": "../../settings/settings-provider"
+      "path": "../../settings/settings"
     }
   ]
 }

@@ -9,8 +9,8 @@ import { defineConfig, type Plugin } from 'vitest/config'
  * plugin mis-parses the extends chain from this directory).
  */
 const WORKSPACE: Record<string, string> = {
-  '@dsh-cc/settings-ns': '../../settings/settings-ns/src/index.ts',
-  '@dsh-cc/settings-provider': '../../settings/settings-provider/src/index.ts',
+  '@dsh-cc/settings/ns': '../../settings/settings-ns/src/index.ts',
+  '@dsh-cc/settings': '../../settings/settings-provider/src/index.ts',
   '@dsh-cc/tools': '../../core/tools/src/index.ts',
 }
 

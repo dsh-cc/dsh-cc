@@ -9,16 +9,13 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../core/tools"
     },
     {
-      "path": "../../settings/settings-ns"
+      "path": "../../settings/settings"
     },
     {
       "path": "../../skill/skill-claude-code"
-    },
-    {
-      "path": "../../core/tools"
     },
     {
       "path": "../../workspace/session-cwd"

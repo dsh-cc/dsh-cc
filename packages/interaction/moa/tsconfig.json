@@ -9,12 +9,6 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../settings/settings-ns"
-    },
-    {
       "path": "../../compat/cc-model-aliases"
     },
     {
@@ -22,6 +16,9 @@
     },
     {
       "path": "../../observability/sidecar-io"
+    },
+    {
+      "path": "../../settings/settings"
     }
   ]
 }

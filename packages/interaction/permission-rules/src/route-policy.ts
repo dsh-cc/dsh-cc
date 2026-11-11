@@ -24,7 +24,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsProvider } from '@dsh-cc/settings-provider'
+import type { SettingsProvider } from '@dsh-cc/settings'
 import {
   MODEL_ALIASES_NAMESPACE,
   createModelInspector,

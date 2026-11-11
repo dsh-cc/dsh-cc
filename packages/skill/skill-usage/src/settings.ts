@@ -3,7 +3,7 @@
  * docs/plans/2026-10-09-skill-lifecycle-usage-gates.md §3.5), dual-half
  * pattern (advisor-watchdog precedent):
  *
- * 1. namespace registration via `@dsh-cc/settings-ns` (kebab keys) — the
+ * 1. namespace registration via `@dsh-cc/settings/ns` (kebab keys) — the
  *    cascade read serves /config UX and the rollup-time knobs (slice C);
  * 2. a RAW user-layer read of `<dshHome>/settings.json` re-read per matched
  *    skill-load event, so a hot toggle never waits on cascade timing.
@@ -17,9 +17,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the skill-usage flags. */
 export const SETTINGS_NAMESPACE = 'cc-skill-usage' as SettingsNamespace

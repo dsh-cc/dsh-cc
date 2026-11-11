@@ -66,8 +66,8 @@ function childTsconfig(dir: string): string {
       paths: {
         '@dsh-cc/vwa-evidence': [self('packages/interaction/vwa-evidence/src/index.ts')],
         '@dsh-cc/sidecar-io': [self('packages/observability/sidecar-io/src/index.ts')],
-        '@dsh-cc/settings-ns': [self('packages/settings/settings-ns/src/index.ts')],
-        '@dsh-cc/settings-provider': [self('packages/settings/settings-provider/src/index.ts')],
+        '@dsh-cc/settings/ns': [self('packages/settings/settings/src/ns/src/index.ts')],
+        '@dsh-cc/settings': [self('packages/settings/settings/src/src/index.ts')],
         '@dsh-cc/session-cwd': [self('packages/workspace/session-cwd/src/index.ts')],
       },
     },

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm check:readme --write
-README.md: 52b790c0c2feb5c4aa66cf01d72e30947648fa77
-README.zh.md: 0892e9f67bed1353f4693a521dace3e4288e3c6e
+README.md: c3353376e150a144427da55595677ca347b99d11
+README.zh.md: 804b908f3b8d2f36f77a48d350385829a90746ff

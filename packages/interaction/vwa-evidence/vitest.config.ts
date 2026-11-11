@@ -11,8 +11,8 @@ import { defineConfig, type Plugin } from 'vitest/config'
  * (`import('../src/index.ts')`) honest.
  */
 const WORKSPACE: Record<string, string> = {
-  '@dsh-cc/settings-ns': '../../settings/settings-ns/src/index.ts',
-  '@dsh-cc/settings-provider': '../../settings/settings-provider/src/index.ts',
+  '@dsh-cc/settings/ns': '../../settings/settings-ns/src/index.ts',
+  '@dsh-cc/settings': '../../settings/settings-provider/src/index.ts',
   '@dsh-cc/session-cwd': '../../workspace/session-cwd/src/index.ts',
   '@dsh-cc/tools': '../../core/tools/src/index.ts',
   '@dsh-cc/agent-loop-mock': '../agent-loop-mock/src/index.ts',
