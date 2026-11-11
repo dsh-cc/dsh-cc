@@ -63,16 +63,13 @@ const PAIRS = [
  * in README.md's FORK DRIFT note.
  */
 const FORK_ONLY_FILES = [
-  'cc-executor.ts', // D7 — the native/code/both ToolExecutor plugin + run_code transport
+  'cc-executor.ts', // D7 — the native/code/both ToolExecutor plugin + run_code transport; also strips $schema annotations at the SDK-render boundary (D2.1 continuation) and loads the upstream renderers through the vendored module below
   'cc-names.ts', // CC↔harness tool-name translation
   'current-execution.ts', // execution-identity instrumentation (tools/execute listener)
   'json-schema-value.ts', // extracted value validator, re-exported by json-schema.ts
-  'py-names.ts', // Python SDK renderer support (upstream hosts these in tool-executor-ptc)
-  'py-render.ts',
-  'py-sdk-doc.ts',
-  'py-types.ts',
-  'ts-types.ts',
+  'sdk-schema.ts', // fork-owned ToolSdkSchema declaration (the upstream type cannot be imported; see ptc-renderers.ts)
   'types.ts', // durable tool/code-dispatch* session-event payloads + KNOWN registration
+  'ptc-renderers.ts', // runtime load of the upstream SDK renderers with locally-owned types — the upstream .d.ts chain re-augments Context.tools and collides with this fork's own augmentation
 ]
 
 /** Lines that carry no behavior: pure structure left behind by an added block. */

@@ -412,7 +412,7 @@ describe('mode-aware wire contribution', () => {
     const sdk = assembly.sections.find(section => section.name === 'tools:sdk')
     expect(sdk?.text).toContain('class Tools(Protocol):')
     expect(sdk?.text).toContain('async def echo(self, args:')
-    expect(sdk?.text).toContain('top-level `await`')
+    expect(sdk?.text).toContain('the program to execute') // delta (b): upstream instruction copy
   })
 
   it("assembles under a python runtime in mode 'both' as well, SDK and schema together", async () => {

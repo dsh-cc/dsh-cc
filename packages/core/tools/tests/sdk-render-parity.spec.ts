@@ -18,9 +18,10 @@
  * MCP-shaped catalog rows must flow through `renderSdk` to be an
  * apples-to-apples comparison.
  *
- * Regeneration is env-gated so the baseline cannot silently rewrite itself:
- * `UPDATE_SDK_SNAPSHOTS=1` rewrites whichever target is active. Run it
- * deliberately, review the diff, and commit it with the delta classification.
+ * The target is EXPLICIT (SDK_PARITY_TARGET=baseline|approved) and
+ * regeneration additionally requires UPDATE_SDK_SNAPSHOTS=1 — two env gates,
+ * so neither snapshot can silently rewrite the other. The baseline is
+ * history after the switch lands; approved is the living pin.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -40,10 +41,10 @@ const CATALOG = JSON.parse(readFileSync(join(HERE, '__fixtures__', 'sdk-render-c
   outputSchema: Record<string, unknown>
 }>
 
-/** Which snapshot the spec asserts against: the baseline until the switch lands, approved after. */
-const TARGET = existsSync(join(HERE, '__snapshots__', 'sdk-render-approved.md')) && process.env.SDK_PARITY_TARGET !== 'baseline'
-  ? 'sdk-render-approved.md'
-  : 'sdk-render-fork-baseline.md'
+/** Which snapshot the spec asserts against — explicit, never sniffed from disk. */
+const TARGET = process.env.SDK_PARITY_TARGET === 'baseline'
+  ? 'sdk-render-fork-baseline.md'
+  : 'sdk-render-approved.md'
 
 /** Minimal PtcRuntime double; the SDK path reads `language` only. */
 class ParityRuntime extends PtcRuntime {
@@ -90,7 +91,7 @@ describe('SDK render parity (frozen catalog, full executor path)', () => {
       writeFileSync(path, rendered)
       return
     }
-    expect(existsSync(path), `${TARGET} missing — run with UPDATE_SDK_SNAPSHOTS=1 once, then commit it`).toBe(true)
+    expect(existsSync(path), `${TARGET} missing — SDK_PARITY_TARGET=${process.env.SDK_PARITY_TARGET} UPDATE_SDK_SNAPSHOTS=1, then commit it`).toBe(true)
     expect(rendered).toBe(readFileSync(path, 'utf8'))
   })
 
@@ -101,7 +102,7 @@ describe('SDK render parity (frozen catalog, full executor path)', () => {
       writeFileSync(path, rendered)
       return
     }
-    expect(existsSync(path), `python snapshot missing — run with UPDATE_SDK_SNAPSHOTS=1 once, then commit it`).toBe(true)
+    expect(existsSync(path), `python snapshot missing — SDK_PARITY_TARGET=${process.env.SDK_PARITY_TARGET} UPDATE_SDK_SNAPSHOTS=1, then commit it`).toBe(true)
     expect(rendered).toBe(readFileSync(path, 'utf8'))
   })
 
@@ -114,8 +115,10 @@ describe('SDK render parity (frozen catalog, full executor path)', () => {
     // directory' appears nowhere else in the catalog, so counting it counts
     // the example.
     const rendered = await renderCatalog('typescript')
+    // 'Show current directory' appears once in the run_code wrapper's
+    // description argument and once inside the example program itself.
     const examples = rendered.split('Show current directory').length - 1
-    const expected = TARGET === 'sdk-render-approved.md' ? 1 : 0
+    const expected = TARGET === 'sdk-render-approved.md' ? 2 : 0
     expect(examples, `bash example count (target ${TARGET})`).toBe(expected)
     // Both negative rows are present in the declarations (proving they were
     // rendered and simply did not trigger the example).

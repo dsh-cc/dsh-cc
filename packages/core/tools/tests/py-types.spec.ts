@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { jsonSchemaToPy, renderToolsSdkPy } from '@dsh-cc/tools/src/py-types.ts'
 import { parameterSchemaSpecToJsonSchema } from '@dsh-cc/tools'
-import type { ToolSdkSchema } from '@dsh-cc/tools/src/ts-types.ts'
+import { jsonSchemaToPy, renderToolsSdkPy } from '../src/ptc-renderers.ts'
+import type { ToolSdkSchema } from '../src/sdk-schema.ts'
 
 describe('jsonSchemaToPy', () => {
   it('maps the defineTool DSL subset', () => {
@@ -150,8 +150,10 @@ describe('renderToolsSdkPy', () => {
     // Empty-property tools keep the opaque dict (nothing to name).
     expect(text).toContain('# tools["my-mcp.tool"](args: dict[str, Any]) -> str')
     expect(text).toContain('# tools["class"](args: dict[str, Any]) -> str')
-    // Fixed instruction lines the model relies on.
-    expect(text).toContain('top-level `await`')
+    // Fixed instruction lines the model relies on. (delta (b), re-recorded
+    // with the upstream switch: the function-body phrasing became "the
+    // program to execute"; the STATIC STUB half below is unchanged.)
+    expect(text).toContain('the program to execute')
     // The binding boundary: `tools`/`ToolCallError` are bound, the TypedDicts
     // are not. Both halves are pinned — dropping either one turns a correct
     // contract into a wrong one (a model that reads only "STATIC STUB" would

@@ -43,10 +43,8 @@ import type {
 } from './executor.ts'
 import type { ToolsService } from './index.ts'
 import { ToolExecutionPipeline, executeToolBatch, toolErrorMessage } from './pipeline.ts'
-import { renderToolsSdkPy } from './py-sdk-doc.ts'
-import { jsonSchemaToPy } from './py-types.ts'
+import { jsonSchemaToPy, jsonSchemaToTs, renderToolsSdk, renderToolsSdkPy, stripSchemaAnnotations, type ToolSdkSchema } from './ptc-renderers.ts'
 import { defineTool, parameterSchemaSpecToJsonSchema, projectToolSchema } from './schema.ts'
-import { jsonSchemaToTs, renderToolsSdk, type ToolSdkSchema } from './ts-types.ts'
 import { CODE_DISPATCH_EVENT, CODE_DISPATCH_START_EVENT } from './types.ts'
 // Type-only: resolves `ctx.workingDirectory` and `ctx.systemPrompt` augmentations.
 import type {} from '@deepseek-ai/dsh-working-directory'
@@ -863,7 +861,8 @@ export class CcToolExecutor implements ToolExecutor {
         const output = snapshotJsonValue(definition.output.schema)
         /* v8 ignore next -- registration already validated and retained this schema as lossless JSON. */
         if (output === undefined) throw new Error(`tool "${definition.name}" output schema must be lossless JSON before SDK projection`)
-        return { ...projectToolSchema(definition, true), output }
+        const parameters = stripSchemaAnnotations(projectToolSchema(definition, true))
+        return { ...parameters, output: stripSchemaAnnotations(output) }
       }))
   }
 
