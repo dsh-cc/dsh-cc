@@ -17,6 +17,10 @@ PreToolUse 钩子只对这一种命令形态自动放行。
 - 每次运行前，Codex 凭据会被同步到一个位于临时目录、权限为 `0700` 的专属 home；Codex
   CLI 本身在启动时解析为经过校验的绝对路径。
 
+### 共享 lane 库
+
+`scripts/lib/{lexer,argv,canonical}.mjs` 由仓库根的 `scripts/lib/bridge-lane/` **生成**（唯一的作者源，与另一桥共享）；`scripts/lib/lane.mjs` 是本插件自己的手写配置，也是唯一的 per-lane 输入。改生成文件会丢——请改作者源后运行 `node scripts/generate-bridge-lane-lib.mjs`。pre-commit 与 presubmit 的 `--check` 在副本漂移时失败。`home.mjs` **不共享**：两 lane 清理临时 home 的方式不同。
+
 ## 使用方法
 
 1. **会话开始时的状态块。** SessionStart 钩子在每次会话启动时触发（startup 与 resume

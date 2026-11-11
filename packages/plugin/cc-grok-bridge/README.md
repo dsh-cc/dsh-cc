@@ -24,6 +24,16 @@ temp areas only.
 - Inline prompts must be single-line and must not start with `-`; multi-line or
   dash-leading prompts go through `--prompt-file`.
 
+### Shared lane library
+
+`scripts/lib/{lexer,argv,canonical}.mjs` are **generated** from
+`scripts/lib/bridge-lane/` at the repository root (the single authored source,
+shared with `cc-grok-bridge`); `scripts/lib/lane.mjs` is this plugin's own
+hand-written config and the only per-lane input. Editing a generated file loses —
+edit the source and run `node scripts/generate-bridge-lane-lib.mjs`.
+`check` in pre-commit and presubmit fails when a copy drifts. `home.mjs` is
+NOT shared: the two lanes clean up temp homes differently.
+
 ## Usage
 
 1. **Status at session start.** A SessionStart hook fires on every session

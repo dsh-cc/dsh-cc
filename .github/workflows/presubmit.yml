@@ -335,6 +335,10 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/generate-parity-matrix.mjs --check
 
+      - name: Bridge-lane generated copies fresh
+        working-directory: dsh-cc
+        run: node scripts/generate-bridge-lane-lib.mjs --check
+
       # Paired self-tests for the two checkers (see
       # docs/plans/2026-09-03-claude-code-capability-manifest.md §5.3).
       - name: Capability evidence self-test
@@ -344,6 +348,10 @@ jobs:
       - name: Parity matrix generator self-test
         working-directory: dsh-cc
         run: node scripts/generate-parity-matrix.test.mjs
+
+      - name: Bridge-lane library generator self-test
+        working-directory: dsh-cc
+        run: node scripts/generate-bridge-lane-lib.test.mjs
 
       # Cordis inject declarations (#140 class: ctx.<svc> read on a plugin
       # context without `export const inject` throws only in a real boot).

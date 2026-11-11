@@ -19,6 +19,10 @@ PreToolUse 钩子只对这一种命令形态自动放行。
   按允许清单清扫并以 `auth.json` 播种；grok CLI 本身在启动时解析为经过校验的绝对路径。
 - 内联提示词必须单行且不得以 `-` 开头；多行或短横线开头的提示词走 `--prompt-file`。
 
+### 共享 lane 库
+
+`scripts/lib/{lexer,argv,canonical}.mjs` 由仓库根的 `scripts/lib/bridge-lane/` **生成**（唯一的作者源，与另一桥共享）；`scripts/lib/lane.mjs` 是本插件自己的手写配置，也是唯一的 per-lane 输入。改生成文件会丢——请改作者源后运行 `node scripts/generate-bridge-lane-lib.mjs`。pre-commit 与 presubmit 的 `--check` 在副本漂移时失败。`home.mjs` **不共享**：两 lane 清理临时 home 的方式不同。
+
 ## 使用方法
 
 1. **会话开始时的状态块。** SessionStart 钩子在每次会话启动时触发（startup 与 resume
