@@ -143,7 +143,7 @@ cache-health observer feature and a future `/cost` enrichment.
 
 ### 3.6 Configuration (kebab namespace, settings-cascade)
 
-`cc-context-compression.enabled` (default `false`),
+`cc-context-compression.enabled` (default `true` since 2026-11-11 — promoted from `false`; `mode` stays `dry-run`),
 `.mode` (`dry-run`|`on`, default `dry-run`), `.min-bytes` (default 8192),
 `.min-savings-ratio` (default 0.4), `.protected-tools` (string[]). TTL and
 max-entries are constants until ledger data justifies knobs.

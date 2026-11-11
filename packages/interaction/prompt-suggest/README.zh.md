@@ -6,7 +6,9 @@
 
 ## 工作方式
 
-监听器同步完成决策（启用开关、会话 id、禁用时清理），然后以 void promise 发起预测——turn-stop 永不被等待或阻塞（memory-consolidation 先例）。`runSideQuery` 通过 `AbortSignal.any` 将 `timeoutMs` 预算与插件的 dispose 信号组合；所有失败形态（`timeout`/`error`/`unrouted`）保留注册表中的旧值，而 `empty`（模型表示"没有可信预测"）则清空它。纯空白回答按 `empty` 处理。
+只有**顶层** turn-stop 会预测：子代理会话同样会发出 `agent/turn-stopping`，因此监听器采用与 turn-rules 相同的 `origin !== 'subagent' && delegationDepth <= 0` 谓词。
+
+监听器同步完成决策（启用开关、**仅顶层会话**、会话 id、禁用时清理），然后以 void promise 发起预测——turn-stop 永不被等待或阻塞（memory-consolidation 先例）。`runSideQuery` 通过 `AbortSignal.any` 将 `timeoutMs` 预算与插件的 dispose 信号组合；所有失败形态（`timeout`/`error`/`unrouted`）保留注册表中的旧值，而 `empty`（模型表示"没有可信预测"）则清空它。纯空白回答按 `empty` 处理。
 
 注册表是模块级的（不随 context 走），因此 TUI 重新实例化其自动补全 provider 时不会丢失已存储的建议。**同进程假设：**交互式 TUI 通过普通 import 读取注册表；如果 TUI 将来运行在独立进程中，注册表在那边为空，功能自动失效——构造上即 fail-soft。`getSuggestion(sessionId)` 是唯一的读取面：缺失、过期或从未写入（包括所有禁用的会话——禁用的生产者不写入，并在下一次 turn-stop 清除旧条目）时返回 `undefined`。
 
@@ -21,7 +23,7 @@ vendored 的 pi-tui Editor 只在触发字符（`/`、`@`）或强制 Tab 时咨
 | 键 | 默认 | 含义 |
 |---|---|---|
 | `enabled` | `false` | 总开关，**需主动开启**。每次 turn-stop 实时读取；禁用时不发起模型调用并清除该会话的已存建议。 |
-| `alias` | `haiku` | 经 `ccModelRoutes`/`resolveAlias` 咨询的廉价通道别名；未配置时继承父路由（fail-soft）。 |
+| `alias` | `haiku` | 经 `ccModelRoutes`/`resolveAlias` 咨询的廉价通道别名；未配置时**跳过**（`onUnrouted: 'skip'`），绝不向父路由计费——该调用在每个顶层 turn-stop 都会触发。 |
 | `timeoutMs` | `4000` | 预测的墙钟预算；与插件 dispose 信号组合。 |
 | `maxTokens` | `128` | 预测的 token 预算。 |
 

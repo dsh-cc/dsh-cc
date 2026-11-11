@@ -384,14 +384,16 @@ capabilities:
     deviation:
       kind: divergent
       summary: >-
-        Not an upstream CC surface: a dsh-cc extension shipped flag-gated
-        (enabled: false, mode: dry-run by default) so savings are measured
-        before any replacement. An optional evidence-preserving reducer
-        escalates noisy build/test output the deterministic router declines
-        to a cheap-lane receipt (a failing-test list with verbatim evidence
-        quotes), verified deterministically before substitution (schema,
-        exact quotes, exit consistency, size gain, count consistency) with
-        original-bytes fallback on any failure. The reducer ships dark
+        Not an upstream CC surface: a dsh-cc extension. Default ON since
+        2026-11-11 with `mode: dry-run` (opt out with `enabled: false`): the
+        default posture measures savings into the ledger and never replaces a
+        result; only an explicit `mode: on` swaps in the compressed form. An
+        optional evidence-preserving reducer escalates noisy build/test output
+        the deterministic router declines to a cheap-lane receipt (a
+        failing-test list with verbatim evidence quotes), verified
+        deterministically before substitution (schema, exact quotes, exit
+        consistency, size gain, count consistency) with original-bytes
+        fallback on any failure. The reducer ships dark
         (reducer-enabled: false) with knobs reducer-commands,
         reducer-max-input-tokens (30000), reducer-min-savings-ratio (0.5),
         reducer-max-tokens (1024), reducer-timeout-ms (10000), and
@@ -861,7 +863,11 @@ capabilities:
       summary: >-
         dsh-cc extension, DEFAULT OFF (cc-prompt-suggest.enabled: false —
         disabled sessions make zero adapter calls and zero suggestion items).
-        Surface is prefix-match-only: the vendored pi-tui Editor consults the
+        Cost posture: only TOP-LEVEL turn stops predict (subagent sessions
+        emit the same event but are filtered out), and the cheap-lane call
+        uses `onUnrouted: 'skip'` — an unconfigured alias is never inherited,
+        so the parent route is not billed once per turn. Surface is
+        prefix-match-only: the vendored pi-tui Editor consults the
         autocomplete provider only on trigger characters ('/' and '@') or
         forced Tab, never on empty input, so the prediction completes after
         the user types a leading fragment (probed at implementation; see

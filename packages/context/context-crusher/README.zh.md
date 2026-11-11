@@ -26,7 +26,7 @@ CCR（Compress-Cache-Retrieve）可逆的工具输出压缩。一个 `tools/post
 
 | 键 | 默认 | 含义 |
 |---|---|---|
-| `enabled` | `false` | 总开关；功能需显式开启。 |
+| `enabled` | `true` | 总开关；2026-11-11 起默认开启（设 `false` 关闭）。默认 `dry-run` 模式下只写台账行，绝不改写工具结果。 |
 | `mode` | `dry-run` | `dry-run` 只度量；`on` 替换。 |
 | `min-bytes` | `8192` | 参与压缩的最小尺寸（按 token 度量；键名保留旧称）。 |
 | `min-savings-ratio` | `0.4` | 最小 token 节省比例。 |

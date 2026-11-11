@@ -32,7 +32,10 @@ export const DEFAULT_REDUCER_COMMANDS: readonly string[] = [
 ]
 
 export const DEFAULTS: ResolvedConfig = deepFreeze({
-  enabled: false,
+  // Default ON since 2026-11-11: measurement is honest in dry-run (ledger only,
+  // no replacement), so the feature ships on while `mode` stays 'dry-run' until
+  // the ledger shows the deterministic lanes are safe to apply by default.
+  enabled: true,
   mode: 'dry-run',
   minBytes: 8192,
   minSavingsRatio: 0.4,

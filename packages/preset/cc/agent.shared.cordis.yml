@@ -445,6 +445,8 @@
     # bridge sees the original bytes; the committed result carries the
     # compressed form). The order tripwire is pinned by
     # packages/context/context-crusher/tests/composition.spec.ts.
+    # Default ON since 2026-11-11 with mode dry-run (measurement only; no
+    # result is rewritten until `mode: on` is set explicitly).
     - id: context-crusher
       name: '@dsh-cc/context-crusher'
 
@@ -672,7 +674,10 @@
     # provider reads in-process (same-process assumption). Publishes no Service
     # (plain plugin, reasoning-fold pattern) so it needs no isolate key of its
     # own; DEFAULT OFF (cc-prompt-suggest.enabled) — disabled sessions make
-    # zero adapter calls and the TUI surfaces zero suggestion items.
+    # zero adapter calls and the TUI surfaces zero suggestion items. Cost
+    # posture (2026-11-11): top-level turn stops only (subagent sessions emit
+    # the same event), and an unconfigured cheap-lane alias is SKIPPED, never
+    # inherited, so the parent route is not billed once per turn.
     - id: prompt-suggest
       name: '@dsh-cc/prompt-suggest'
 
