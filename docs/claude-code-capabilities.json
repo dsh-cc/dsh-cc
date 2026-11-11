@@ -196,6 +196,10 @@
         {
           "type": "test",
           "path": "packages/acp/cc-acp/tests/preset-composition.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/acp/cc-acp/tests/preset-roster-resolution.spec.ts"
         }
       ],
       "deviation": {

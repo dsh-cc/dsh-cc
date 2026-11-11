@@ -160,6 +160,7 @@ capabilities:
       - { type: source, path: packages/launcher/tui/bootstrap.mjs, anchor: "ACP_BUNDLES" }
       - { type: test, path: packages/launcher/tui/tests/acp.spec.ts }
       - { type: test, path: packages/acp/cc-acp/tests/preset-composition.spec.ts }
+      - { type: test, path: packages/acp/cc-acp/tests/preset-roster-resolution.spec.ts }
     deviation:
       kind: divergent
       summary: >-

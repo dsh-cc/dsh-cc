@@ -199,6 +199,13 @@ interface BridgeClient {
   cancel: NonNullable<AcpAgent['cancel']>
 }
 
+export interface LoaderGate {
+  /** Resolves on the NEXT `loader.await()` call (re-arms after each entry). */
+  entered: () => Promise<void>
+  /** Release the current hold so the parked admission proceeds. */
+  open: () => void
+}
+
 export interface BridgeHarness {
   ctx: Context
   client: BridgeClient
@@ -210,6 +217,19 @@ export interface BridgeHarness {
   persistenceRoot: string
   /** Agent presets the bridge composed, in mount order (spy preset, §5.2 tests). */
   presetMounts: { presetId: string | undefined }[]
+  /**
+   * Install (or replace) the spy roster as the `agentPresets` service. The
+   * rig skips the initial provide when `roster: 'absent'` — calling this
+   * later exercises the per-use resolution contract (issue #380): the plugin
+   * must tolerate the service missing at apply time.
+   */
+  provideRoster: (knownPresets?: string[]) => void
+  /**
+   * Installed when `loaderGate: true` — a fake `loader` service whose
+   * `await()` blocks until the test opens it. Drives the session-admission
+   * boot-settlement gate deterministically (issue #380).
+   */
+  loaderGate: LoaderGate | undefined
   onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse
   onSessionUpdateError: (() => void) | undefined
   registerCatalogProvider: (provider: string) => () => void
@@ -234,6 +254,17 @@ export async function makeBridgeHarness(options: {
   persistenceRoot?: string
   /** Preset ids the spy roster accepts; anything else throws like the real registry. */
   knownPresets?: string[]
+  /**
+   * Skip the initial roster provide (default 'present' provides it before the
+   * plugin mounts). 'absent' leaves `agentPresets` unprovided at apply time —
+   * the issue #380 regression shape; the test installs one via provideRoster.
+   */
+  roster?: 'present' | 'absent'
+  /**
+   * Install a fake `loader` service with a test-controlled `await()` — the
+   * admission gate's barrier fixture (issue #380).
+   */
+  loaderGate?: boolean
 } = {}): Promise<BridgeHarness> {
   const adapter = new MockAdapter(options.script ?? [], options.imageCapable === true)
   const ctx = new Context()
@@ -257,37 +288,67 @@ export async function makeBridgeHarness(options: {
 
   // Spy preset roster: the real registry composes loader trees (§5.1 row B);
   // the bridge tests only need mount observability, so a recording stub with
-  // the real projection registered stands in.
+  // the real projection registered stands in. Provided up front by default;
+  // `roster: 'absent'` defers the (one-time) provide to the test — later
+  // calls only retarget the accepted ids, since cordis rejects a second
+  // provide of an already-registered name (issue #380 per-use contract).
   const presetMounts: { presetId: string | undefined }[] = []
-  const knownPresets = options.knownPresets ?? ['cc']
-  const composedAgents = new WeakSet<object>()
-  ctx.provide('agentPresets', {
-    mount: async (_agentCtx: unknown, presetId?: string) => {
-      if (presetId === undefined || !knownPresets.includes(presetId)) {
-        throw new Error(`Unknown agent preset: ${String(presetId)}`)
-      }
-      presetMounts.push({ presetId })
-    },
-    // §5.2 revised: the create-path join runs on agent/created + select()
-    // (see src/index.ts). The spy records the join like a mount and dedupes
-    // by agent; composedPreset reports nothing pre-composed so the
-    // listener's already-composed guard always proceeds in tests.
-    select: async (agent: object, presetId: string) => {
-      if (!knownPresets.includes(presetId)) {
-        throw new Error(`Unknown agent preset: ${String(presetId)}`)
-      }
-      if (!composedAgents.has(agent)) {
-        composedAgents.add(agent)
+  const rosterState = { known: options.knownPresets ?? ['cc'] }
+  let rosterInstalled = false
+  const provideRoster = (knownPresets: string[] = ['cc']): void => {
+    rosterState.known = knownPresets
+    if (rosterInstalled) return
+    rosterInstalled = true
+    const composedAgents = new WeakSet<object>()
+    ctx.provide('agentPresets', {
+      mount: async (_agentCtx: unknown, presetId?: string) => {
+        if (presetId === undefined || !rosterState.known.includes(presetId)) {
+          throw new Error(`Unknown agent preset: ${String(presetId)}`)
+        }
         presetMounts.push({ presetId })
-      }
-      return presetId
-    },
-    composedPreset: () => undefined,
-    // The real SubagentRuntime unconditionally inherits a parent preset via
-    // composeFrom (upstream child-agent.ts:200); the spy composes nothing,
-    // so delegation-test children run preset-free.
-    composeFrom: () => undefined,
-  } as never)
+      },
+      // §5.2 revised: the create-path join runs on agent/created + select()
+      // (see src/index.ts). The spy records the join like a mount and dedupes
+      // by agent; composedPreset reports nothing pre-composed so the
+      // listener's already-composed guard always proceeds in tests.
+      select: async (agent: object, presetId: string) => {
+        if (!rosterState.known.includes(presetId)) {
+          throw new Error(`Unknown agent preset: ${String(presetId)}`)
+        }
+        if (!composedAgents.has(agent)) {
+          composedAgents.add(agent)
+          presetMounts.push({ presetId })
+        }
+        return presetId
+      },
+      composedPreset: () => undefined,
+      // The real SubagentRuntime unconditionally inherits a parent preset via
+      // composeFrom (upstream child-agent.ts:200); the spy composes nothing,
+      // so delegation-test children run preset-free.
+      composeFrom: () => undefined,
+    } as never)
+  }
+  if (options.roster !== 'absent') provideRoster()
+
+  // Fake loader for the admission-gate barrier: `loader.await()` resolves the
+  // entry signal first, so a test can prove a request is parked INSIDE the
+  // gate before any roster read; `open()` releases the current hold and
+  // re-arms for the next admission (issue #380).
+  let loaderGate: LoaderGate | undefined
+  if (options.loaderGate === true) {
+    let releaseGate!: () => void
+    let gate = new Promise<void>((resolve) => { releaseGate = resolve })
+    const waiters: Array<() => void> = []
+    loaderGate = {
+      entered: () => new Promise<void>((resolve) => { waiters.push(resolve) }),
+      open: () => {
+        releaseGate()
+        gate = new Promise<void>((resolve) => { releaseGate = resolve })
+      },
+    }
+    const enter = (): void => { waiters.shift()?.() }
+    ctx.provide('loader', { await: async () => { enter(); await gate } } as never)
+  }
   // The registry registers this projection in production; the spy rig
   // registers the definition directly so resume reads the recorded identity
   // exactly as the composed bundle does (§5.2).
@@ -305,6 +366,8 @@ export async function makeBridgeHarness(options: {
     permissionRequests,
     persistenceRoot,
     presetMounts,
+    provideRoster,
+    loaderGate,
     onPermission: () => ({ outcome: { outcome: 'cancelled' } }),
     onSessionUpdateError: undefined,
     registerCatalogProvider: provider => ctx.llm.registerAdapter([provider], new MockAdapter([], false, provider)),

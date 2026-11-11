@@ -38,23 +38,38 @@ and `docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md` D4).
    〔src:ws:packages/acp/cc-acp/src/index.ts#L69-L69〕.
 
 2. **Preset composition seam** (§5.2, **revised 2026-10-09 after live
-   acceptance**): the roster is resolved in `apply()` via plain
-   `ctx.get('agentPresets')` (absent → loud throw)
-   〔src:ws:packages/acp/cc-acp/src/index.ts#L123-L131〕 and every stamped
-   agent is joined on the serial `agent/created` event through
-   `AcpPresetsService.select()`
-   〔src:ws:packages/acp/cc-acp/src/index.ts#L139-L160〕
-   〔src:ws:packages/acp/cc-acp/src/session.ts#L51-L57〕. The original form
-   declared `inject: ['agentPresets']` — **wrong**: cordis re-composes an
-   injected service in the consuming plugin's own scope, re-applying the
-   preset-cc declaration row and double-registering the roster (persona +
-   command collisions; boot-time `record.broken`, surfacing only at
-   session/new). Evidence chain: five-step floor A/B (acp-app removal,
-   bundle-tui swap, acp-cc row disable, inject override) pinned the trigger;
-   the TUI's `preset.ts` rosterOf pattern and the upstream `subagents`
-   duck-type are the precedents for non-inject service access. Upstream has no
-   preset composition at all ("No preset composition" comment removed from
-   `newSession`).
+   acceptance; re-revised for issue #380**): the roster is resolved PER USE by
+   `src/preset-roster.ts` (`presetRosterResolver`) — never captured at apply
+   time — and every stamped agent is joined on the serial `agent/created`
+   event through `AcpPresetsService.select()`
+   〔src:ws:packages/acp/cc-acp/src/preset-roster.ts#L18-L45〕
+   〔src:ws:packages/acp/cc-acp/src/index.ts#L117-L121〕
+   〔src:ws:packages/acp/cc-acp/src/session.ts#L51-L57〕. Issue #380 root
+   cause: the loader mounts group siblings concurrently
+   (`EntryGroup.update` → `Promise.all`) and strict `ctx.get` reads a LOADING
+   sibling as `undefined`, so the original apply-time capture threw whenever
+   the registry's async `Service.init` lost the import-order race, killing
+   the whole ACP lane. Session admission (`newSession`/`resumeSession`) now
+   additionally settles on `loader.await()` first
+   〔src:ws:packages/acp/cc-acp/src/preset-roster.ts#L48-L61〕 — the same
+   primitive `boot()` itself awaits — because `app.connect` runs at the end
+   of `apply` while `boot()` is still settling, so an early client can race
+   its first request past a LOADING registry. The absent-registry failure
+   throws a wire-preserving `RequestError` at the first session admission.
+   The original form declared `inject: ['agentPresets']` — rejected: inject
+   couples this plugin's fiber lifecycle to the registry's, so a registry
+   fiber restart would re-apply acp-cc and drop every live `AcpSession`
+   (the sessions map is apply-scoped; the harness's own declarative
+   `preset-cc` row accepts exactly that trade, a stateful server cannot).
+   The 2026-10-09 claim that inject "re-composes the service and
+   double-registers the roster" does not reproduce after the PR-B
+   dsh-scope module-instance-split fix — the lifecycle coupling above is
+   the standing rationale. Evidence chain: five-step floor A/B (acp-app
+   removal, bundle-tui swap, acp-cc row disable, inject override) pinned
+   the original trigger; the issue #380 three-seat review (critic + grok
+   + codex) converged on per-use resolution plus the admission gate.
+   Upstream has no preset composition at all ("No preset composition"
+   comment removed from `newSession`).
 
 3. **`presetId` config** (§5.2): `AcpConfig`/`Config` gain optional
    `presetId: Schema.string().default('cc')`, resolved in `apply()` and passed
