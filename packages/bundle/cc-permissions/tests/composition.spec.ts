@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsCascadeProvider } from '@dsh-cc/settings-cascade'
+import { SettingsCascadeProvider } from '@dsh-cc/settings/cascade'
 import SettingsForms from '@deepseek-ai/dsh-settings'
 import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
 

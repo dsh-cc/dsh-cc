@@ -21,7 +21,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import DefaultModel from '@deepseek-ai/dsh-agent-default-model'
-import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings-provider'
+import { SettingsProvider, type SettingsNamespace } from '@dsh-cc/settings'
 import { DEFAULT_MODEL_ENTRY_ID, ensureProviderBridge } from '../src/provider-bridge.ts'
 
 /** In-memory provider over which the bridge's settings seam runs (same shape

@@ -265,7 +265,7 @@ File-facing contract (`settings.json` and the local/project/policy files):
 ```
 
 - `AutoModeSchema` / `AutoModeClassifierSchema` are authored in
-  `packages/settings/settings-cascade/src/auto-mode.ts` (the authored
+  `packages/settings/settings/src/cascade/auto-mode.ts` (the authored
   reference, like `PermissionsSchema`) and **hand-mirrored** as an optional
   `autoMode` field of the permission-rules plugin's local `permissions`
   section schema (`permissionSettingsSchema` in `permission-rules/src/index.ts`)
@@ -304,7 +304,7 @@ settings/permissions surface, so in the same commit:
 ## 5. Test plan (TDD — tests first, then code)
 
 New specs in `packages/interaction/permission-rules/tests/` and
-`packages/settings/settings-cascade/tests/`, fake-injected dependencies only
+`packages/settings/settings/src/cascade/tests/`, fake-injected dependencies only
 (no network, no real LLM):
 
 1. **verbose-core parity:** for a matrix of modes × risks × rules,

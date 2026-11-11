@@ -169,7 +169,7 @@ deployment) would silently miss a classifier-only setting.
   a value LARGER than the model's real window can silently truncate
   verdict inputs; when in doubt configure low.
 - Mirrors to update (all three, same PR):
-  1. `packages/settings/settings-cascade/src/auto-mode.ts` — `AutoMode`
+  1. `packages/settings/settings/src/cascade/auto-mode.ts` — `AutoMode`
      interface + its schemastery `z.object` (the shared definition).
   2. `packages/interaction/permission-rules/src/settings-schema.ts` —
      `AutoModeSettings` interface + `autoMode` z.object (the hand-mirror).

@@ -9,7 +9,7 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
+      "path": "../../settings/settings"
     },
     {
       "path": "../command-usage"

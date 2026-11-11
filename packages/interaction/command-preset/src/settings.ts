@@ -1,7 +1,7 @@
 /**
  * The `vwa-preset` settings namespace: this host's persisted default agent
  * preset. Schema-first via `registerNamespaceSafe` with the absence-preserving
- * union idiom (packages/settings/settings-cascade/src/auto-mode.ts): an absent
+ * union idiom (packages/settings/settings/src/cascade/src/auto-mode.ts): an absent
  * key stays absent, no empty-string sentinel is materialized.
  *
  * The upstream `agent-preset-registry` settings namespace is NOT borrowed: in
@@ -13,8 +13,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
-import { registerNamespaceSafe, type SettingsReader } from '@dsh-cc/settings-ns'
+import type { SettingsNamespace } from '@dsh-cc/settings'
+import { registerNamespaceSafe, type SettingsReader } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the persisted default agent preset. */
 export const VWA_PRESET_NAMESPACE = 'vwa-preset' as SettingsNamespace

@@ -48,7 +48,7 @@ A pure executor plus a host adapter plugin. Letting the client read settings/fs 
 | Modify `packages/preset/cc` and the compose files of related bundles | mount the service; the service itself never triggers a request |
 | Modify packages/observability/sidecar-io | hoist the session-directory encodeSegment helper into sidecar-io as a new export (the S1-02 ledger path uses it; the existing copies in config-snapshot and vwa-evidence remain until their own migrations) |
 
-New package runtime dependencies declare `@dsh-cc/systemone`, `@dsh-cc/model-aliases`, `@dsh-cc/settings-ns`, `@dsh-cc/settings-provider`, `@dsh-cc/sidecar-io` and the harness/cordis packages actually used, with `workspace:^` for workspace packages. Update the workspace lock, tsconfig paths/project references and published exports in sync; deep imports of sibling `src` that are not declared as dependencies are forbidden.
+New package runtime dependencies declare `@dsh-cc/systemone`, `@dsh-cc/model-aliases`, `@dsh-cc/settings/ns`, `@dsh-cc/settings`, `@dsh-cc/sidecar-io` and the harness/cordis packages actually used, with `workspace:^` for workspace packages. Update the workspace lock, tsconfig paths/project references and published exports in sync; deep imports of sibling `src` that are not declared as dependencies are forbidden.
 
 ## Public interface
 

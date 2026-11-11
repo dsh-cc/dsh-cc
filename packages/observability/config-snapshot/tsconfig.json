@@ -15,7 +15,7 @@
       "path": "../../observability/version-info"
     },
     {
-      "path": "../../settings/settings-ns"
+      "path": "../../settings/settings"
     },
     {
       "path": "../sidecar-io"

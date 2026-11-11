@@ -18,7 +18,7 @@
 # keeping the cascade first keeps boot logs readable.
 - insert:
     - id: settings-cc
-      name: '@dsh-cc/settings-cascade'
+      name: '@dsh-cc/settings/cascade'
 
     # allow/deny/ask rule engine reading the `permissions` settings namespace.
     # bypass-immune rules ride the monotonic guard layer.

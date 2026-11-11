@@ -1,0 +1,62 @@
+{
+  "name": "@dsh-cc/settings",
+  "description": "The vendored settings-provider contract plus the two things built on it: idempotent namespace registration (ns) and the Claude Code settings cascade (cascade)",
+  "version": "0.9.4",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/settings/settings"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./ns": {
+      "types": "./lib/ns/index.d.ts",
+      "default": "./lib/ns/index.js"
+    },
+    "./cascade": {
+      "types": "./lib/cascade/index.d.ts",
+      "default": "./lib/cascade/index.js"
+    },
+    "./cascade/local-root": {
+      "types": "./lib/cascade/local-root.d.ts",
+      "default": "./lib/cascade/local-root.js"
+    },
+    "./cascade/permissions": {
+      "types": "./lib/cascade/permissions.d.ts",
+      "default": "./lib/cascade/permissions.js"
+    },
+    "./cascade/worktree": {
+      "types": "./lib/cascade/worktree.d.ts",
+      "default": "./lib/cascade/worktree.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "chokidar": "^4.0.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-util-values": ">=0.2.2-rc.1",
+    "@deepseek-ai/schemastery": ">=0.2.0-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-util-values": "link:../../../../deepseek-harness/packages/util/values",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

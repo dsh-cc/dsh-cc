@@ -13,9 +13,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { installSectionSafe } from '@dsh-cc/settings-ns'
+import { installSectionSafe } from '@dsh-cc/settings/ns'
 import { DEFAULT_ACTOR_CONTRACT_MODELS, gateCandidates } from '@dsh-cc/claude-code-agents'
 
 // The candidates rule and dispatch default live in @dsh-cc/claude-code-agents

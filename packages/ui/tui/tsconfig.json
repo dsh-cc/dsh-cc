@@ -30,10 +30,7 @@
       "path": "../../memory/memory"
     },
     {
-      "path": "../../settings/settings-ns"
-    },
-    {
-      "path": "../../settings/settings-provider"
+      "path": "../../settings/settings"
     },
     {
       "path": "../../subagent/task"

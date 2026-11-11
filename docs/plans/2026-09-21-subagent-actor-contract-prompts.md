@@ -164,7 +164,7 @@ New settings namespace `actor-contract` (kebab-case per dsh-settings discipline)
   both readers — the multi-owner semantics (`settings-ns/src/index.ts` :219-244) give
   the second owner a live `setSource` plus `settings/updated` fan-out. Gate state is
   read at spawn time, so mid-session edits apply to the next spawn. Both seam packages
-  gain a `@dsh-cc/settings-ns` workspace dependency edge (neither has one today).
+  gain a `@dsh-cc/settings/ns` workspace dependency edge (neither has one today).
 - The task plugin additionally publishes its gate as the `ccActorContractGate` cordis
   service (resume-pin re-fingerprinting reads it duck-typed, defaulting to
   `['glm-*']` when unmounted). Because `cc-subagent-task` is a preset row, that

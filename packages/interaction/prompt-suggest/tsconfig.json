@@ -9,13 +9,10 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
       "path": "../../llm-tuning/side-query"
     },
     {
-      "path": "../../settings/settings-ns"
+      "path": "../../settings/settings"
     }
   ]
 }

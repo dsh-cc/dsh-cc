@@ -17,7 +17,7 @@ bundle:
 
 The patch performs three mounts in registration order:
 
-- `settings-cc` — the `@dsh-cc/settings-cascade` provider, honouring `$DSH_HOME/settings.json` and the project's `.claude` settings files. The in-box settings row is disabled by ID to prevent double-mounting.
+- `settings-cc` — the `@dsh-cc/settings/cascade` provider, honouring `$DSH_HOME/settings.json` and the project's `.claude` settings files. The in-box settings row is disabled by ID to prevent double-mounting.
 - `permission-rules` — the `@dsh-cc/permission-rules` allow/deny/ask rule engine, reading the `permissions` settings namespace lazily at call time. Bypass-immune rules ride the monotonic guard layer.
 - `command-permissions` — the host-plane mount of the `/permissions` command plus catalog wrap; the empty host fiber is what dsh-client-modules scans for the popupSelect browser half.
 

@@ -9,9 +9,9 @@ import { defineConfig, type Plugin } from 'vitest/config'
  * extends chain from this directory).
  */
 const WORKSPACE: Record<string, string> = {
-  '@dsh-cc/settings-ns': '../../settings/settings-ns/src/index.ts',
+  '@dsh-cc/settings/ns': '../../settings/settings-ns/src/index.ts',
   '@dsh-cc/sidecar-io': '../../observability/sidecar-io/src/index.ts',
-  '@dsh-cc/settings-provider': '../../settings/settings-provider/src/index.ts',
+  '@dsh-cc/settings': '../../settings/settings-provider/src/index.ts',
   '@dsh-cc/session-cwd': '../../workspace/session-cwd/src/index.ts',
   '@dsh-cc/vwa-evidence': '../vwa-evidence/src/index.ts',
 }

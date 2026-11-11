@@ -1,0 +1,340 @@
+/**
+ * Idempotent settings-namespace registration helpers (design:
+ * docs/plans/2026-09-16-settings-namespace-idempotence.md).
+ *
+ * Preset plugins register their settings namespaces against the app-level
+ * shared `SettingsProvider` on every session mount. Harness `register()`
+ * throws on a duplicate namespace, and during the create-before-dispose
+ * overlap window around `/clear` two mounts collide, failing the whole preset
+ * mount. These helpers degrade duplicates to live reads and lazily
+ * re-acquire a namespace whose owning fiber died.
+ *
+ * @module @dsh-cc/settings/ns
+ */
+
+import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import { isDuplicateRegistration } from '../index.ts'
+import type { SettingsNamespace, SettingsProvider, SettingsRegisterOptions } from '../index.ts'
+
+/** Composition base layer and cross-field validation passed through to the provider. */
+export interface SafeRegisterOptions<T> {
+  /** Composition base layer passed through to the provider. */
+  base?: Record<string, unknown>
+  /** Cross-field validation passed through to the provider. */
+  validate?: (value: T) => void
+}
+
+/** A live settings reader; `undefined` means "no namespace registered". */
+export type SettingsReader<T> = () => T | undefined
+
+/** Hooks a consumer hands to {@link installSectionSafe} (harness `SettingsSectionHooks` shape). */
+export interface SectionHooks<T> {
+  /**
+   * Receive the active configuration source: the resolved settings value while
+   * one is attached, the composition entry otherwise.
+   */
+  setSource(current: () => T): void
+  /** Re-judge anything derived from the source after an attach or a committed change. */
+  onChange(): void
+  /** Reject a resolved section this consumer could not act on. */
+  validate?: (value: T) => void
+}
+
+/**
+ * The duplicate-registration message, re-exported from its single owner
+ * (`@dsh-cc/settings`). It used to be built here as a second literal
+ * copy, which meant the two sides could drift from EACH OTHER while the pin
+ * test still passed — it only compared this copy against itself.
+ */
+export { duplicateRegistrationMessage } from '../index.ts'
+
+/**
+ * Presentation-free passthrough schema: resolves any section unchanged, so a
+ * namespace registered with it surfaces the raw user layer through the
+ * describe/scope seams — the only layer passthrough consumers (e.g. the
+ * /provider bridge) read. UI modules import it from here because
+ * check:tui-boundary forbids direct harness imports in tui UI sources, and the
+ * provider CALLS the schema at register time (a toJSON-only impostor crashes
+ * registration with a TypeError).
+ */
+export const AnySchema: z<unknown> = z.any()
+
+/**
+ * Value mirror of the cordis `FiberState` members compared against: a const
+ * enum has no runtime object to import, so the numeric values are mirrored
+ * (same rationale as the harness provider's own `isUnloading`).
+ */
+const FIBER_DISPOSED = 4
+const FIBER_UNLOADING = 5
+
+/** Whether the context's own fiber is tearing down (defensive: state unreadable → not unloading). */
+function isUnloading(ctx: Context): boolean {
+  try {
+    const state: number = ctx.fiber.state
+    return state === FIBER_UNLOADING || state === FIBER_DISPOSED
+  } catch {
+    return false
+  }
+}
+
+function isInactive(error: unknown): boolean {
+  return (error as { code?: unknown } | null | undefined)?.code === 'INACTIVE_EFFECT'
+}
+
+/**
+ * Memoized readers per settings-provider shadow, module-level. Bounds the
+ * churn to one register/unregister pair per lost owner within one module
+ * copy; the try/catch — not this WeakMap — is the cross-module-copy
+ * protection (a different module copy means a different WeakMap key).
+ */
+const readers = new WeakMap<object, SettingsReader<never>>()
+
+/**
+ * Register a settings namespace idempotently and return a live reader.
+ *
+ * Behavior (plan §2.2):
+ *
+ * - No `ctx.get('settings')` provider → the reader returns `undefined` on
+ *   every call (callers keep their graceful-degradation behavior).
+ * - The reader is a read-through source of truth: it always resolves through
+ *   `settings.get(ns)`, never a cached scope object. **Constraint:** this
+ *   contract assumes an object schema (`z.object(...)`), so a legitimate
+ *   resolved value is never `undefined` — `undefined` on read unambiguously
+ *   means "not registered". A scalar namespace whose value can legitimately
+ *   be `undefined` breaks the self-healing trigger.
+ * - Lazy self-healing: when a read observes `undefined` and the setup-time
+ *   context is still live, the reader attempts `settings.register` again with
+   * the same schema/options and re-reads.
+ * - Duplicate registration (`settings namespace "<ns>" is already registered`)
+ *   degrades to the live provider read. **Value-fidelity caveat:** under dual
+ *   module copies with *different* schemas, the degrade path serves the other
+ *   copy's resolved value — the same trade the pre-helper guard made.
+ * - Any other register error propagates, except re-acquisition on a
+ *   disposed/unloading context (cordis `CordisError` code `INACTIVE_EFFECT`),
+ *   which degrades to `undefined`: a stale reader must never throw into a hot
+ *   read path.
+ * @param ctx - the setup-time mount context; effects bind here.
+ * @param ns - the settings namespace.
+ * @param schema - schemastery schema resolving the namespace's value.
+ * @param options - composition base and validation, passed through.
+ * @returns a reader resolving the live namespace value, or `undefined`.
+ */
+export function registerNamespaceSafe<T>(
+  ctx: Context,
+  ns: SettingsNamespace,
+  schema: z<T>,
+  options?: SafeRegisterOptions<T>,
+): SettingsReader<T> {
+  const settings = ctx.get('settings') as SettingsProvider | undefined
+  if (settings === undefined) {
+    // rc.2 mount-order race: the vendored settings provider's async init
+    // settles DURING the preset mount sweep, so an early apply previously
+    // degraded to undefined-reads forever (the stranded-namespace incident:
+    // model-aliases/cost-gate/advisor/… silently ran on defaults and the
+    // auto-mode classifier disarmed every eligible call). Defer the whole
+    // registration to the provider's injectable arrival instead.
+    let deferred: SettingsReader<T> | undefined
+    try {
+      ctx.inject(['settings'], () => {
+        deferred = registerNamespaceSafe(ctx, ns, schema, options)
+      })
+    } catch {
+      // Caller fiber already unloading: match the legacy absent-service reader.
+      return () => undefined
+    }
+    return () => deferred?.()
+  }
+  const memoized = readers.get(settings)
+  if (memoized !== undefined) return memoized as SettingsReader<T>
+  const registerOptions = options as SettingsRegisterOptions<T> | undefined
+  // Scope fallback: some test doubles (and legacy provider shapes) return the
+  // namespace scope from `register` and expose no provider-level `get`. Prefer
+  // the provider read-through; only when `settings.get` is unavailable fall
+  // back to the most recently obtained scope object.
+  const providerGet = typeof settings.get === 'function' ? () => settings.get(ns) as T | undefined : undefined
+  let scope: { get?: () => unknown } | undefined
+  try {
+    scope = settings.register(ns, schema, registerOptions) as { get?: () => unknown } | undefined
+  } catch (error) {
+    // A duplicate means another mount or module copy owns the namespace;
+    // degrade to live reads and let self-healing retry when it disappears.
+    if (!isDuplicateRegistration(error, ns)) throw error
+  }
+  const readValue = (): T | undefined =>
+    providerGet !== undefined ? providerGet() : (scope?.get?.() as T | undefined)
+  const reader: SettingsReader<T> = () => {
+    const value = readValue()
+    if (value !== undefined) return value
+    let reacquired = false
+    if (!isUnloading(ctx)) {
+      try {
+        scope = settings.register(ns, schema, registerOptions) as { get?: () => unknown } | undefined
+        reacquired = true
+      } catch (error) {
+        if (!isDuplicateRegistration(error, ns) && !isInactive(error)) throw error
+      }
+    }
+    // A re-acquisition in THIS call makes this mount the namespace owner: its
+    // scope is the freshest read (a real provider's provider-level `get`
+    // reflects it too, but a provider whose `get` is disconnected from its
+    // `register` — the resume-pins spec fixture shape — is only readable
+    // through the scope). The PREVIOUS scope must never be served: after the
+    // owning fiber disposed it returns a stale frozen value — that is the
+    // #79 hole this helper exists to close.
+    if (reacquired) {
+      const acquired = scope?.get?.() as T | undefined
+      if (acquired !== undefined) return acquired
+    }
+    return readValue()
+  }
+  readers.set(settings, reader as SettingsReader<never>)
+  return reader
+}
+
+/**
+ * Duck-typed describe face needed for a raw user-layer read.
+ */
+export type DescribeFace = {
+  describe?: () => ReadonlyArray<{ ns?: unknown; user?: unknown }> | undefined
+}
+
+/**
+ * Read one namespace's RAW USER OVERRIDE section off the provider's
+ * `describe()` descriptors (migration plan Q3 addendum (d)): the layered
+ * cascade's user layer, never the fully resolved value. Degrades to
+ * `undefined` on an absent service, an unregistered namespace, or junk shape
+ * — read paths stay total.
+ */
+export function readUserSection(
+  settings: DescribeFace | undefined,
+  ns: string,
+): Record<string, unknown> | undefined {
+  if (settings === undefined || typeof settings.describe !== 'function') return undefined
+  try {
+    const descriptor = (settings.describe() ?? []).find(
+      (entry): entry is { ns?: unknown; user?: unknown } =>
+        entry !== null && typeof entry === 'object' && String((entry as { ns?: unknown }).ns) === ns,
+    )
+    const user = descriptor?.user
+    return user !== null && typeof user === 'object' && !Array.isArray(user)
+      ? structuredClone(user as Record<string, unknown>)
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Attach one optional-settings consumer idempotently, mirroring the harness
+ * `SettingsProvider.installSection(owner, ns, schema, entry, hooks)` call
+ * signature (plan §2.3).
+ *
+ * - Fresh path (namespace unregistered): delegate to `installSection`
+ *   unchanged — it owns attach-time `setSource`/`onChange` wiring, the
+ *   provider-loss fallback, and its own change subscription.
+ * - Preflight path (namespace already owned — mount overlap or a dual module
+ *   copy): do NOT call `installSection` (its internal `register` would throw,
+ *   and a silent second owner would double-fire `onChange` into two live
+ *   consumers). Wire the hooks directly: `setSource` reads the live
+ *   `settings.get(ns)`, and reload notification comes from the provider's
+ *   public `settings/updated` commit event, filtered by namespace and inert
+ *   once the caller ctx is unloading. The listener unwinds with the caller
+ *   mount (registered as an effect on the caller ctx).
+ * - No re-registration after owner death: `settings.get(ns)` returns
+ *   `undefined` once the owning registration disappears, so the consumer's
+ *   existing fallback contract applies — identical to the harness's own
+ *   provider-loss semantics.
+ * @param ctx - the caller (consumer) context.
+ * @param ns - the settings namespace.
+ * @param schema - schemastery schema resolving the namespace's value.
+ * @param entry - composition entry used as base and fallback value.
+ * @param hooks - consumer hooks (`setSource`, `onChange`, optional `validate`).
+ */
+export function installSectionSafe<T>(
+  ctx: Context,
+  ns: SettingsNamespace,
+  schema: z<T>,
+  entry: T,
+  hooks: SectionHooks<T>,
+): void {
+  const settings = ctx.get('settings') as SettingsProvider | undefined
+  if (settings === undefined) {
+    // rc.2 mount-order race (see registerNamespaceSafe): serve the composition
+    // entry immediately so attach-time consumers always have a source, then
+    // re-attach through the full ceremony when the provider arrives. A
+    // consumer must tolerate a second setSource/onChange pair (the normal
+    // attach/detach dance).
+    hooks.setSource(() => entry)
+    hooks.onChange()
+    try {
+      ctx.inject(['settings'], () => installSectionSafe(ctx, ns, schema, entry, hooks))
+    } catch {
+      // Caller fiber unloading: the entry fallback stands.
+    }
+    return
+  }
+  if (settings.get(ns) === undefined) {
+    settings.installSection(ctx, ns, schema, entry, hooks as never)
+    return
+  }
+  // Preflight: the namespace is already owned by another mount. Read live;
+  // notify on commits to this namespace only; never re-register (the
+  // installSection hook surface belongs to the first owner).
+  hooks.setSource(() => settings.get(ns) as T)
+  ctx.effect(() => {
+    const listener = (eventNs: SettingsNamespace) => {
+      if (eventNs !== ns || isUnloading(ctx)) return
+      hooks.onChange()
+    }
+    // The commit event fans out on the provider's own context (Service.ctx is
+    // protected in cordis, hence the cast); the disposer unwinds via the
+    // effect above when the caller mount tears down.
+    const dispose = (settings as unknown as { ctx: Context }).ctx.on('settings/updated', listener)
+    return () => dispose()
+  }, `settings-ns: settings/updated(${String(ns)})`)
+  hooks.onChange()
+}
+
+/**
+ * Structure-preserving deep copy for values that must survive an in-place
+ * mutating pass (issue #373: schemastery re-admission of a deep-frozen
+ * cascade section — `z.dict` reassigns each entry and a frozen container
+ * turns that into a TypeError).
+ *
+ * Contract: a COPY, never a validator. Plain objects and arrays are copied
+ * into fresh, mutable containers with their enumerable string-keyed own
+ * properties — set, presence (an own `undefined`-valued key stays own), and
+ * insertion order — preserved exactly; every other value (functions, Dates,
+ * class instances, `null`) is passed through by reference — only the
+ * containers a mutating pass writes into need to be fresh. Cycle-safe via a
+ * seen-map. Never throws over its input domain: JSON-shaped values as
+ * served by the settings cascade (string keys, no getters/accessors) — the
+ * domain every call site in this incident class feeds it.
+ * @param value - the value to decouple from its (possibly frozen) owner.
+ * @returns the mutable deep copy.
+ */
+export function copyForMutation<T>(value: T): T {
+  const seen = new Map<unknown, unknown>()
+  const copy = (node: unknown): unknown => {
+    if (node === null || typeof node !== 'object') return node
+    const memo = seen.get(node)
+    if (memo !== undefined) return memo
+    if (Array.isArray(node)) {
+      const out: unknown[] = []
+      seen.set(node, out)
+      for (const entry of node) out.push(copy(entry))
+      return out
+    }
+    const proto = Object.getPrototypeOf(node)
+    if (proto !== Object.prototype && proto !== null) return node
+    const out: Record<string, unknown> = {}
+    seen.set(node, out)
+    for (const [key, entry] of Object.entries(node)) {
+      if (key === '__proto__') Object.defineProperty(out, key, { value: copy(entry), writable: true, enumerable: true, configurable: true })
+      else out[key] = copy(entry)
+    }
+    return out
+  }
+  return copy(value) as T
+}

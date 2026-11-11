@@ -12,6 +12,9 @@
       "path": "../../observability/sidecar-io"
     },
     {
+      "path": "../../settings/settings"
+    },
+    {
       "path": "../../skill/skill-claude-code"
     },
     {
@@ -19,12 +22,6 @@
     },
     {
       "path": "../../workspace/session-cwd"
-    },
-    {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../settings/settings-ns"
     }
   ]
 }

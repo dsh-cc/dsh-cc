@@ -9,19 +9,16 @@
   ],
   "references": [
     {
-      "path": "../../settings/settings-provider"
-    },
-    {
-      "path": "../../settings/settings-ns"
-    },
-    {
       "path": "../../compat/cc-model-aliases"
     },
     {
-      "path": "../permission-rules"
+      "path": "../../llm-tuning/side-query"
     },
     {
-      "path": "../../llm-tuning/side-query"
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../permission-rules"
     }
   ]
 }

@@ -28,10 +28,10 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
-import type { SettingsReader } from '@dsh-cc/settings-ns'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
+import type { SettingsReader } from '@dsh-cc/settings/ns'
 import type { DiscoverySettings } from './discovery.ts'
 
 export type { DiscoverySettings }

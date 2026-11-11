@@ -7,8 +7,8 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
-import { SettingsProvider } from '@dsh-cc/settings-provider'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import { SettingsProvider } from '@dsh-cc/settings'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 // Harness 0.2.2: `AgentRegistry.inject` includes 'sessionProjections', so the
 // registry stays PENDING (and `ctx.agents` is undefined) without this service.

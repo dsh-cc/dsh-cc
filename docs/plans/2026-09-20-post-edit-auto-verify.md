@@ -156,7 +156,7 @@ of anyone cloning it. Rules are therefore read **directly from the user settings
 file only** — the org-policy-layer read is dropped: policy sub-source paths are
 constructor config on SettingsCascadeProvider
 (`settings-cascade/src/index.ts:55-59`), never exposed on ctx, so they are unreachable
-from a plugin. Concretely: `readUserFile(path)` from the `@dsh-cc/settings-cascade` persist
+from a plugin. Concretely: `readUserFile(path)` from the `@dsh-cc/settings/cascade` persist
 surface (`settings-cascade/src/persist.ts:151`), with path =
 `join(dshHome, 'settings.json')` using the guarded `ctx.dshHomePath` pattern (guard
 precedent: `context-crusher/src/index.ts:86-92`). This direct read bypasses the cascade
@@ -209,7 +209,7 @@ No `tools` array — runtime names are fixed at `edit`/`write` (§2; a configura
 whose only valid members are those two buys nothing).
 
 Registration vs. reading: the `cc-post-edit-verify` namespace **is registered** via
-`@dsh-cc/settings-ns` `registerNamespaceSafe` + schemastery object schema (convention:
+`@dsh-cc/settings/ns` `registerNamespaceSafe` + schemastery object schema (convention:
 `settings-ns/src/index.ts`; `context-crusher/src/settings.ts:30-45`) — purely so /config UX
 and validation see it — but trigger logic always reads the raw user file per §3.4.
 

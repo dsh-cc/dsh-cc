@@ -16,7 +16,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { resolveDetailedAlias } from '@dsh-cc/model-aliases'
-import { readUserSection } from '@dsh-cc/settings-ns'
+import { readUserSection } from '@dsh-cc/settings/ns'
 import { resolveGaugeContextWindow } from './gauge-adapter.ts'
 import { pickGaugeRouteName, type ClassifierBackend, type PolicyWarn } from './route-policy.ts'
 import type { ClassifierRoute } from './llm-classifier.ts'

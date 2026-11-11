@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider } from '@dsh-cc/settings-provider'
+import { SettingsProvider } from '@dsh-cc/settings'
 import { apply } from '../src/index.ts'
 import type { AliasTarget, ResolvedRoute } from '../src/types.ts'
 

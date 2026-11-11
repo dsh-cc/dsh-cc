@@ -3,7 +3,7 @@
  *
  * ONE defaults module for the namespace: the TUS producer plugin AND the
  * compaction-micro consumer both read through `registerTusSettings`, which is
- * idempotent per settings provider via the shared `@dsh-cc/settings-ns`
+ * idempotent per settings provider via the shared `@dsh-cc/settings/ns`
  * helper so a second caller reads the already-registered namespace instead of
  * failing the duplicate registration.
  * Consumers without a settings provider run on the schema defaults.
@@ -13,8 +13,8 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import type { SettingsNamespace } from '@dsh-cc/settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the TUS pipeline settings. */
 export const SETTINGS_NAMESPACE = 'cc-tool-use-summary' as SettingsNamespace

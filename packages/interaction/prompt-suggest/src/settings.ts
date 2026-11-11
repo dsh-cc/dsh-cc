@@ -8,8 +8,8 @@
 
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace, SettingsProvider } from '@dsh-cc/settings-provider'
-import { registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import type { SettingsNamespace, SettingsProvider } from '@dsh-cc/settings'
+import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the feature flag and cheap-lane knobs. */
 export const SETTINGS_NAMESPACE = 'cc-prompt-suggest' as SettingsNamespace

@@ -6,7 +6,7 @@
  * Schema-first (vwa-evidence idiom: `registerNamespaceSafe` + absence-
  * preserving union), kebab keys, defaults per the design table. The cascade
  * reassembles this namespace from trusted sources only (user/managed/
- * explicit --settings — `TRUSTED_SOURCE_KEYS` in @dsh-cc/settings-cascade),
+ * explicit --settings — `TRUSTED_SOURCE_KEYS` in @dsh-cc/settings/cascade),
  * so this module performs NO source filtering of its own; it validates shape.
  *
  * `routes` holds the per-alias pin rows of the single decision lane: the
@@ -20,9 +20,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
-import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings-ns'
+import { copyForMutation, registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
 /** The settings namespace carrying the SystemOne decision budget contract. */
 export const SETTINGS_NAMESPACE = 'systemone-decisions'

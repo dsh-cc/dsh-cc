@@ -5,7 +5,7 @@
  * @module @dsh-cc/command-config/config
  */
 
-import type { SettingsDescriptor } from '@dsh-cc/settings-provider'
+import type { SettingsDescriptor } from '@dsh-cc/settings'
 
 /** A parsed `/config` update request. */
 export interface ConfigArgs {

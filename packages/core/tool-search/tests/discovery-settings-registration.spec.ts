@@ -10,8 +10,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider } from '@dsh-cc/settings-provider'
-import type { SettingsNamespace } from '@dsh-cc/settings-provider'
+import { SettingsProvider } from '@dsh-cc/settings'
+import type { SettingsNamespace } from '@dsh-cc/settings'
 import {
   DEFAULT_DISCOVERY_SETTINGS,
   SETTINGS_NAMESPACE,

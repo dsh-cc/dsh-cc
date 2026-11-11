@@ -24,40 +24,40 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "@dsh-cc/moa": "workspace:^",
     "@dsh-cc/model-aliases": "workspace:^",
-    "@dsh-cc/settings-cascade": "workspace:^",
-    "@dsh-cc/settings-ns": "workspace:^",
-    "@dsh-cc/moa": "workspace:^"
+    "@dsh-cc/settings": "workspace:^"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-skill": "link:../../../../deepseek-harness/packages/skill/skill",
+    "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
     "@dsh-cc/claude-code-agents": "workspace:^",
-    "@dsh-cc/model-aliases": "workspace:^",
-    "@deepseek-ai/dsh-commands": "link:../../../../deepseek-harness/packages/interaction/commands",
-    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
     "@dsh-cc/hook-protocol": "workspace:^",
     "@dsh-cc/mcp-client": "workspace:^",
-    "@dsh-cc/settings-provider": "workspace:^",
-    "@deepseek-ai/dsh-skill": "link:../../../../deepseek-harness/packages/skill/skill",
+    "@dsh-cc/model-aliases": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/skill-loader": "workspace:^",
-    "@deepseek-ai/dsh-subagent": "link:../../../../deepseek-harness/packages/subagent/subagent",
-    "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
-    "@deepseek-ai/dsh-home-paths": "link:../../../../deepseek-harness/packages/util/home-paths"
+    "@dsh-cc/tools": "workspace:^"
   },
   "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-commands": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-skill": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-subagent": ">=0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@dsh-cc/claude-code-agents": "workspace:^",
-    "@deepseek-ai/dsh-commands": ">=0.2.2-rc.1",
-    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
     "@dsh-cc/hook-protocol": "workspace:^",
     "@dsh-cc/mcp-client": "workspace:^",
-    "@deepseek-ai/dsh-skill": ">=0.2.2-rc.1",
+    "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/skill-loader": "workspace:^",
-    "@deepseek-ai/dsh-subagent": ">=0.2.2-rc.1",
-    "@dsh-cc/tools": "workspace:^",
-    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
-    "@deepseek-ai/dsh-home-paths": ">=0.2.2-rc.1"
+    "@dsh-cc/tools": "workspace:^"
   },
   "files": [
     "lib"
