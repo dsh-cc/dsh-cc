@@ -245,7 +245,9 @@ describe('moa acceptance judge — integration (real agent loop)', () => {
     // Ledger rows: judge verdict (acted) + routing escalate row.
     const judgeRows = await pollJsonl<{ type: string; acted: boolean; pAcceptable: number; eligible: boolean }>(rig.acceptanceLedger, 1)
     expect(judgeRows[0]).toMatchObject({ type: 'judge', acted: true, pAcceptable: 0.6, eligible: true })
-    const escalateRows = await readJsonl<{ type: string; fromTier: number; toTier: number }>(rig.routingLedger)
+    // The escalate row lands after the judge row (one ordered ledger queue),
+    // so poll for it too: the judge row alone does not mean it is on disk.
+    const escalateRows = await pollJsonl<{ type: string; fromTier: number; toTier: number }>(rig.routingLedger, 1)
     expect(escalateRows[0]).toMatchObject({ type: 'escalate', fromTier: 1, toTier: 2 })
   }, 30_000)
 
