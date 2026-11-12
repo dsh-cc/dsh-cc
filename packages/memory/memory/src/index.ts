@@ -19,6 +19,7 @@ import { resolveMemoryHome } from './paths.ts'
 import { MemorySection } from './section.ts'
 import { MemoryRecall, SubagentMemorySelector } from './recall.ts'
 import { registerRecallDecisionSettings } from './recall-decision-settings.ts'
+import { registerMemorySectionSettings } from './section-settings.ts'
 import type { RecallDecisionBinding, SystemOneDecisionsLike } from './recall-coordinator-support.ts'
 import { registerMemorySaveTool } from './save.ts'
 
@@ -51,7 +52,21 @@ export {
 } from './title-sidecar.ts'
 export type { TitleSidecarOptions } from './title-sidecar.ts'
 export { MemorySection, renderMemorySection, renderTeamMemorySection, renderLayers, saveGuidance, MEMORY_SECTION_NAME, MEMORY_SECTION_ORDER } from './section.ts'
-export type { MemoryLayer } from './section.ts'
+export type { CombinedIndexBudget, MemoryLayer } from './section.ts'
+export {
+  DEFAULT_MEMORY_SECTION_SETTINGS,
+  MAX_INDEX_MAX_BYTES,
+  MIN_INDEX_MAX_BYTES,
+  SETTINGS_NAMESPACE as MEMORY_SECTION_SETTINGS_NAMESPACE,
+  memorySectionSettings,
+  registerMemorySectionSettings,
+  validateMemorySectionSettings,
+} from './section-settings.ts'
+export type {
+  MemorySectionSettings,
+  MemorySectionSettingsReader,
+  MemorySectionSettingsSection,
+} from './section-settings.ts'
 export { MemoryRecall, SubagentMemorySelector, MAX_RECALL_MEMORIES, RECALL_FILES_SCHEMA } from './recall.ts'
 export type { MemorySelector, RecallCandidate } from './recall.ts'
 export { INJECTED_SOURCE_DENYLIST, resolveRecallTurn } from './recall-query.ts'
@@ -215,6 +230,9 @@ export function apply(ctx: Context, config: Config = {}): void {
   if (config.sectionEnabled ?? true) {
     const section = new MemorySection(ctx, home, {
       teamEnabled: config.teamEnabled === true,
+      // Live reader for the combined-index budget: consulted per render, so a
+      // settings write reaches the next assembly without a remount.
+      readSettings: registerMemorySectionSettings(ctx),
     })
     section.start()
     // The save channel: memory directories sit outside every session's

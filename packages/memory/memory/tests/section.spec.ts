@@ -1,10 +1,21 @@
+import { Buffer } from 'node:buffer'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { scanMemoryDirectory } from '../src/scan.ts'
 import { MemorySection, renderMemorySection, MEMORY_SECTION_NAME } from '../src/section.ts'
+import { MIN_INDEX_MAX_BYTES } from '../src/section-settings.ts'
+import type { MemorySectionSettings } from '../src/section-settings.ts'
 import { FakeMemoryFs } from './helpers.ts'
+
+/** UTF-8 bytes of the combined-index block inside a rendered section text. */
+function indexBlockBytes(text: string): number {
+  const start = text.indexOf('## Memory index')
+  const end = text.indexOf('## Searching past context')
+  const block = start === -1 ? '' : text.slice(start, end === -1 ? undefined : end)
+  return Buffer.byteLength(block, 'utf8')
+}
 
 async function mountedFs(): Promise<{ fs: FakeMemoryFs }> {
   const ctx = new Context()
@@ -233,14 +244,14 @@ describe('MemorySection (assemble waterfall readiness)', () => {
   const agentAt = (cwd: string, delegationDepth = 0): Agent =>
     ({ session: { header: { cwd, delegationDepth } }, options: {} }) as unknown as Agent
 
-  async function setupReal() {
+  async function setupReal(readSettings?: () => MemorySectionSettings | undefined) {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(FakeMemoryFs)
     const fs = ctx.fs as unknown as FakeMemoryFs
     const changes = vi.fn()
     ctx.on('system-prompt/change' as never, changes)
-    const section = new MemorySection(ctx, '/mem')
+    const section = new MemorySection(ctx, '/mem', readSettings === undefined ? {} : { readSettings })
     const textOf = async (agent?: Agent): Promise<string> => {
       const assembly = await ctx.systemPrompt.assemble(agent === undefined ? {} : { scope: agent })
       return assembly.sections.find(section => section.name === MEMORY_SECTION_NAME)?.text ?? ''
@@ -294,6 +305,21 @@ describe('MemorySection (assemble waterfall readiness)', () => {
     const count = changes.mock.calls.length
     await textOf(agentAt('/work/repo-a'))
     expect(changes.mock.calls.length).toBe(count)
+    await ctx.fiber.dispose()
+  })
+
+  it('applies the live index budget on the first-assembly readiness re-render', async () => {
+    const { ctx, fs, textOf, start } = await setupReal(() => ({ truncate: true, maxBytes: MIN_INDEX_MAX_BYTES }))
+    for (let i = 0; i < 12; i += 1) {
+      const filename = `topic_${String(i).padStart(2, '0')}.md`
+      fs.seed(`/mem/${filename}`, `---\nname: topic ${i}\ndescription: ${'d'.repeat(120)}\ntype: user\n---\nbody\n`)
+    }
+    start()
+    // The readiness path re-renders through the same `render()`; the cap must
+    // already hold on that first assembly, not only on later ones.
+    const text = await textOf(agentAt('/work/repo-a'))
+    expect(text).toContain('grep the memory directory for older entries')
+    expect(indexBlockBytes(text)).toBeLessThanOrEqual(MIN_INDEX_MAX_BYTES)
     await ctx.fiber.dispose()
   })
 })
