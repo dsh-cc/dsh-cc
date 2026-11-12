@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 1,
+  "description": "Offline replay corpus for S1-06 advisory skill recommendation. Synthetic and redaction-safe: no real paths, credentials, or model identifiers. Each case carries the catalog the consumer would see (`skills`), the human target set (`expected`), and a `rationale` naming the coverage category the case exists for. `modelInvocable: false` marks a user-invocable-only or model-invocation-forbidden skill: it must never enter the recommendation pool. `withheld` names skills the catalog does not expose at all (paths condition unmet, plugin not loaded, another scope), so they must never be judged or recommended. `scores` overrides the replay scorer's defaults (expected names are scored relevance 4 / prerequisites 1, every other name 0 / 0) so a case can demonstrate the relevance and prerequisite thresholds rather than only relevance.",
+  "cases": [
+    {
+      "id": "complementary-article-pipeline",
+      "rationale": "complementary",
+      "task": "Write a technical article about the port closure, then review its structure without rewriting the body.",
+      "skills": [
+        {
+          "name": "article-writing",
+          "description": "Plan an argument, draft the sections, and revise the structure of an article.",
+          "whenToUse": "A new article, or a structural rewrite of an existing draft.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "article-review",
+          "description": "Report structure, logic, and prose findings without changing the body.",
+          "whenToUse": "A finished draft needs a review, not an edit.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "language-editing",
+          "description": "Improve clarity, concision, and style with local edits.",
+          "whenToUse": "Sentence-level polish of an existing text.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "writing-workflow",
+          "description": "Shared run protocol, schemas, and profiles for the writing skills.",
+          "whenToUse": "Supporting skill; it is never a task entry point.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "image-resizer",
+          "description": "Resize images to target dimensions.",
+          "source": "builtin",
+          "modelInvocable": true
+        }
+      ],
+      "expected": ["article-review", "article-writing"],
+      "notes": "Two complementary skills for one task; the review is not a substitute for the draft. Both score equally, so the documented tie-break orders them by name ascending."
+    },
+    {
+      "id": "complementary-cap-truncation",
+      "rationale": "complementary",
+      "task": "Add a JSON endpoint to the billing service, cover it with interface tests, and document the new fields for the client team.",
+      "skills": [
+        {
+          "name": "api-designer",
+          "description": "Design an endpoint contract: paths, payloads, error shapes.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "code-writer",
+          "description": "Generate predictable code using an existing reference file.",
+          "whenToUse": "Implementation with a mandatory reference.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "doc-writer",
+          "description": "Write reference documentation for a completed interface.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "test-writer",
+          "description": "Write interface-level tests for an existing module.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "image-resizer",
+          "description": "Resize images to target dimensions.",
+          "source": "builtin",
+          "modelInvocable": true
+        }
+      ],
+      "scores": {
+        "api-designer": { "relevance": 3.6, "prerequisites": 1 },
+        "code-writer": { "relevance": 4, "prerequisites": 1 },
+        "doc-writer": { "relevance": 3.4, "prerequisites": 1 },
+        "test-writer": { "relevance": 3.9, "prerequisites": 1 }
+      },
+      "expected": ["code-writer", "test-writer", "api-designer"],
+      "notes": "Four skills clear both thresholds; max-recommendations keeps the three highest in relevance order and truncates doc-writer, which stays in the catalog."
+    },
+    {
+      "id": "chinese-citation-list",
+      "rationale": "chinese-synonym",
+      "task": "把这篇文章引用的文献整理成一份带年份和出处的清单",
+      "skills": [
+        {
+          "name": "citation-collector",
+          "description": "List the works a paper cites, with venue and year.",
+          "whenToUse": "A bibliography must be assembled from a text.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "doc-search",
+          "description": "Full-text search across local documentation.",
+          "source": "builtin",
+          "modelInvocable": true
+        },
+        {
+          "name": "csv-summarizer",
+          "description": "Average and group the numeric columns of a delimited file.",
+          "source": "builtin",
+          "modelInvocable": true
+        },
+        {
+          "name": "image-resizer",
+          "description": "Resize images to target dimensions.",
+          "source": "builtin",
+          "modelInvocable": true
+        }
+      ],
+      "expected": ["citation-collector"],
+      "notes": "The task carries no ASCII letters, so no candidate shares a literal token with it; the whole pool is still judged."
+    },
+    {
+      "id": "chinese-bulk-rename",
+      "rationale": "chinese-synonym",
+      "task": "把这几个文件里的旧函数名批量改掉",
+      "skills": [
+        {
+          "name": "bulk-renamer",
+          "description": "Rewrite an identifier across many files under the project root.",
+          "whenToUse": "A rename that touches more than one file.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "log-reader",
+          "description": "Read application logs and filter by level or time.",
+          "source": "builtin",
+          "modelInvocable": true
+        },
+        {
+          "name": "doc-search",
+          "description": "Full-text search across local documentation.",
+          "source": "builtin",
+          "modelInvocable": true
+        }
+      ],
+      "expected": ["bulk-renamer"],
+      "notes": "Editing intent phrased in Chinese against English metadata with zero overlap."
+    },
+    {
+      "id": "chinese-paraphrase-migration",
+      "rationale": "chinese-synonym",
+      "task": "先规划迁移步骤，再补一份可以照着做的回滚说明",
+      "skills": [
+        {
+          "name": "migration-planner",
+          "description": "Plan the steps of a schema migration before any change lands.",
+          "whenToUse": "A migration with more than one irreversible step.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "rollback-writer",
+          "description": "Write the procedure that restores the previous state.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "code-review",
+          "description": "Report defects in a diff before it merges.",
+          "source": "plugin",
+          "modelInvocable": true
+        }
+      ],
+      "expected": ["migration-planner", "rollback-writer"],
+      "notes": "Two complementary skills requested in one Chinese paraphrase; no literal token is shared with either description."
+    },
+    {
+      "id": "missing-prerequisite-reference",
+      "rationale": "missing-prerequisites",
+      "task": "Write interface tests for the existing controller.",
+      "skills": [
+        {
+          "name": "code-writer",
+          "description": "Generate predictable code using an existing reference file.",
+          "whenToUse": "Tests and stubs with a mandatory reference.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "test-writer",
+          "description": "Write interface-level tests for an existing module.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "image-resizer",
+          "description": "Resize images to target dimensions.",
+          "source": "builtin",
+          "modelInvocable": true
+        }
+      ],
+      "scores": {
+        "code-writer": { "relevance": 3.7, "prerequisites": 0.1 }
+      },
+      "expected": [],
+      "notes": "code-writer clears the relevance threshold, but the task names no reference file, so prerequisites fail and nothing is recommended."
+    },
+    {
+      "id": "missing-prerequisite-approved-plan",
+      "rationale": "missing-prerequisites",
+      "task": "Refactor the billing module while keeping behaviour identical.",
+      "skills": [
+        {
+          "name": "migration-planner",
+          "description": "Apply a migration only after its plan is approved and linked.",
+          "whenToUse": "A refactor that needs an approved plan first.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "code-review",
+          "description": "Report defects in a diff before it merges.",
+          "source": "plugin",
+          "modelInvocable": true
+        }
+      ],
+      "scores": {
+        "migration-planner": { "relevance": 3.3, "prerequisites": 0.2 },
+        "code-review": { "relevance": 2.4, "prerequisites": 1 }
+      },
+      "expected": [],
+      "notes": "One candidate fails prerequisites with acceptable relevance, the other fails relevance; an empty recommendation is a valid outcome."
+    },
+    {
+      "id": "explicit-skill-named-in-task",
+      "rationale": "explicit-skill",
+      "task": "Use article-review to report findings on docs/draft.md; do not rewrite it.",
+      "skills": [
+        {
+          "name": "article-review",
+          "description": "Report structure, logic, and prose findings without changing the body.",
+          "whenToUse": "A finished draft needs a review, not an edit.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "article-writing",
+          "description": "Plan an argument, draft the sections, and revise the structure of an article.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "language-editing",
+          "description": "Improve clarity, concision, and style with local edits.",
+          "source": "plugin",
+          "modelInvocable": true
+        }
+      ],
+      "expected": ["article-review"],
+      "notes": "The named skill is invoked through the normal skill tool; the recommendation agrees here but grants no invocation eligibility."
+    },
+    {
+      "id": "explicit-skill-not-hidden",
+      "rationale": "explicit-skill",
+      "task": "Use language-editing on this paragraph; leave the overall structure alone.",
+      "skills": [
+        {
+          "name": "article-writing",
+          "description": "Plan an argument, draft the sections, and revise the structure of an article.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "language-editing",
+          "description": "Improve clarity, concision, and style with local edits.",
+          "source": "plugin",
+          "modelInvocable": true
+        }
+      ],
+      "scores": {
+        "article-writing": { "relevance": 3.8, "prerequisites": 1 },
+        "language-editing": { "relevance": 3.2, "prerequisites": 1 }
+      },
+      "expected": ["article-writing", "language-editing"],
+      "notes": "The explicitly named skill is neither hidden nor dropped: both judged skills clear the thresholds and are returned in relevance order."
+    },
+    {
+      "id": "mandatory-rule-keeps-other-skill",
+      "rationale": "mandatory-skill",
+      "task": "Follow the release rule: release notes must be updated before the cut. Also draft the changelog entry for the new flag.",
+      "skills": [
+        {
+          "name": "release-notes",
+          "description": "Maintain the release notes file, one bullet per merged change.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "changelog-writer",
+          "description": "Draft a changelog entry for one user-visible change.",
+          "whenToUse": "A single behavioural change needs a user-facing sentence.",
+          "source": "plugin",
+          "modelInvocable": true
+        }
+      ],
+      "mandated": ["release-notes"],
+      "scores": {
+        "changelog-writer": { "relevance": 3.9, "prerequisites": 1 },
+        "release-notes": { "relevance": 2.6, "prerequisites": 1 }
+      },
+      "expected": ["changelog-writer"],
+      "notes": "The mandatory rule stands outside the recommendation: the mandated skill keeps its visibility, body, and invocation eligibility even though the judgment names only the other skill."
+    },
+    {
+      "id": "paths-gated-untouched",
+      "rationale": "paths-gated",
+      "task": "Fix the slow dashboard query so the list view returns in under a second.",
+      "skills": [
+        {
+          "name": "sql-optimizer",
+          "description": "Rewrite a slow query plan and add the missing index.",
+          "whenToUse": "A query that is measurably too slow.",
+          "source": "plugin",
+          "modelInvocable": true
+        },
+        {
+          "name": "log-reader",
+          "description": "Read application logs and filter by level or time.",
+          "source": "builtin",
+          "modelInvocable": true
+        }
+      ],
+      "withheld": [
+        { "name": "perf-profile", "reason": "paths-not-triggered" }
+      ],
+      "expected": ["sql-optimizer"],
+      "notes": "perf-profile is gated on paths this task never touches, so the catalog excludes it before the pool is built and it is never judged."
+    },
+    {
+      "id": "user-invocable-only-skill",
+      "rationale": "user-invocable-only",
+      "task": "Cut the release build and publish the artifacts.",
+      "skills": [
+        {
+          "name": "release-runbook",
+          "description": "Run the release checklist end to end.",
+          "whenToUse": "User-invoked as /release-runbook only.",
+          "source": "plugin",
+          "modelInvocable": false
+        },
+        {
+          "name": "release-notes",
+          "description": "Maintain the release notes file, one bullet per merged change.",
+          "source": "plugin",
+          "modelInvocable": true
+        }
+      ],
+      "forbidden": ["release-runbook"],
+      "scores": {
+        "release-notes": { "relevance": 3.5, "prerequisites": 0.9 }
+      },
+      "expected": ["release-notes"],
+      "notes": "The user-invocable-only skill never enters the model pool; the model-invocable skill is judged normally."
+    },
+    {
+      "id": "model-invocation-forbidden",
+      "rationale": "model-invocation-forbidden",
+      "task": "Deploy the service to production once the pre-deployment checklist passes.",
+      "skills": [
+        {
+          "name": "deploy-production",
+          "description": "Apply the production deployment.",
+          "whenToUse": "Disable-model-invocation: it runs only when the user asks for it.",
+          "source": "plugin",
+          "modelInvocable": false
+        },
+        {
+          "name": "deploy-checklist",
+          "description": "Walk the pre-deployment checklist and record each item.",
+          "source": "plugin",
+          "modelInvocable": true
+        }
+      ],
+      "forbidden": ["deploy-production"],
+      "scores": {
+        "deploy-checklist": { "relevance": 3.7, "prerequisites": 1 }
+      },
+      "expected": ["deploy-checklist"],
+      "notes": "A skill that forbids model invocation is excluded from the pool exactly like a user-invocable-only one; the model-invocable checklist skill is recommended."
+    }
+  ]
+}

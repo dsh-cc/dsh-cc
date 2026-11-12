@@ -1,6 +1,6 @@
 # S1-06: Add a task-based recommendation consumer outside the skill provider
 
-**Status: proposed, not implemented. Priority: P3.** This document defines the implementation boundaries and acceptance method for a separate plugin.
+**Status: implemented in `packages/skill/skill-recommender` (read-only `recommend_skill` tool; mode defaults to off and the plugin is not in the default preset). Priority: P3.** This document defines the implementation boundaries and acceptance method for a separate plugin.
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 **Dependencies:** [Overview](2026-11-02-systemone-00-overview.md), [Answer contract validation](2026-11-02-systemone-01-contract-validation.md), [Decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). Recommendation does not depend on S1-05 and can ship on its own.
 
