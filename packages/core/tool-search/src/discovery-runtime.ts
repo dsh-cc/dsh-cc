@@ -178,13 +178,10 @@ interface TransactionSnapshot<S> {
 }
 
 /**
- * Why a judgment was abandoned mid-flight. Thrown inside the cache factory so
- * the rejection discards the run — a failed or abandoned run stores nothing —
- * and the reason survives to the caller (§ "Lifecycle, cache, and failure
- * handling").
+ * Why a judgment was abandoned mid-flight: thrown inside the cache factory so
+ * the rejection discards the run, and the reason survives to the caller.
  */
 class DiscoveryFallbackSignal extends Error {
-  /** Explicit assignment, not a parameter property: keeps the module loadable by Node's strip-only TypeScript mode (the eval script imports it directly). */
   readonly reason: Exclude<DiscoveryFallbackReason, 'off' | 'exact' | 'shadow' | 'invalid'>
   constructor(reason: Exclude<DiscoveryFallbackReason, 'off' | 'exact' | 'shadow' | 'invalid'>) {
     super(`tool-discovery: ${reason}`)

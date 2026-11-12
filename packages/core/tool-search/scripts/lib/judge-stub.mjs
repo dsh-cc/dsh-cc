@@ -25,9 +25,18 @@
  * 3. Weight the overlap by where it lands — name 3, search hint 2, description
  *    1 — and normalize against the query's own content size, capped at three
  *    content words so a long Chinese query (whose bigrams inflate the count) is
- *    not unfairly diluted.
+ *    not unfairly diluted. The name/hint weighting is also what discounts a
+ *    keyword-stuffed description: text alone cannot activate a tool whose name
+ *    and hint carry none of the query's vocabulary.
  * 4. Map coverage to a relevance index 0..4 and name/hint evidence to a
  *    direct-fit `noul` through fixed thresholds.
+ *
+ * Tuning history (corpus growth, `corpusVersion` 2): the concept table grew from
+ * ~24 to 46 generic capability groups (scheduling, branches, backups, deploys,
+ * charts, permissions, migrations, audio, …) so a growing catalog stays
+ * reachable, and the relevance mass became an exact binary split (see
+ * {@link massFor}) so an interior index is not lost to floating-point drift.
+ * No rule reads a corpus name, id, or label.
  *
  * The answer envelope is byte-compatible with the oracle's `answersFor`:
  * `<id>_relevance` is a `score` answer carrying the full 0..4 mass (so the
@@ -54,10 +63,15 @@ const STOPWORDS = new Set([
 ])
 
 /**
- * Hand-authored concept groups (~24): one line per everyday capability. A group
+ * Hand-authored concept groups (46): one line per everyday capability. A group
  * fires when ANY member is present — a Chinese substring in the text, or an
  * ASCII member among the text's tokens — and then contributes every other
  * member, which is how 查找 reaches `search` and `weather` reaches 天气.
+ *
+ * The table is generic on purpose: one row per capability concept of an
+ * everyday tool catalog (search, files, versions, build, deploy, data, …), never
+ * a per-case row and never a tool name from the corpus. Growing it is how the
+ * judge follows a corpus that grows; it is not how a single case is passed.
  */
 const SYNONYM_GROUPS = [
   ['search', 'find', 'lookup', 'query', '查找', '搜索'],
@@ -84,6 +98,28 @@ const SYNONYM_GROUPS = [
   ['commit', 'commits', 'revision', 'revisions', 'diff', '提交', '修订'],
   ['summary', 'summarize', 'digest', 'condense', '摘要', '总结'],
   ['benefit', 'review', 'audit', 'auditor', '审计', '评审'],
+  ['schedule', 'agenda', 'calendar', '日程', '日历'],
+  ['branch', 'fork', '分支'],
+  ['sync', 'synchronize', 'merge', '同步', '合并'],
+  ['backup', 'snapshot', '备份', '快照'],
+  ['archive', '归档', '存档'],
+  ['deploy', 'deployment', 'rollout', '部署'],
+  ['screenshot', 'screenshots', '截图', '截屏'],
+  ['chart', 'plot', 'graph', '图表'],
+  ['report', '报表', '报告'],
+  ['permission', 'permissions', 'access', '权限'],
+  ['dependency', 'dependencies', 'deps', '依赖'],
+  ['migration', 'migrations', 'migrate', 'schema', '迁移'],
+  ['cache', 'cached', '缓存'],
+  ['retry', 'retries', '重试'],
+  ['compress', 'zip', '压缩'],
+  ['incident', 'outage', 'triage', '故障', '事故'],
+  ['latency', 'slowness', 'slow', '延迟', '变慢'],
+  ['metric', 'metrics', 'telemetry', '指标', '监控'],
+  ['notification', 'notify', 'alert', '通知', '告警'],
+  ['customer', 'user', 'users', '客户'],
+  ['payment', 'refund', 'billing', 'refunds', '支付', '退款'],
+  ['audio', 'recording', 'recordings', 'transcript', 'transcripts', '录音', '音频'],
 ]
 
 /** Group membership test for one table member. */
@@ -147,17 +183,28 @@ function hitsOf(signature, tokens) {
 }
 
 /**
- * The frozen 0..4 mass for one relevance index: most mass on the index, the
- * rest split between its neighbours, so `expectedScore` returns exactly `index`
- * (endpoints land at 0.15 and 3.85).
+ * The frozen 0..4 mass for one relevance index: three quarters on the index and
+ * the rest split between its neighbours, so `expectedScore` returns exactly
+ * `index`. Endpoints carry all their mass on the endpoint itself.
+ *
+ * Every mass is a binary fraction (0.75, 0.125, 1) on purpose: the arithmetic
+ * that weights them is then exact, so an interior index does not drift to
+ * 2.9999999999999996 and get rejected by the production `min-relevance-index`
+ * comparison (`>= 3`). A stub that misreports its own index would understate the
+ * judge and make every "direct" judgment look like a miss.
+ *
  * @param index - the chosen relevance index.
  * @returns the probability map keyed by the stringified index.
  */
 function massFor(index) {
   const probabilities = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 }
-  probabilities[index] += 0.7
-  probabilities[index > 0 ? index - 1 : index + 1] += 0.15
-  probabilities[index < 4 ? index + 1 : index - 1] += 0.15
+  if (index === 0 || index === 4) {
+    probabilities[index] = 1
+    return probabilities
+  }
+  probabilities[index] = 0.75
+  probabilities[index - 1] = 0.125
+  probabilities[index + 1] = 0.125
   return probabilities
 }
 

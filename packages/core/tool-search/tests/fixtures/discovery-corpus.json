@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "corpusVersion": 1,
+  "corpusVersion": 2,
   "description": "Offline evaluation corpus for S1-05 semantic tool discovery. Synthetic and redaction-safe: no real paths, credentials, or model identifiers. `class` is the gating dimension (a case may declare `alsoClasses` membership); `subset` stays a legacy filter. Bump `corpusVersion` whenever the cases change. The human target set per case is `expectedNames`; `admitted: false` on a candidate means the scope's permission gate denies it, so it must never be admitted to the pool or activated.",
   "cases": [
     {
@@ -300,6 +300,1132 @@
       ],
       "expectedNames": [],
       "notes": "The only relevant tool is denied, so the admissible target set is empty and a denial leak is a hard failure."
+    },
+    {
+      "id": "df-migration-plan",
+      "subset": "synonym",
+      "class": "direct-fit",
+      "query": "apply the pending database migrations",
+      "candidates": [
+        { "name": "migration_runner", "description": "Apply pending schema migrations to a database.", "searchHint": "migrate schema database", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "json_patcher", "description": "Apply a JSON patch document to a JSON file.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["migration_runner"],
+      "notes": "Migration intent phrased without the tool verb."
+    },
+    {
+      "id": "df-zh-backup-dir",
+      "subset": "chinese",
+      "class": "direct-fit",
+      "query": "把这个目录备份到远程快照",
+      "candidates": [
+        { "name": "dir_backup", "description": "Copy a directory tree to a backup target and restore it.", "searchHint": "backup snapshot directory restore", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["dir_backup"],
+      "notes": "Backup intent in Chinese; every candidate scores zero lexically."
+    },
+    {
+      "id": "df-zh-deploy-cluster",
+      "subset": "chinese",
+      "class": "direct-fit",
+      "query": "把新版本部署到测试集群",
+      "candidates": [
+        { "name": "deploy_runner", "description": "Roll out a build to a target cluster and wait for readiness.", "searchHint": "deploy rollout cluster", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "cluster_status", "description": "Report the health of cluster nodes and pods.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["deploy_runner"],
+      "notes": "Deployment intent in Chinese; the cluster reader is adjacent but only reports health."
+    },
+    {
+      "id": "df-latency-chart",
+      "subset": "synonym",
+      "class": "direct-fit",
+      "query": "plot the request latency per endpoint",
+      "candidates": [
+        { "name": "chart_renderer", "description": "Draw a line chart from a series of numbers.", "searchHint": "chart plot series", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["chart_renderer"],
+      "notes": "Charting intent; the summarizer works on columns, not series."
+    },
+    {
+      "id": "df-endpoint-probe",
+      "subset": "synonym",
+      "class": "direct-fit",
+      "query": "probe the docs endpoint for a healthy status",
+      "candidates": [
+        { "name": "endpoint_probe", "description": "Send one request to an endpoint and report the status code.", "searchHint": "probe endpoint status", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "test_runner", "description": "Run the unit test suite for a project and report failures.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["endpoint_probe"],
+      "notes": "Health-probe paraphrase; the test runner needs a suite."
+    },
+    {
+      "id": "df-zh-revert-commit",
+      "subset": "chinese",
+      "class": "direct-fit",
+      "query": "把这个提交回滚掉",
+      "candidates": [
+        { "name": "commit_reverter", "description": "Revert a commit by applying its inverse patch.", "searchHint": "revert commit patch", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "git_blame_view", "description": "Show which commit last touched each line of a file.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["commit_reverter"],
+      "notes": "Revert intent in Chinese; the blame view only reads history."
+    },
+    {
+      "id": "df-review-calendar",
+      "subset": "synonym",
+      "class": "direct-fit",
+      "query": "put the design review on the team calendar",
+      "candidates": [
+        { "name": "review_scheduler", "description": "Book a review slot onto a shared team calendar.", "searchHint": "schedule review calendar", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 },
+        { "name": "screenshot_grabber", "description": "Capture a rendered page to an image.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["review_scheduler"],
+      "notes": "Scheduling intent for a review, not a review of anything."
+    },
+    {
+      "id": "df-zh-archive-logs",
+      "subset": "chinese",
+      "class": "direct-fit",
+      "query": "把这批旧日志归档保存",
+      "candidates": [
+        { "name": "log_archiver", "description": "Move old log files into an archive and list what was stored.", "searchHint": "archive logs retention", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["log_archiver"],
+      "notes": "Archival intent in Chinese; nothing asks for log reading."
+    },
+    {
+      "id": "df-file-format",
+      "subset": "synonym",
+      "class": "direct-fit",
+      "query": "format every file to the house style",
+      "candidates": [
+        { "name": "file_formatter", "description": "Reformat source files to the house style.", "searchHint": "format style source", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["file_formatter"],
+      "notes": "Formatting intent; the linter only reports violations."
+    },
+    {
+      "id": "df-zh-metric-report",
+      "subset": "chinese",
+      "class": "direct-fit",
+      "query": "把上周的监控指标汇总成一份报告",
+      "candidates": [
+        { "name": "metric_report", "description": "Aggregate metric samples into a periodic report.", "searchHint": "metric report aggregate", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["metric_report"],
+      "notes": "Reporting intent in Chinese; the summarizer only handles columns."
+    },
+    {
+      "id": "df-zh-screenshot-page",
+      "subset": "chinese",
+      "class": "direct-fit",
+      "query": "帮我给首页截个图",
+      "candidates": [
+        { "name": "screenshot_grabber", "description": "Capture a rendered page to an image.", "searchHint": "screenshot page capture", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "pdf_extractor", "description": "Extract headings, captions, and tables from a PDF.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["screenshot_grabber"],
+      "notes": "Screen capture in Chinese; the resizer needs an existing image."
+    },
+    {
+      "id": "df-zh-branch-merge",
+      "subset": "chinese",
+      "class": "direct-fit",
+      "query": "把这个分支合并到主分支上",
+      "candidates": [
+        { "name": "branch_merger", "description": "Merge one branch into another and report conflicts.", "searchHint": "merge branch conflicts", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["branch_merger"],
+      "notes": "Merge intent in Chinese; no other candidate touches branches."
+    },
+    {
+      "id": "lt-lint-noise",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "silence the noisy lint warnings in the build",
+      "candidates": [
+        { "name": "lint_suppressor", "description": "Silence selected lint warnings for a package build.", "searchHint": "suppress lint warnings build", "lexicalScore": 0 },
+        { "name": "build_cache", "description": "Warm the compiler cache so a cold start is shorter.", "lexicalScore": 7 },
+        { "name": "style_linter", "description": "Report style violations in source files.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["lint_suppressor"],
+      "notes": "The cache warmer and the linter both carry build vocabulary but neither can silence a warning."
+    },
+    {
+      "id": "lt-announce-window",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "schedule the announcement window",
+      "candidates": [
+        { "name": "announcement_scheduler", "description": "Schedule an announcement post for a chosen window.", "searchHint": "schedule announcement window", "lexicalScore": 0 },
+        { "name": "changelog_writer", "description": "Turn commit subjects between two tags into a release changelog.", "lexicalScore": 8 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["announcement_scheduler"],
+      "notes": "The changelog tool mentions releases and windows but writes no announcement."
+    },
+    {
+      "id": "lt-volume-bench",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "trim the storage growth on the data volume",
+      "candidates": [
+        { "name": "storage_reclaimer", "description": "Free space on the volume by deleting stale artifacts.", "searchHint": "reclaim disk space", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite on the volume and compare numbers to a baseline.", "lexicalScore": 6 },
+        { "name": "artifact_pruner", "description": "Delete build artifacts older than a retention window.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["storage_reclaimer"],
+      "notes": "Two distractors share the volume noun; neither frees space."
+    },
+    {
+      "id": "lt-token-count",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "count the tokens in the prompt template",
+      "candidates": [
+        { "name": "token_counter", "description": "Count the tokens of a text for cost estimation.", "searchHint": "count tokens text", "lexicalScore": 0 },
+        { "name": "row_count", "description": "Report the number of records a query returns.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["token_counter"],
+      "notes": "The row counter shares the counting verb but counts records, not tokens."
+    },
+    {
+      "id": "lt-redact-payload",
+      "subset": "restricted",
+      "class": "lexical-trap",
+      "query": "redact the api keys in the captured payload",
+      "candidates": [
+        { "name": "secret_redactor", "description": "Replace secret-looking literals with placeholders before sharing.", "searchHint": "redact secrets mask credentials", "lexicalScore": 0 },
+        { "name": "payload_inspector", "description": "Print the body of an intercepted request for debugging.", "lexicalScore": 7 },
+        { "name": "incident_secrets_dump", "description": "Dump process environment including credentials for incident triage.", "lexicalScore": 9, "admitted": false },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["secret_redactor"],
+      "notes": "The scope denies the credential dump; the inspector prints the payload but cannot mask it."
+    },
+    {
+      "id": "lt-response-stub",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "replace the network calls with recorded responses",
+      "candidates": [
+        { "name": "response_stubber", "description": "Serve a recorded response instead of a network call.", "searchHint": "stub recorded response network", "lexicalScore": 0 },
+        { "name": "site_crawler", "description": "Walk every page of a site and record each network call.", "lexicalScore": 7 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["response_stubber"],
+      "notes": "The crawler records traffic; replacing a call is a different capability."
+    },
+    {
+      "id": "lt-permission-probe",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "check the permissions on the release bucket",
+      "candidates": [
+        { "name": "permission_probe", "description": "Report the access policy that applies to a resource.", "searchHint": "permission access policy", "lexicalScore": 0 },
+        { "name": "bucket_lister", "description": "List the stored objects of a cloud store.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["permission_probe"],
+      "notes": "Listing a bucket says nothing about who may write to it."
+    },
+    {
+      "id": "lt-zh-report-archive",
+      "subset": "chinese",
+      "class": "lexical-trap",
+      "query": "把这份报告导出成压缩包",
+      "candidates": [
+        { "name": "report_archiver", "description": "Save a report and its attachments into one compressed file.", "searchHint": "archive report compress", "lexicalScore": 0 },
+        { "name": "weekly_digest", "description": "Summarize a week of metric samples into a report for the team.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["report_archiver"],
+      "notes": "The digest writes prose; archiving is a storage operation."
+    },
+    {
+      "id": "lt-mirror-sync",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "sync the mirror to the upstream repository",
+      "candidates": [
+        { "name": "mirror_sync", "description": "Copy objects from an upstream mirror on a schedule.", "searchHint": "sync mirror upstream", "lexicalScore": 0 },
+        { "name": "upstream_watcher", "description": "Poll a remote feed for new entries.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["mirror_sync"],
+      "notes": "Watching an upstream feed is not copying it."
+    },
+    {
+      "id": "lt-dedup-rows",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "drop duplicate rows from the customer table",
+      "candidates": [
+        { "name": "dedup_table", "description": "Remove repeated rows from a table.", "searchHint": "deduplicate rows table", "lexicalScore": 0 },
+        { "name": "record_tally", "description": "Tally how many records a query returns.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["dedup_table"],
+      "notes": "Only one candidate removes rows; the other reports a count."
+    },
+    {
+      "id": "lt-alt-text",
+      "subset": "synonym",
+      "class": "lexical-trap",
+      "query": "write alt text for each product shot",
+      "candidates": [
+        { "name": "alt_text_writer", "description": "Write alternative text for an image so a screen reader can describe it.", "searchHint": "alt text image describe", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Scale a graphic to a target width.", "lexicalScore": 7 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["alt_text_writer"],
+      "notes": "The resizer mentions sizing vocabulary; the request is descriptive text."
+    },
+    {
+      "id": "mi-bench-tag",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "run the benchmark suite and tag the result revision",
+      "candidates": [
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "searchHint": "benchmark suite run", "lexicalScore": 0 },
+        { "name": "revision_tagger", "description": "Attach a tag name to a revision in the repository.", "searchHint": "tag revision repository", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["benchmark_harness","revision_tagger"],
+      "notes": "Two independent intents: measure and label."
+    },
+    {
+      "id": "mi-test-changelog",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "run the unit tests and update the changelog",
+      "candidates": [
+        { "name": "test_runner", "description": "Run the unit test suite for a project and report failures.", "searchHint": "tests suite run", "lexicalScore": 0 },
+        { "name": "changelog_writer", "description": "Turn commit subjects between two tags into a release changelog.", "searchHint": "changelog release notes", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["test_runner","changelog_writer"],
+      "notes": "Executing tests and writing release notes are separate capabilities."
+    },
+    {
+      "id": "mi-resize-upload",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "resize the screenshots and upload them to the docs site",
+      "candidates": [
+        { "name": "screenshot_resizer", "description": "Shrink a screenshot to a smaller pixel size.", "searchHint": "resize screenshot pixels", "lexicalScore": 0 },
+        { "name": "docs_uploader", "description": "Upload a file to the documentation site.", "searchHint": "upload docs site", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["screenshot_resizer","docs_uploader"],
+      "notes": "Image work plus a publish step."
+    },
+    {
+      "id": "mi-translate-refs",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "translate the readme and update the reference list",
+      "candidates": [
+        { "name": "readme_translator", "description": "Translate paragraphs between natural languages.", "searchHint": "translate language paragraphs", "lexicalScore": 0 },
+        { "name": "reference_updater", "description": "Append a citation to the reference list of an article.", "searchHint": "citation reference article", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["readme_translator","reference_updater"],
+      "notes": "Translation and bibliography maintenance are distinct tools."
+    },
+    {
+      "id": "mi-chart-report",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "chart the hourly metrics and write a short report",
+      "candidates": [
+        { "name": "metric_chart", "description": "Draw one line per metric series.", "searchHint": "chart metric series", "lexicalScore": 0 },
+        { "name": "report_writer", "description": "Compose a short report from a few paragraphs.", "searchHint": "report prose paragraphs", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["metric_chart","report_writer"],
+      "notes": "Visualizing numbers and writing prose are two intents."
+    },
+    {
+      "id": "mi-zh-compress-archive",
+      "subset": "chinese",
+      "class": "multi-intent",
+      "query": "把日志压缩一下再归档",
+      "candidates": [
+        { "name": "log_compressor", "description": "Compress rotated log files into a single bundle.", "searchHint": "compress logs bundle", "lexicalScore": 0 },
+        { "name": "log_archiver", "description": "Move old log files into an archive and list what was stored.", "searchHint": "archive logs retention", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["log_compressor","log_archiver"],
+      "notes": "Compressing and archiving are two steps in one Chinese sentence."
+    },
+    {
+      "id": "mi-migrate-seed",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "apply the schema migration and seed the fixture rows",
+      "candidates": [
+        { "name": "migration_runner", "description": "Apply pending schema migrations to a database.", "searchHint": "migrate schema database", "lexicalScore": 0 },
+        { "name": "fixture_seeder", "description": "Load a fixed set of rows into a test database.", "searchHint": "seed fixture rows", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["migration_runner","fixture_seeder"],
+      "notes": "Schema change and fixture load are separate operations."
+    },
+    {
+      "id": "mi-restore-redeploy",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "restore the latest snapshot and redeploy the service",
+      "candidates": [
+        { "name": "snapshot_restore", "description": "Restore a machine image from a stored snapshot.", "searchHint": "restore snapshot image", "lexicalScore": 0 },
+        { "name": "deploy_runner", "description": "Roll out a build to a target service cluster and wait for readiness.", "searchHint": "deploy rollout service", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["snapshot_restore","deploy_runner"],
+      "notes": "Recovery and rollout, two intents."
+    },
+    {
+      "id": "mi-transcribe-digest",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "turn the audio recording into text and summarize it",
+      "candidates": [
+        { "name": "audio_transcriber", "description": "Convert an audio file into written text.", "searchHint": "audio transcription text", "lexicalScore": 0 },
+        { "name": "meeting_digest", "description": "Condense a meeting transcript into a short digest.", "searchHint": "summarize digest transcript", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["audio_transcriber","meeting_digest"],
+      "notes": "Transcription plus summarization."
+    },
+    {
+      "id": "mi-logs-incident",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "pull the failing request logs and annotate the incident timeline",
+      "candidates": [
+        { "name": "log_reader", "description": "Read application logs and filter by level or time.", "searchHint": "logs filter request", "lexicalScore": 0 },
+        { "name": "incident_annotator", "description": "Attach notes to an incident timeline.", "searchHint": "incident timeline notes", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["log_reader","incident_annotator"],
+      "notes": "Reading logs and annotating an incident are two capabilities."
+    },
+    {
+      "id": "mi-hips-config-map",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "audit the dependencies and bump the patch versions",
+      "candidates": [
+        { "name": "dependency_auditor", "description": "Report known vulnerabilities in declared dependencies.", "searchHint": "audit vulnerabilities dependencies", "lexicalScore": 0 },
+        { "name": "version_bumper", "description": "Raise the patch version of every package in the workspace.", "searchHint": "bump version packages", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["dependency_auditor","version_bumper"],
+      "notes": "An audit and a version bump are separate steps."
+    },
+    {
+      "id": "mi-zh-encode-sheet",
+      "subset": "chinese",
+      "class": "multi-intent",
+      "query": "把表格里的重复行去掉再生成一份图表",
+      "candidates": [
+        { "name": "dedup_table", "description": "Remove repeated rows from a table.", "searchHint": "deduplicate rows table", "lexicalScore": 0 },
+        { "name": "chart_renderer", "description": "Draw a line chart from a series of numbers.", "searchHint": "chart series numbers", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["dedup_table","chart_renderer"],
+      "notes": "Cleaning rows and charting them are two intents."
+    },
+    {
+      "id": "mi-link-fix",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "query": "resize the logo and repair the favicon link",
+      "candidates": [
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "searchHint": "resize images dimensions", "lexicalScore": 0 },
+        { "name": "link_fixer", "description": "Repair a broken hyperlink in a page template.", "searchHint": "fix link template", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["image_resizer","link_fixer"],
+      "notes": "One asset step and one template repair."
+    },
+    {
+      "id": "mi-zh-alert-silence",
+      "subset": "chinese",
+      "class": "multi-intent",
+      "query": "检查告警规则并把其中噪音太大的规则静音",
+      "candidates": [
+        { "name": "alert_rule_checker", "description": "Report which alert rules are configured and their thresholds.", "searchHint": "alert rules thresholds", "lexicalScore": 0 },
+        { "name": "alert_silencer", "description": "Mute alert rules for a maintenance window.", "searchHint": "mute alert rules", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["alert_rule_checker","alert_silencer"],
+      "notes": "Inspecting rules and muting some of them are two intents."
+    },
+    {
+      "id": "miks-pdf-chart",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "alsoClasses": ["keyword-stuffing"],
+      "query": "extract the tables from the pdf and chart the totals",
+      "candidates": [
+        { "name": "pdf_extractor", "description": "Extract headings, captions, and tables from a PDF.", "searchHint": "pdf extract tables", "lexicalScore": 0 },
+        { "name": "chart_renderer", "description": "Draw a line chart from a series of numbers.", "searchHint": "chart series totals", "lexicalScore": 0 },
+        { "name": "weekly_digest", "description": "Summarize a week of metric samples into a report. Popular for pdf tables, chart totals, extract, visualize, dashboard, export.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["pdf_extractor","chart_renderer"],
+      "notes": "Two intents plus a report tool that is stuffed with both intents’ keywords."
+    },
+    {
+      "id": "miks-redact-upload",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "alsoClasses": ["keyword-stuffing"],
+      "query": "redact the secrets from the payload and share it with docs",
+      "candidates": [
+        { "name": "secret_redactor", "description": "Replace secret-looking literals with placeholders before sharing.", "searchHint": "redact secrets placeholders", "lexicalScore": 0 },
+        { "name": "docs_uploader", "description": "Upload a file to the documentation site.", "searchHint": "upload docs site", "lexicalScore": 0 },
+        { "name": "env_inspector", "description": "Print the environment variables of a running process. Popular for secrets, redact, payload, share, docs upload, sanitize.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["secret_redactor","docs_uploader"],
+      "notes": "Redact-then-publish, with an environment printer stuffed with both vocabularies."
+    },
+    {
+      "id": "miks-backup-compress",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "alsoClasses": ["keyword-stuffing"],
+      "query": "back up the database and compress the dump",
+      "candidates": [
+        { "name": "db_backup", "description": "Copy a database to a backup target and restore it.", "searchHint": "backup database dump copy", "lexicalScore": 0 },
+        { "name": "bundle_compressor", "description": "Compress a folder into a single zip bundle.", "searchHint": "compress zip bundle", "lexicalScore": 0 },
+        { "name": "storage_reclaimer", "description": "Free space on the volume by deleting stale artifacts. Popular for database backup, compress, dump, archive, zip, retention.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["db_backup","bundle_compressor"],
+      "notes": "Backup plus compression, with a reclaimer stuffed with storage vocabulary."
+    },
+    {
+      "id": "miks-feed-table",
+      "subset": "synonym",
+      "class": "multi-intent",
+      "alsoClasses": ["keyword-stuffing"],
+      "query": "fetch the pricing feed and write it into the events table",
+      "candidates": [
+        { "name": "feed_fetcher", "description": "Fetch a remote feed and write each entry to a table.", "searchHint": "fetch feed entries table", "lexicalScore": 0 },
+        { "name": "table_writer", "description": "Insert rows into a database table.", "searchHint": "insert rows table", "lexicalScore": 0 },
+        { "name": "invoice_exporter", "description": "Write billing statements to a delimited file. Popular for pricing feed, fetch, write table, ingest, rows, export.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["feed_fetcher","table_writer"],
+      "notes": "Ingest plus insert, with a billing exporter stuffed with ingest keywords."
+    },
+    {
+      "id": "miks-zh-audio-digest",
+      "subset": "chinese",
+      "class": "multi-intent",
+      "alsoClasses": ["keyword-stuffing"],
+      "query": "把这段录音转成文字再总结一下",
+      "candidates": [
+        { "name": "audio_transcriber", "description": "Convert an audio file into written text.", "searchHint": "audio transcription text", "lexicalScore": 0 },
+        { "name": "meeting_digest", "description": "Condense a meeting transcript into a short digest.", "searchHint": "summarize digest transcript", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file. 也常用于 录音 文字 总结, transcript, digest, audio, summarize.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["audio_transcriber","meeting_digest"],
+      "notes": "Transcribe then summarize, with a column summarizer stuffed with both keywords."
+    },
+    {
+      "id": "ks-revenue-export",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "export the quarterly revenue table to csv",
+      "candidates": [
+        { "name": "table_exporter", "description": "Write a delimited file from a stored query result set.", "searchHint": "export table delimited file", "lexicalScore": 0 },
+        { "name": "ledger_totals", "description": "Tracks ledger totals. Quarterly revenue table csv export csv report quarterly finance accounting spreadsheet pivot chart dashboard export json markup.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["table_exporter"],
+      "notes": "The stuffed description repeats every query keyword but the tool only totals a ledger."
+    },
+    {
+      "id": "ks-invoice-pdf",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "generate a PDF invoice for last month",
+      "candidates": [
+        { "name": "invoice_pdf", "description": "Render an invoice as a PDF document.", "searchHint": "render invoice pdf", "lexicalScore": 0 },
+        { "name": "ledger_totals", "description": "Totals a ledger per account. Popular for pdf invoice generation, last month billing, invoice template, pdf export, invoice numbers, monthly statement.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["invoice_pdf"],
+      "notes": "Rendering a document is not what a ledger totals tool does."
+    },
+    {
+      "id": "ks-docker-space",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "reclaim disk space from old docker images",
+      "candidates": [
+        { "name": "docker_pruner", "description": "Delete unused docker images and layers.", "searchHint": "prune docker images layers", "lexicalScore": 0 },
+        { "name": "metric_rollup", "description": "Aggregate counters into hourly buckets. Handy for docker images, disk space, cleanup, image prune, cache purge, garbage collection.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["docker_pruner"],
+      "notes": "A metrics rollup cannot free a byte."
+    },
+    {
+      "id": "ks-zh-image-text",
+      "subset": "chinese",
+      "class": "keyword-stuffing",
+      "query": "把这张图片里的文字提取出来",
+      "candidates": [
+        { "name": "image_ocr", "description": "Read printed text out of a photographed page.", "searchHint": "text extraction image scanning", "lexicalScore": 0 },
+        { "name": "chart_renderer", "description": "Draw a line chart from a series of numbers. Useful for 图片 文字 提取, text extraction, image scanning, document capture, ocr pipeline.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["image_ocr"],
+      "notes": "The stuffed row repeats the Chinese keywords but only draws charts."
+    },
+    {
+      "id": "ks-css-bundle",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "bundle the css files for the static site",
+      "candidates": [
+        { "name": "css_bundler", "description": "Concatenate stylesheets into one css bundle.", "searchHint": "bundle css stylesheets", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline. Popular for css bundle, static site, minify, assets, build pipeline.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["css_bundler"],
+      "notes": "A benchmark harness is often tagged with build vocabulary it never implements."
+    },
+    {
+      "id": "ks-cron-hourly",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "create a cron job that runs every hour",
+      "candidates": [
+        { "name": "cron_writer", "description": "Write a cron entry that runs on a given schedule.", "searchHint": "cron entry runs schedule", "lexicalScore": 0 },
+        { "name": "alert_silencer", "description": "Mute alert rules for a maintenance window. Frequently paired with cron, hourly job, timer, every hour, cron expression.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["cron_writer"],
+      "notes": "Alert muting shares the scheduling vocabulary but writes no entry."
+    },
+    {
+      "id": "ks-graphql-schema",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "print the graphql schema of the gateway",
+      "candidates": [
+        { "name": "schema_printer", "description": "Print the graphql schema served by a gateway.", "searchHint": "print schema gateway", "lexicalScore": 0 },
+        { "name": "dependency_auditor", "description": "Report known vulnerabilities in declared dependencies. Also covers graphql, schema, gateway, introspection, api surface.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["schema_printer"],
+      "notes": "The auditor reads dependency manifests, not a served schema."
+    },
+    {
+      "id": "ks-tsv-compare",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "compare two tsv files row by row",
+      "candidates": [
+        { "name": "tsv_diff", "description": "Show the differing rows between two tsv files.", "searchHint": "diff rows tsv files", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file. Also handles tsv, compare, diff, row by row, delimiter, join, split.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["tsv_diff"],
+      "notes": "Grouping columns is not comparing rows."
+    },
+    {
+      "id": "ks-p90-latency",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "report the p90 latency of the checkout endpoint",
+      "candidates": [
+        { "name": "latency_report", "description": "Summarize p90 latency per endpoint.", "searchHint": "latency percentile endpoint", "lexicalScore": 0 },
+        { "name": "screenshot_grabber", "description": "Capture a rendered page to an image. Popular for latency, p90, percentile, checkout, endpoint, performance report.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["latency_report"],
+      "notes": "The screenshot tool is tagged with performance vocabulary it cannot measure."
+    },
+    {
+      "id": "ks-i18n-keys",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "extract the translation keys from the templates",
+      "candidates": [
+        { "name": "i18n_extractor", "description": "Extract translation keys from templates into a catalog.", "searchHint": "extract translation keys catalog", "lexicalScore": 0 },
+        { "name": "pdf_extractor", "description": "Extract headings, captions, and tables from a PDF. Also used for translation keys, i18n, templates, strings, locale.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["i18n_extractor"],
+      "notes": "Both names contain the extraction verb; only one reads templates."
+    },
+    {
+      "id": "ks-zh-refund",
+      "subset": "chinese",
+      "class": "keyword-stuffing",
+      "query": "给这批客户退款",
+      "candidates": [
+        { "name": "refund_writer", "description": "Record a refund against an order.", "searchHint": "refund order record", "lexicalScore": 0 },
+        { "name": "invoice_exporter", "description": "Write billing statements to a delimited file. 也常用于 退款 客户 支付 账单, refund, customer, payment export.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["refund_writer"],
+      "notes": "The billing exporter repeats the Chinese keywords but issues nothing back."
+    },
+    {
+      "id": "ks-rollback-deploy",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "roll back the last deploy to the previous build",
+      "candidates": [
+        { "name": "deploy_rollback", "description": "Revert the current deploy to the previous build.", "searchHint": "revert deploy previous build", "lexicalScore": 0 },
+        { "name": "review_router", "description": "Assign incoming pull requests to reviewers. Popular for deploy, rollback, previous build, revert, release history, canary.", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["deploy_rollback"],
+      "notes": "Routing review requests has nothing to do with a deployment history."
+    },
+    {
+      "id": "ks-csv-ingest-hint",
+      "subset": "synonym",
+      "class": "keyword-stuffing",
+      "query": "load the csv export into the events table",
+      "candidates": [
+        { "name": "csv_loader", "description": "Insert rows of a csv export into a database table.", "searchHint": "load rows table insert", "lexicalScore": 0 },
+        { "name": "vector_indexer", "description": "Embed documents into a similarity index. Popular for csv export, ingest, bulk load, table import, export pipeline.", "searchHint": "csv pipeline ingest corpus", "lexicalScore": 0 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 }
+      ],
+      "expectedNames": ["csv_loader"],
+      "notes": "One keyword in the stuffed hint: the indexer still performs no load."
+    },
+    {
+      "id": "none-pasta-recipe",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "recommend a pasta recipe for dinner",
+      "candidates": [
+        { "name": "calendar_planner", "description": "Schedule dinners onto a team calendar.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Cooking question; the calendar tool only shares a meal noun."
+    },
+    {
+      "id": "none-restaurant-table",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "book a nice restaurant for tonight",
+      "candidates": [
+        { "name": "row_count", "description": "Report the number of records a query returns.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Dining reservation; no candidate reserves anything."
+    },
+    {
+      "id": "none-banana-calories",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "how many calories are in a banana",
+      "candidates": [
+        { "name": "metric_rollup", "description": "Aggregate counters into hourly buckets.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Nutrition question; the metric rollup counts requests, not calories."
+    },
+    {
+      "id": "none-museum-hours",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "what hours is the museum open",
+      "candidates": [
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Opening hours; nothing in the catalog holds venue information."
+    },
+    {
+      "id": "none-poem-ocean",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "write a short poem about the ocean",
+      "candidates": [
+        { "name": "prose_polisher", "description": "Rewrite awkward sentences while keeping the meaning.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Creative writing; the polisher only rewrites existing prose."
+    },
+    {
+      "id": "none-capital-portugal",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "what is the capital of portugal",
+      "candidates": [
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 6 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "A factual question; the catalog only holds local documentation, which contains no gazetteer."
+    },
+    {
+      "id": "none-workout-plan",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "suggest a workout plan for the week",
+      "candidates": [
+        { "name": "test_runner", "description": "Run the unit test suite for a project and report failures.", "lexicalScore": 3 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Fitness planning; the suite runner only executes tests."
+    },
+    {
+      "id": "none-movie-friday",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "recommend a movie for friday night",
+      "candidates": [
+        { "name": "screenshot_grabber", "description": "Capture a rendered page to an image.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Entertainment recommendation; no catalog entry ranks media."
+    },
+    {
+      "id": "none-hiking-trail",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "which hiking trail is best nearby",
+      "candidates": [
+        { "name": "site_crawler", "description": "Walk every page of a site and report broken links.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "benchmark_harness", "description": "Run a benchmark suite and compare numbers to a baseline.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Outdoor advice; the crawler only walks a site."
+    },
+    {
+      "id": "none-sourdough",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "explain how sourdough starter works",
+      "candidates": [
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 2 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Explanatory cooking question; local docs hold nothing about bread."
+    },
+    {
+      "id": "none-order-flowers",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "order flowers for my mother birthday",
+      "candidates": [
+        { "name": "invoice_exporter", "description": "Write billing statements to a delimited file.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Purchasing intent; no candidate places an order with a shop."
+    },
+    {
+      "id": "none-knit-scarf",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "explain how to knit a scarf",
+      "candidates": [
+        { "name": "table_rewriter", "description": "Reshape a table: reorder, drop, or rename columns.", "lexicalScore": 3 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Craft instructions; reshaping a table is unrelated."
+    },
+    {
+      "id": "none-podcast-history",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "recommend a podcast series about history",
+      "candidates": [
+        { "name": "audio_transcriber", "description": "Convert an audio file into written text.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Media recommendation; the transcriber needs an existing recording."
+    },
+    {
+      "id": "none-birthday-party",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "plan a birthday party for ten people",
+      "candidates": [
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 5 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Event planning; the calendar only books meetings."
+    },
+    {
+      "id": "none-thanksgiving-menu",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "what should i cook for thanksgiving",
+      "candidates": [
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 3 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Cooking menu question; no recipe tool exists."
+    },
+    {
+      "id": "none-learn-spanish",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "teach me conversational spanish",
+      "candidates": [
+        { "name": "text_translator", "description": "Translate paragraphs between natural languages.", "lexicalScore": 6 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Language tutoring; the translator only converts finished text."
+    },
+    {
+      "id": "none-everest-height",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "how tall is mount everest in meters",
+      "candidates": [
+        { "name": "metric_rollup", "description": "Aggregate counters into hourly buckets.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Geographic fact; the rollup aggregates counters only."
+    },
+    {
+      "id": "none-dentist-nearby",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "recommend a dentist near the office",
+      "candidates": [
+        { "name": "codeowners_lookup", "description": "Find the team that owns a directory.", "lexicalScore": 5 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 },
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Local services recommendation; ownership metadata is not a directory of people."
+    },
+    {
+      "id": "none-traffic-bridge",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "what is the traffic like on the bridge",
+      "candidates": [
+        { "name": "trace_viewer", "description": "Show spans of one distributed trace.", "lexicalScore": 3 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Road traffic; a request trace is not a road."
+    },
+    {
+      "id": "none-cat-name",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "suggest a name for my new cat",
+      "candidates": [
+        { "name": "rename_linter", "description": "Report unused identifiers after a rename.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Naming a pet; the rename linter inspects identifiers."
+    },
+    {
+      "id": "none-wine-salmon",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "which wine goes with grilled salmon",
+      "candidates": [
+        { "name": "csv_summarizer", "description": "Average and group the numeric columns of a delimited file.", "lexicalScore": 3 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Food pairing advice; nothing in the catalog pairs flavours."
+    },
+    {
+      "id": "none-legal-contract",
+      "subset": "none",
+      "class": "negative-only",
+      "query": "estimate the legal risk of this contract",
+      "candidates": [
+        { "name": "bulk_file_editor", "description": "Rewrite identifiers across many files under the project root.", "lexicalScore": 4 },
+        { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
+        { "name": "image_resizer", "description": "Resize images to target dimensions.", "lexicalScore": 0 },
+        { "name": "calendar_planner", "description": "Schedule meetings onto a team calendar.", "lexicalScore": 0 }
+      ],
+      "expectedNames": [],
+      "notes": "Legal judgment beyond any tool; a bulk editor only rewrites text mechanically."
     }
   ]
 }
