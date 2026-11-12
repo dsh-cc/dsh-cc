@@ -35,6 +35,12 @@ exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/memory: every
 ]
 `;
 
+exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/skill-recommender: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/skill-recommender 1`] = `
+[
+  "recommend_skill",
+]
+`;
+
 exports[`CI tool-schema regression gate (design §F.2.1) > @dsh-cc/subagent-task: every mounted tool exposes a valid non-degenerate JSON Schema parameters > @dsh-cc/subagent-task 1`] = `
 [
   "release_agent",

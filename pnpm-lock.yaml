@@ -1167,6 +1167,9 @@ importers:
       '@dsh-cc/memory':
         specifier: workspace:^
         version: link:../../memory/memory
+      '@dsh-cc/skill-recommender':
+        specifier: workspace:^
+        version: link:../../skill/skill-recommender
       '@dsh-cc/tool-git-worktree':
         specifier: workspace:^
         version: link:../../workspace/tool-git-worktree
