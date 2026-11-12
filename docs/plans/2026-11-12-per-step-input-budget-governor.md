@@ -8,6 +8,15 @@ r3 → r4 fold: observe mode drops the `wouldTrim`/`wouldDefer` pseudo-fields (d
 - Depends on: doc 3 (`@dsh-cc/input-ledger` — row schemas GovernorRow/DedupeRow/CapRow live there; single schema source). Doc 7 plugs into this package's `govern()` pipeline.
 - Literature basis: Mei et al. `C* = argmax U(C) s.t. |C| ≤ L`; ContextPipe (2609.00749); Anthropic "smallest high-signal token set"; ToolMenuBench.
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: enabled (shared model with the dedupe doc — the governor hosts both stages in one listener)
+- triggerIds: FD-T2 (defer backlog re-offers are late messages affecting admission outcomes), FD-L1 (class eligibility composition with stated never-trim invariants whose violation changes effective behavior), FD-L2 (byte budgets with stated bounds, FIFO ordering, monotonic gateSeq arithmetic).
+- backends: `["tla", "lean"]`
+- modelDirs: `{"tla": "specs/tla/input-admission-governance", "lean": "specs/lean/input-admission-arithmetic"}`
+- rationale: the cross-step invariants (no-self-suppression, commit-on-admission atomicity, observe/enforce state separation, protected-class preservation) are state-machine properties; the class map and budget arithmetic are deterministic rules with stated conservation/bounds — both backends apply, and neither substitutes for the other.
+
 ## Problem
 
 Eleven-plus producers append content into the per-step message stream with no byte budget, no arbitration, and no cross-producer visibility (`memory` recall bodies with no byte cap at `memory/src/recall.ts:410`, cc-shell glue notices, retry-attendant guidance, advisor severity notes, subagent lifecycle notices, MCP-ready notice, progress briefs, hook additionalContext). The only existing cap is a per-kind **count** inside one producer (`turn-rules` `MAX_INJECTIONS = 32`, `turn-rules/src/wiring.ts:26`).

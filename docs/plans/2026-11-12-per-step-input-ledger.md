@@ -6,6 +6,14 @@
 - Depends on: nothing (substrate). Docs 1 and 7 define *their* row payload shapes here by reference (single schema source, per review finding).
 - Literature basis: Four-condition evidence-utilization protocol; interaction-budget auditing of context compression (arxiv 2608.16370); "Context Is a Pipeline" (2610.36114).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: not-needed
+- triggerIds: none — no protocol or state-machine behavior: pure observers over final snapshots, fail-soft per event, no cross-step state beyond per-session counters and a rotation rule.
+- backends: `none`
+- rationale (selected scope): row emission, byte accounting, attribution, rotation, and the reference-counted mount are covered by unit and integration tests in the doc's Verification section; nothing here is an ordering property that property tests cannot decide. Re-screen if the ledger ever gains admission or arbitration behavior.
+
 ## Problem
 
 Nothing records what actually entered the model on a given step. The existing records are fragmented (`cache-health` = prefix/cache shape only; `context-crusher` = savings only; `decision-usage` = SystemOne decisions only; full trajectories only offline in the eval harness). The budget governor (doc 1), CCR graduation evidence (doc 5), injection dedupe (doc 7) and pollution detection (doc 8) all need a shared, content-free composition record per request.

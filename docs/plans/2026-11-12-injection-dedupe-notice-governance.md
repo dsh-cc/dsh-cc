@@ -8,6 +8,15 @@ r3 → r4 fold: stale `payload.step` window instruction deleted (gateSeq is the 
 - Depends on: doc 1 (same package `@dsh-cc/input-budget`; plugs into `govern()` at the stage order **dedupe → caps → budget trim**; the class registry is referenced from doc 1's r2, not restated). Doc 3 (DedupeRow/CapRow live in its single-schema union).
 - Literature basis: Silent Failures (2606.14589); Signal-Driven Observation (2606.06708 — observation over-ingestion).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: enabled (shares the admission-governance model with the budget-governor doc — dedupe/caps are stages of the same `govern()` pipeline)
+- triggerIds: FD-T2 (dedupe windows and deferred re-offers are late-message effects on admission), FD-L1 (advisory-kind eligibility composition with stated exclusion invariants), FD-L2 (window/cap arithmetic with monotonic gateSeq).
+- backends: `["tla", "lean"]`
+- modelDirs: `{"tla": "specs/tla/input-admission-governance", "lean": "specs/lean/input-admission-arithmetic"}`
+- rationale: two-phase commit-on-admission, provisional in-batch allocation with rollback, and observe/enforce state separation are ordering-sensitive state properties; the window and cap rules are deterministic arithmetic. One model covers both docs' stages.
+
 ## Problem
 
 A few advisory producers re-inject equivalent text repeatedly within a session, each time a durable message (retry-attendant guidance `interaction/retry-attendant/src/wiring.ts:269`, advisor-watchdog severity batches `interaction/advisor-watchdog/src/wiring.ts:314-317`, cc-shell glue notices `bundle/cc-shell/src/index.ts:251,272`). Producer-side latches exist for some (glue notices are process-latched — grok's correction: they are not the main repeating source); there is no systemic floor below them. Note-this-is-not: subagent lifecycle notices (`cc-subagent-children`, `subagent-settled`) are **not** redundant — see scope cuts below.

@@ -8,6 +8,14 @@ r3 → r4 fold: `decideCrush` inputs enlarged with `projectKey?`/`storeAvailable
 - Depends on: doc 3 (ledger — production-side monitoring). Fixture replay is offline.
 - Literature basis: Referential Dangling (2608.04569); Later Questions (2610.27301); What Does Context Compression Cost (2608.16370 — completion-only evaluation masks re-acquisition); Paritok-4B (~96% identifier presence for coding agents); AGORA (granularity must match action grammar).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: not-needed
+- triggerIds: none — offline evaluation pipeline with deterministic replay; no runtime protocol, no cross-actor state. The `decideCrush` extraction is a pure decision table pinned by mutation tests.
+- backends: `none`
+- rationale (selected scope): the gate arithmetic, determinism (byte-identical reports), and mutation tests are the acceptance tools; no ordering property exists that TLC could enumerate beyond them. Re-screen if the eval ever drives live sessions.
+
 ## Problem
 
 Context Crusher (CCR) ships `enabled: true` / `mode: 'dry-run'` (`packages/context/context-crusher/src/config.ts:38-39`) — measures everything, rewrites nothing. No evidence framework exists that could justify flipping `mode: 'on'`: no CCR gold set, and today's only metric (savings rate) says nothing about evidence preservation, downstream-reference survival, or interaction-level exposure. This doc specifies that framework. It changes no defaults.

@@ -8,6 +8,15 @@ r3 → r4 fold: the stale "summary fires only on success" anchor sentence delete
 - Depends on: nothing. Independent package and mechanism.
 - Literature basis: Governance Decay (arxiv 2606.22528 — pinning restores violation rate 30%→0%); ARCBench (2611.03223 — rules retained ≠ rules honored after compaction); Facts Without Rules (2608.29028).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: enabled
+- triggerIds: FD-T1 (the compaction engine and the pinning plugin are independent actors co-writing the session surface), FD-T2 (late/duplicate shadow and restore events affect restore outcomes), FD-T3 (the summary-before-commit failure window decides phantom vs lost restores — persistence order is load-bearing).
+- backends: `["tla"]`
+- modelDirs: `{"tla": "specs/tla/compaction-pin-restore"}`
+- rationale: restoration correctness hangs on event ordering across a failure window (summary logged before checkpoint commit; end-with-error cancellation; drain-after-next visibility) and on loop-safety of restore re-capture — enumerable only by fault-injected state-machine checking, not by property tests.
+
 ## Problem
 
 Behavioral-governance messages — turn-rules reminders, post-edit-verify recovery hints — travel as ordinary `user/message` events. The summarization compactor replaces an entire `[startSeq, endSeq]` region with one checkpoint message; everything in the region becomes shadowed. Governance instructions survive only as whatever the LLM summary kept, with citation-grade evidence the survive/honor rates are poor. dsh-cc ships these governance surfaces on by default; compaction currently erases their durable effect mid-session.

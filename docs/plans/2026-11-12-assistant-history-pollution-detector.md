@@ -12,6 +12,14 @@ Four rounds, three blind seats each (internal critic, grok lane, codex lane): r1
 - Depends on: doc 3 (ledger — optional input; the detector's primary source is raw session logs).
 - Literature basis: AC3 (2611.00518); Speech-LLM History Interference (2611.05124); Silent Failures (2606.14589).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: not-needed
+- triggerIds: none — offline, read-only analysis over session logs; runtime curation is explicitly disqualified in the Non-goals, so there is no protocol to check. The positional surface-fold replay is a deterministic function pinned by the committed synthetic fixtures.
+- backends: `none`
+- rationale (selected scope): detection-only; if a later design adds runtime flagging or curation, that design re-screens (it will hit FD-T1/T2 immediately).
+
 ## Problem
 
 Assistant messages asserting false or went-stale state persist in history and keep influencing later steps. The cited remediation (runtime curation with reset) is rejected upfront for this workload (reset discards tool observations; AC3's own stateful tool-use arm collapses to 0% reward). Version 1 is **detection only**: a deterministic offline detector over session logs, measuring whether the phenomenon exists at meaningful rates in this product, with audit-grade precision — the evidence base for any later runtime design.

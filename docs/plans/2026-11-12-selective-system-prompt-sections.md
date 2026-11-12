@@ -8,6 +8,14 @@ r3 → r4 fold: first-pass formula moved fully to `min-entry-bytes` with UTF-8-s
 - Depends on: nothing hard; doc 3's `AssembleRow.sections[].bytes` is the distribution instrument that tunes the defaults.
 - Literature basis: PAACE (plan-aware context slicing); Less Context (token ↓~63%).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: not-needed (documented downgrade of an FD-L2 literal hit)
+- triggerIds: FD-L2 (byte bounds) is literally hit, but deliberately downgraded: both renders are **stateless total functions** over `(defs, settings)` — the doc's own property tests (`bytes ≤ max-bytes` for all non-floor cases over random defs) are a complete decision procedure for the bound, and there is no cross-step state or ordering to miss.
+- backends: `none`
+- rationale (selected scope): downgrade justified by the absence of a state machine; the floor/overflow forms are finite-domain properties exhaustively testable. Re-screen if caps ever become adaptive or stateful.
+
 ## Problem
 
 Variable system-prompt sections render uncapped on every assemble. The two large ones:

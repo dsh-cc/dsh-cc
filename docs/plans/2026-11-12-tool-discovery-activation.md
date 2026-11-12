@@ -8,6 +8,14 @@ r3 → r4 fold: admitted-restriction rationale corrected (judge never sees denie
 - Depends on: nothing hard; doc 3's ledger (`toolsCount/toolsBytes` rows) is the post-flip monitoring instrument.
 - Literature basis: ToolMenuBench (CMTF 32.1% → 85.7% success); Signals and Queries (cheap classifier pre-filter).
 
+## Formal design
+
+- mode: auto (session-adopted; no formal-design screening clause in the project rules at this revision; adoption snippet at `<skill>/references/agents-snippet.md`).
+- decision: not-needed (covered by an existing model)
+- triggerIds: FD-T1/T2 would apply to the discovery runtime's cache-then-coalesce protocol, but that protocol is **already modeled** by `specs/tla/decision-gate-coalescing` (its design.md lists tool-discovery among the shared-protocol features); this document changes no discovery-runtime behavior — it adds eval arms and a pre-registered flip policy.
+- backends: `none`
+- rationale (selected scope): the later `shadow → active` flip PR touches runtime behavior and must re-screen against the existing model (extending it if the sampling sidecar adds new state); this docs-only PR needs no model of its own.
+
 ## Problem
 
 The SystemOne tool-discovery decision layer is built and dormant: `cc-tool-discovery.mode` defaults to `'off'` (`packages/core/tool-search/src/discovery-settings.ts:43,55`; modes `off|shadow|active`). In active mode a cheap-lane judge scores deferred tool candidates so only causally relevant tools activate per query. It is off because there is no live-lane evidence for judge quality, latency, or cost.
