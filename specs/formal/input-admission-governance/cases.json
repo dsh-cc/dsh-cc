@@ -1,49 +1,117 @@
 {
   "schemaVersion": 1,
   "featureId": "input-admission-governance",
-  "note": "Shared examples binding the TLA operators to the Lean predicates. Each row names the same arithmetic instance on both sides; no implementation is bound yet (docs 1+7 are unimplemented), so implementationFiles is empty in bridge.json and these rows are model-to-model examples only.",
+  "note": "Shared examples binding the TLA operators to the Lean predicates, expressed in the current model constants (advisory budget AB=3, oversize mB=6 B, dedupe window W=3). No implementation is bound yet (docs 1+7 are unimplemented), so implementationFiles is empty in bridge.json and these rows are model-to-model examples only.",
   "cases": [
     {
       "id": "advisory-budget-admission/exact-fit",
       "operationId": "advisory-budget-admission",
-      "tla": { "budget": 4, "used": 2, "bytes": 2, "admits": true },
-      "lean": { "budget": 4, "used": 2, "bytes": 2, "fits": true }
+      "tla": {
+        "budget": 3,
+        "used": 1,
+        "bytes": 2,
+        "admits": true
+      },
+      "lean": {
+        "budget": 3,
+        "used": 1,
+        "bytes": 2,
+        "fits": true
+      }
     },
     {
       "id": "advisory-budget-admission/one-over",
       "operationId": "advisory-budget-admission",
-      "tla": { "budget": 4, "used": 3, "bytes": 2, "admits": false },
-      "lean": { "budget": 4, "used": 3, "bytes": 2, "fits": false }
+      "tla": {
+        "budget": 3,
+        "used": 2,
+        "bytes": 2,
+        "admits": false
+      },
+      "lean": {
+        "budget": 3,
+        "used": 2,
+        "bytes": 2,
+        "fits": false
+      }
     },
     {
       "id": "oversize-drop/above-budget",
       "operationId": "oversize-drop",
-      "tla": { "budget": 4, "bytes": 6, "dropped": true, "deferred": false },
-      "lean": { "budget": 4, "bytes": 6, "oversize": true }
+      "tla": {
+        "budget": 3,
+        "bytes": 6,
+        "dropped": true,
+        "deferred": false
+      },
+      "lean": {
+        "budget": 3,
+        "bytes": 6,
+        "oversize": true
+      }
     },
     {
       "id": "oversize-drop/at-budget",
       "operationId": "oversize-drop",
-      "tla": { "budget": 4, "bytes": 4, "dropped": false, "deferred": false },
-      "lean": { "budget": 4, "bytes": 4, "oversize": false }
+      "tla": {
+        "budget": 3,
+        "bytes": 3,
+        "dropped": false,
+        "deferred": false
+      },
+      "lean": {
+        "budget": 3,
+        "bytes": 3,
+        "oversize": false
+      }
     },
     {
       "id": "dedupe-window-boundary/below",
       "operationId": "dedupe-window-boundary",
-      "tla": { "now": 3, "lastAdmitted": 1, "window": 3, "suppressed": true },
-      "lean": { "now": 3, "lastAdmitted": 1, "window": 3, "suppressed": true }
+      "tla": {
+        "now": 3,
+        "lastAdmitted": 1,
+        "window": 3,
+        "suppressed": true
+      },
+      "lean": {
+        "now": 3,
+        "lastAdmitted": 1,
+        "window": 3,
+        "suppressed": true
+      }
     },
     {
       "id": "dedupe-window-boundary/equal",
       "operationId": "dedupe-window-boundary",
-      "tla": { "now": 4, "lastAdmitted": 1, "window": 3, "suppressed": false },
-      "lean": { "now": 4, "lastAdmitted": 1, "window": 3, "suppressed": false }
+      "tla": {
+        "now": 4,
+        "lastAdmitted": 1,
+        "window": 3,
+        "suppressed": false
+      },
+      "lean": {
+        "now": 4,
+        "lastAdmitted": 1,
+        "window": 3,
+        "suppressed": false
+      }
     },
     {
       "id": "dedupe-window-boundary/above",
       "operationId": "dedupe-window-boundary",
-      "tla": { "now": 5, "lastAdmitted": 1, "window": 3, "suppressed": false },
-      "lean": { "now": 5, "lastAdmitted": 1, "window": 3, "suppressed": false }
+      "tla": {
+        "now": 5,
+        "lastAdmitted": 1,
+        "window": 3,
+        "suppressed": false
+      },
+      "lean": {
+        "now": 5,
+        "lastAdmitted": 1,
+        "window": 3,
+        "suppressed": false
+      }
     }
   ]
 }

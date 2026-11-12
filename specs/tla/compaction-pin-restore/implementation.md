@@ -41,7 +41,7 @@ probe cases already complete in ~1k states.
 |---|---|---|
 | convention (run 2) | surface envelope excluded drain growth | modeling defect (fixed) |
 | convention (run 3) | terminal-state deadlock | modeling artifact (fixed) |
-| strict-blind-rule-b | rule (b) without the checkpoint gate restores never-shadowed pins after the F3 double failure | **design finding — the checkpoint gate is load-bearing** (already folded into doc 2's Detect section at r3; this model pins it) |
+| strict-blind-rule-b | rule (b) without a checkpoint-commit gate restores never-shadowed pins after the F3 double failure (checkpoint append fails AND end append fails) | **design finding — currently an OPEN GAP in doc 2** |
 | strict-no-restore | drain disabled loses promised pins | expected probe |
 | strict-belt-off-blind | without the belt AND the gate, the F1 single failure already yields a phantom | expected probe (severity ladder: belt off alone is safe once the gate exists — see x-belt-off-fixed) |
 

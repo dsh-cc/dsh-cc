@@ -130,6 +130,26 @@
         "timeoutMs": 300000,
         "heapMiB": 1024
       }
+    },
+    {
+      "id": "strict-sentinel-commit",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "TRUE",
+        "UnknownAsAdvisory": "FALSE",
+        "ObserveMutates": "FALSE",
+        "Enforce": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "AdmittedEverCommitted"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
     }
   ]
 }

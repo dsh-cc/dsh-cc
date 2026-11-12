@@ -34,7 +34,7 @@ observe-clean case also verified pre-shrink (1,807 states).
 |---|---|---|
 | convention (TypeOK, run 2) | queue-length envelope | modeling defect (fixed) |
 | convention (exception, run 3) | Append-element bug; then the `\/` precedence trap | modeling defects (fixed) |
-| strict-commit-at-check | check-time state advance lets a trimmed/deferred message poison later same-key admissions (DedupeCommitted, CapCommitted) | **expected probe — the r1 design bug the two-phase commit-on-admission fix exists for** |
+| strict-commit-at-check | check-time state advance lets a checked-but-not-admitted message poison later same-key admissions; the run's stdout shows `DedupeCommitted` (and, after the sentinel was wired to the same fault switch, `AdmittedEverCommitted`) | **expected probe — the r1 design bug the two-phase commit-on-admission fix exists for** |
 | strict-unknown-as-advisory | classifying unknown kinds advisory lets budget trim drop passthrough content (NeverTouched via the touched flag) | **expected probe — the r1 inversion fix** |
 | strict-observe-mutates | observe mode writing the real pipeline outcome mutates the real batch (ObserveClean) | expected probe |
 | x-observe-clean | verify | — |

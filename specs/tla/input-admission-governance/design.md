@@ -52,14 +52,17 @@ excluded from the enforced pipeline entirely (not in the message universe).
 | variable | meaning |
 |---|---|
 | `gateSeq` | monotonic gate invocation counter |
-| `batch` | pending producer arrivals (sequence, order = arrival) |
+| `batch` | pending producer arrivals (order = arrival) |
 | `queue` | deferred entries `[eid, msg, enqueuedAt]` FIFO |
-| `dedupeState` | per-key last **committed** admission gateSeq |
-| `capCount` | per-kind committed admission count |
-| `truthAdmSeq` / `truthCapCount` | oracle copies updated only at true admissions (invariant ground truth) |
+| `admittedEver` | a `k1` message has been admitted at least once |
+| `dedupeState` | gateSeq of the last **committed** `k1` admission |
+| `capCount` | committed `advisor`-kind admissions |
+| `truthAdmSeq` / `truthCapCount` / `truthAdmittedEver` | oracle copies updated only at true admissions |
 | `admEids` / `droppedEids` | entry ids ever admitted / dropped |
-| `lastAdmittedBatch` | the batch the last gate actually admitted (enforce) |
-| `lastAdvisoryBytes` / `lastHardOver` | the last gate's advisory bytes and hardOver flag |
+| `admCount` | eid → times admitted (double-admission detector) |
+| `nextEid` | deferred-entry id allocator |
+| `lastAdmittedCount` / `lastAdvisoryBytes` / `lastMemoryBytes` / `lastHardOver` | the last gate's real outcome |
+| `touched` | a protected/unknown message was deferred or dropped (violation marker) |
 
 ## Message universe (fixed)
 
@@ -75,16 +78,16 @@ excluded from the enforced pipeline entirely (not in the message universe).
 
 Budgets: advisory 3 (`mA`+`mC` cannot both fit, so the advisory defer arm is
 reachable), memory 3 (`mM` alone fills it), enter 8, window 3, TTL 2, advisor
-cap 1, retry-attendant cap 8 (so `mC` is never cap-blocked and the cap path
-stays attributable to `mA`).
+cap 1. Only the `advisor` kind is capped in the model; `mC` is a
+`retry-attendant` message modeled as **uncapped** (the real cap of 8 is abstracted
+away), which is why its deferrals are never cap-blocked and the cap path stays
+attributable to `mA`.
 
 ## Invariants
 
-- `ProtectedUntouchable`: no governance/task message is ever dropped or
-  deferred. Business consequence of violation: behavioral constraints and user
+- `NeverTouched`: no protected (governance/task/passthrough) message is ever dropped or
+  deferred; a violation sets the `touched` marker. Business consequence of violation: behavioral constraints and user
   input silently disappear.
-- `UnknownUntouchable`: the unknown-kind message (true class passthrough) is
-  never dropped or deferred — the classification-inversion guard.
 - `DedupeCommitted` / `CapCommitted`: the plugin's state equals the
   oracle state that advances only at true admissions. Violation = the r1
   self-suppression class (check-time state advance poisons later admissions).
@@ -131,5 +134,9 @@ stays attributable to `mA`).
   separately.
 - A9: a never-admitted key is admitted unconditionally; once admitted, the
   window rule `gap >= W` admits (strict comparison at the boundary).
+- A10: dedupe is a **single-key abstraction** — only `k1` is tracked
+  (`dedupeState` is a scalar and the provisional flag tests `key = "k1"`), so
+  `mC`'s `k2` is never suppressed and the window rule is exercised for one key
+  only. Multi-key independence is out of scope.
 - Bounds: batch ≤ 2, queue ≤ 4, gateSeq ≤ 4, 7 messages, advisory budget 3
   (so two 2-byte advisories cannot both fit and the defer arm is live).

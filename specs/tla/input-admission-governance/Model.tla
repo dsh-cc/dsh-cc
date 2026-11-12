@@ -154,17 +154,6 @@ BumpCounts(map, ids, n) ==
 
 (* ---- eligibility ------------------------------------------------------- *)
 
-(* A key that was never admitted is admitted unconditionally; once        *)
-(* admitted, the window rule applies (strict comparison: gap < W          *)
-(* suppresses, gap = W admits).                                          *)
-DedupeEligible(m) ==
-  \/ ~IsAdvisory(m)
-  \/ m.key = "none"
-  \/ ~admittedEver
-  \/ gateSeq + 1 - dedupeState >= W
-
-CapEligible(m) == m.kind # "advisor" \/ capCount < CapAdvisor
-
 ProvisionalDedupeEligible(m, prov) ==
   \/ ~IsAdvisory(m)
   \/ m.key = "none"
@@ -319,7 +308,11 @@ Gate ==
                  /\ admCount' = BumpCounts(admCount, Eids(back.adm), 1)
                  /\ nextEid' = nextEid + Len(faccRev.defer)
                  /\ touched' = (touched \/ badTouch)
-                 /\ admittedEver' = (admittedEver \/ faccRev.admK1 \/ BacklogHasK1(back))
+                 /\ admittedEver' =
+                      (admittedEver
+                        \/ IF CommitAtCheck THEN faccRev.checkK1
+                           ELSE faccRev.admK1
+                        \/ BacklogHasK1(back))
                  /\ dedupeState' =
                       IF CommitAtCheck /\ faccRev.checkK1
                       THEN n
