@@ -1,5 +1,5 @@
 {
-  "description": "Chinese large-pool golden set (104 topics, >96 default max-candidates so the pre-selection path is exercised). The corpus is synthetic but CJK; the mid-band probability behavior it produces is an empirical property of each run's report, not a baked-in guarantee.",
+  "description": "Chinese large-pool golden set (104 topics, >96 default max-candidates so the pre-selection path is exercised). The corpus is synthetic but CJK; the mid-band probability behavior it produces is an empirical property of each run's report, not a baked-in guarantee. The no-relevant-memory queries are deliberately off-corpus (cooking, literature, sport, science, photography, household, poetry) so that no fixture topic is a defensible answer: a query phrased inside the corpus' own admin vocabulary ('canteen menu this week') has a topic that names it, and scoring its retrieval as a mis-injection measures the label, not the model.",
   "clusters": [
     {
       "id": "flink",
@@ -273,61 +273,61 @@
     },
     {
       "class": "no-relevant-memory",
-      "query": "下周五的会议室还有空位吗？",
+      "query": "酸面包的酵种要怎么续养才能保持活力？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "报销发票抬头写什么？",
+      "query": "《哈姆雷特》第三幕的主要剧情是什么？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "我下周一入职的新同事今天到了，我该先带他去哪？",
+      "query": "半程马拉松想在十二周内跑进两小时，训练课表怎么排？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "VPN 又断了，现在是不是机房网络的问题？",
+      "query": "三羧酸循环每一步分别生成什么产物？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "食堂这周有什么菜？",
+      "query": "用单反拍银河，光圈、快门和感光度怎么设？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "我年假够不够下个月连休一周去旅行？",
+      "query": "被套怎么叠才能方方正正不散开？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "打印机又卡纸了，要不要直接换一台新的？",
+      "query": "澳大利亚的首都是哪座城市，大概有多少人口？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "门禁卡丢了，今天能临时刷进去吗？",
+      "query": "烤饼干时 350 华氏度换算成摄氏度是多少？",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "这次团建我们组想住好一点的酒店，超出来的钱怎么办？",
+      "query": "用五言绝句写一首关于猫的诗。",
       "required": [],
       "tolerated": []
     },
     {
       "class": "no-relevant-memory",
-      "query": "访客来访需要提前预约吗？",
+      "query": "朝北的房间光照很弱，养什么绿植不容易死？",
       "required": [],
       "tolerated": []
     },
