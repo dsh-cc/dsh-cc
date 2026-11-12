@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../llm-tuning/systemone"
+    },
+    {
+      "path": "../../settings/settings"
+    }
+  ]
+}

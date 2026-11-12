@@ -25,6 +25,7 @@ import { apply as registerNotebookEditTool } from '@dsh-cc/tool-notebook-edit'
 import { apply as registerManageSkillTool } from '@dsh-cc/tool-manage-skill'
 import { apply as registerStructuredOutputTool } from '@dsh-cc/tool-structured-output'
 import { apply as registerWorkflowTool } from '@dsh-cc/tool-workflow'
+import { apply as applySkillRecommender } from '@dsh-cc/skill-recommender'
 import { apply as registerGitWorktreeTools } from '@dsh-cc/tool-git-worktree'
 import { registerMemorySaveTool } from '@dsh-cc/memory'
 import { registerTaskTool } from '../../../subagent/task/src/tool.ts'
@@ -254,6 +255,18 @@ const TOOL_PACKAGE_MANIFEST: ManifestEntry[] = [
     },
   },
   {
+    packageName: '@dsh-cc/skill-recommender',
+    registerFn: 'apply (recommend_skill)',
+    mount: (seam) => {
+      const ctx = fakeContext(seam)
+      // Mount-time surface only: settings namespace registration (deferred
+      // through ctx.inject against the fake settings plane), the tool
+      // registration and the unload effect. The catalog and the decision
+      // runner are read lazily inside tool calls, which the gate never makes.
+      applySkillRecommender(ctx as never)
+    },
+  },
+  {
     packageName: '@dsh-cc/tools',
     registerFn: 'createRunCodeTool',
     mount: (seam) => {
@@ -291,6 +304,8 @@ const TOOL_SOURCE_CALLS: Record<string, number> = {
   'packages/subagent/handoff-store/src/tools.ts': 2,
   'packages/subagent/task/src/release-agent.ts': 2,
   'packages/subagent/task/src/tool.ts': 2,
+  // defineTool(1) + ctx.tools.register(1) in the plugin's apply().
+  'packages/skill/skill-recommender/src/index.ts': 2,
   // Scenario mock tool only.
   'packages/test-support/cache-trajectory/src/runner.ts': 1,
   // Scenario mock tools only.

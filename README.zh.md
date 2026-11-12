@@ -225,7 +225,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | Command surface | 22 | 10 | 1 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
-| Skills | 2 | 1 | 0 | 0 |
+| Skills | 2 | 2 | 0 | 0 |
 | Subagents | 0 | 4 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 6 | 0 | 0 |

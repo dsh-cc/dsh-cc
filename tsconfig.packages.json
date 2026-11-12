@@ -133,6 +133,9 @@
       "path": "./packages/skill/skill-usage"
     },
     {
+      "path": "./packages/skill/skill-recommender"
+    },
+    {
       "path": "./packages/interaction/moa"
     },
     {

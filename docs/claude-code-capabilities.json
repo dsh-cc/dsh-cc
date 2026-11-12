@@ -4771,6 +4771,54 @@
         "kind": "none"
       }
     },
+    "skills.recommendation": {
+      "title": "Advisory skill recommendation (recommend_skill tool)",
+      "category": "skills",
+      "plane": "preset",
+      "upstream": {
+        "summary": "dsh-cc extension — an optional, explicitly mounted `recommend_skill` tool that judges the visible `ctx.skills` catalog against a task and returns a few names with relevance and prerequisite evidence, mounted through the explicit-plugin row rather than the default preset. 〔src:ws:packages/skill/skill-recommender/README.md#L49-L57〕 It is a read-only consumer of the catalog: it never reads a body (`ctx.skills.get` is never called), never executes or invokes a skill, never changes invocation eligibility and never hides a skill, and skills named explicitly by the user or by higher-level rules keep their original flow. 〔src:ws:docs/plans/2026-11-02-systemone-06-skill-recommendation.md#L27-L32〕 `mode` defaults to `off` and costs zero runner calls; `shadow` records judgments without returning names and `active` returns the selected set. 〔src:ws:packages/skill/skill-recommender/README.md#L18-L27〕",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": false,
+          "notes": "optional plugin mounted explicitly; absent from the default preset, and cc-skill-recommendation.mode defaults to off"
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/skill/skill-recommender/src/index.ts",
+          "anchor": "recommend_skill"
+        },
+        {
+          "type": "source",
+          "path": "packages/skill/skill-recommender/scripts/eval-recommendation.mjs",
+          "anchor": "--mode replay"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-recommender/tests/recommend.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-recommender/tests/composition.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "dsh-cc extension with no Claude Code counterpart: an advisory recommendation consumer rather than an execution path. The plugin is mounted explicitly and is not in the default preset; `mode: off` is the default and leaves the catalog, `/skills`, explicit slash invocation and mandatory-skill rules untouched. Judgments require the optional decision runtime (`ctx.systemoneDecisions`, or the root-realm `ccSystemoneDecisions` bridge) and are `unavailable` without it, so the recommendation never degrades the catalog path on its own; only names and two numbers leave the tool, and no body, skill file, task or candidate metadata is read or persisted."
+      }
+    },
     "skills.system": {
       "title": "Skills system",
       "category": "skills",
