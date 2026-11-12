@@ -1,6 +1,6 @@
 # MOA capability routing with context
 
-Status: **Implemented** — branch `worktree-moa-context-routing` (2026-11-12), not yet merged; ships dark (`context-routing.mode: off`) pending the offline evaluation gate recorded in the implementation notes below. Feature ID: S1-09. Priority: P2.
+Status: **Implemented** — PR #400 (merged 2026-11-12); ships dark (`context-routing.mode: off`) pending the offline evaluation gate recorded in the implementation notes below. Feature ID: S1-09. Priority: P2.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](2026-11-02-systemone-01-contract-validation.md) and [S1-02](2026-11-02-systemone-02-decision-runtime-metering.md); does not depend on [S1-10](2026-11-02-systemone-10-moa-acceptance.md). Entry point: [overview](2026-11-02-systemone-00-overview.md).
 

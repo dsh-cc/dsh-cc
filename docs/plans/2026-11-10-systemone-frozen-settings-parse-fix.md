@@ -1,7 +1,7 @@
 # SystemOne decision-arm silence: frozen-section re-admission fix (issue #373)
 
 - **Date**: 2026-11-10
-- **Status**: v2.1 (r1: three-seat GWC; r2 delta: grok GWC + codex GWC, doc-level folds applied)
+- **Status**: **Implemented** — PR #374 (merged 2026-11-10). Pre-merge review: v2.1 (r1: three-seat GWC; r2 delta: grok GWC + codex GWC, doc-level folds applied)
 - **Commit slicing** (the landing order): (1)+(2) land as ONE commit — the clone and the reason
   union interleave on the same `parseDecisionSettings` hunks, so the parse seam (clone + reasons +
   warn-once + all parse-side tests) is one reviewable unit; (3) lands separately (`MAX_TIMEOUT_MS`
