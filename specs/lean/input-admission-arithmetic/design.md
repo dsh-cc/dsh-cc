@@ -74,6 +74,24 @@ re-derive it): boundary cases for `used = budget`, `bytes = 0`,
 `delta = window - 1`, `delta = window`, plus one known-bad implementation for
 each of the four mutants named in the coverage table.
 
+## Recorded coverage gaps (disclosed, not claimed)
+
+- **Enter budget / `hardOver` (doc 1 budget step 5) is proven by neither
+  backend.** It is the one pure-arithmetic requirement of doc 1, and the Lean
+  face does not state it; the TLA model abstracts it to a flag (assumption A5).
+  Closing it needs either a `hardOver` predicate plus a property here, or an
+  explicit product decision that the flag carries no invariant. Called out so
+  the gap is visible to an implementer rather than latent.
+- **`protected-never-charged` is true by unfolding `charged`.** Under the
+  recorded definitions it cannot fail; its value is as the designated target for
+  the future implementation mutant (a `charged` that returns `bytes` for
+  protected classes). Recorded here so its greenness is not counted as
+  independent coverage.
+- **Class status is assumed, not proven.** `protected_never_charged` takes
+  `budgeted cls = false` as a hypothesis; the model does not prove that
+  `governance`/`task`/`passthrough` *are* unbudgeted. A1 pins this as a
+  specification choice requiring re-proof if the registry changes.
+
 ## Bounds and assumptions
 
 - A1: classes are a closed five-element set; future classes must be assigned

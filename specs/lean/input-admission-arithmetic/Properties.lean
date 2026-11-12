@@ -18,11 +18,6 @@ theorem admission_preserves_bound (budget used bytes : Nat)
   simp only [decide_eq_true_eq] at h
   omega
 
-/-- REQ-2 (rejection is safe): a message that does not fit never appears in
-an admitted set, so the bound holds vacuously. -/
-theorem rejection_leaves_bound (budget used bytes : Nat)
-    (hu : used <= budget) : used <= budget := hu
-
 /-- REQ-3 (oversize is dropped, not deferred): an oversize message can
 never fit its budget, so the oversize branch and the admission branch are
 mutually exclusive. -/
@@ -67,6 +62,20 @@ theorem window_witness : withinWindow 5 5 3 = true := by
 
 /-- Witness: an oversize instance (6 bytes against a 4-byte budget). -/
 theorem oversize_witness : oversize 4 6 = true := by
+  decide
+
+/-- REQ-4 (above window admits): a gap strictly larger than the window
+admits. The `lastAdmitted <= now` hypothesis discharges Nat truncation
+instead of leaving it implicit. -/
+theorem window_above_admits (now lastAdmitted window : Nat)
+    (hmono : lastAdmitted <= now) (h : window < now - lastAdmitted) :
+    withinWindow now lastAdmitted window = false := by
+  unfold withinWindow
+  simp only [decide_eq_false_iff_not, Nat.not_lt]
+  omega
+
+/-- Witness: a nonempty above-window instance (gap 4 > window 3). -/
+theorem window_above_witness : withinWindow 9 5 3 = false := by
   decide
 
 end Formal

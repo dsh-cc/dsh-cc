@@ -51,13 +51,61 @@ observe-clean case also verified pre-shrink (1,807 states).
 
 check-evidence: valid. Aggregate: counterexample = probe package shape.
 
+## Review round 1 (two seats) — folded defects
+
+Both seats returned on the run-5 build; the finding sets overlapped almost
+exactly. Every item below was a real modeling defect, not a design finding:
+
+1. **[BLOCKER] Fresh walk ignored the backlog's admitted bytes.** `FreshAcc`
+   seeded only dedupe/cap counters, so a backlog `mM` (3 B) plus a fresh `mM`
+   (3 B) admitted 6 B against `MB=3`. Fixed: `FreshAcc(back)` seeds `adv`/`mem`
+   from `back.adv`/`back.mem`. **Also added the missing `MemoryBudgetHeld`
+   invariant** — the advisory class had a bound but the memory class had none,
+   which is why the violation was reachable but invisible.
+2. **[MAJOR] `dedupeState = 0` modeled a nonexistent admission.** At gates 1-2
+   the window test `gateSeq+1-0 < W` suppressed a first-ever notice. Fixed with
+   the explicit `admittedEver` flag (admit unconditionally until the first real
+   admission) plus the `AdmittedEverCommitted` oracle invariant.
+3. **[MAJOR] Advisory defer was dead code in convention.** The only deferrable
+   advisory was `mA` (2 B vs `AB=4`, same key, one admission per batch), so
+   `AdvisoryBudgetHeld` was green over states where it could not fail. Fixed:
+   `AB` 4→3 and a second-keyed `mC` (retry-attendant, key k2) so two advisories
+   cannot both fit.
+4. **[MAJOR] Trim direction was inverted.** `WalkFresh` walked in arrival order
+   and deferred the newest; doc 1 requires FIFO-oldest trim. Fixed by walking
+   `Rev(batch)` and re-emitting admissions in arrival order.
+5. **[MAJOR] Cap overflow was modeled as a drop.** Doc 7 routes cap overflow to
+   the governor's trim (defer); only dedupe suppression drops. Fixed by
+   splitting the two arms.
+6. **[MAJOR] `DeferredExactlyOnce` could not detect double admission** (it only
+   asserted queue membership). Replaced with `DispositionPartition` +
+   `AdmittedAtMostOnce` over an `admCount` map.
+7. **[MINOR] Dangling assumption reference** ("A5 in design.md" did not exist)
+   and the observe-mode claim of simulated state. Fixed: design.md now declares
+   A5 (enter budget flag-only), A6 (trim order), A7 (observe simulated state
+   out of scope), A8 (drop-vs-defer), A9 (first-admission sentinel).
+
+## Model-level bugs found while folding (all fixed)
+
+- `Append(@, <<e>>)` wrapped sequences as elements (three sites).
+- `BumpCounts` was fed a **set** where it indexed as a **sequence**.
+- Provisional records had two incompatible shapes (`k1`/`ever`/`advCount` vs
+  `adv`/`mem`); split into `BacklogProv` / `FreshProv`, and `back.k1` replaced
+  by the derived `BacklogHasK1(back)`.
+- **The `=`-vs-`\/` precedence trap fired three more times**
+  (`touched'`, `truthAdmittedEver'`, `admittedEver'`): each made the assignment
+  a bare equality conjunct and pushed the disjunct to action level, so the
+  variable was silently under-assigned. Systematic scan
+  (`grep "' = .*\\/"` minus parenthesized hits) is the reliable detector, not
+  spot checks.
+
 ## Notes for implementers
 
 - The in-batch provisional allocation is threaded through BOTH walks
   (backlog and fresh) — the doc's "check against committed ∪ provisional"
   applies to re-offered backlog entries too, not only fresh arrivals.
-- The enter-budget (EB/hardOver) re-trim pass is NOT modeled (assumption
-  A5 in design.md): the class budgets carry the bound property; hardOver is
-  recorded as a flag only.
+- The enter-budget re-trim pass is NOT modeled (A5): class budgets carry the
+  bound property; `hardOver` is a recorded flag only. This is an explicit
+  cross-backend gap, recorded in the Lean coverage table as well.
 - `cc-shell-glue` and lifecycle kinds are excluded from the universe by
   construction (v1 observe-only / never-trim classes).

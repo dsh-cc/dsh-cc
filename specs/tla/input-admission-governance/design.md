@@ -39,8 +39,10 @@ age by gate invocations (`gateSeq`); entries older than the TTL are dropped;
 the backlog is re-offered FIFO **before** the fresh batch is processed, each
 entry judged against its own class budget.
 
-R5 (observe mode): the real batch and the real dedupe/cap state are never
-touched; only simulated admissions advance a separate simulated state.
+R5 (observe mode, narrowed): in observe mode the real admitted batch stays
+empty and every real state component is left untouched. **Not modeled:** doc
+7's simulated-batch bookkeeping inside observe mode (the model has no
+simulated state) — see A7.
 
 R6 (glue exclusion): `cc-shell-glue` is observe-only in v1 and therefore
 excluded from the enforced pipeline entirely (not in the message universe).
@@ -68,10 +70,13 @@ excluded from the enforced pipeline entirely (not in the message universe).
 | mM | memory | memory | 3 | — |
 | mA | advisor | advisory | 2 | k1 |
 | mB | advisor (oversize) | advisory | 6 | k1 |
+| mC | retry-attendant | advisory | 2 | k2 |
 | mU | unknown | passthrough (probe: advisory) | 2 | — |
 
-Budgets: advisory 4 (two `mA` fit; `mB` alone is oversize), memory 3, enter 8,
-window 3, TTL 2, advisor cap 1.
+Budgets: advisory 3 (`mA`+`mC` cannot both fit, so the advisory defer arm is
+reachable), memory 3 (`mM` alone fills it), enter 8, window 3, TTL 2, advisor
+cap 1, retry-attendant cap 8 (so `mC` is never cap-blocked and the cap path
+stays attributable to `mA`).
 
 ## Invariants
 
@@ -83,10 +88,16 @@ window 3, TTL 2, advisor cap 1.
 - `DedupeCommitted` / `CapCommitted`: the plugin's state equals the
   oracle state that advances only at true admissions. Violation = the r1
   self-suppression class (check-time state advance poisons later admissions).
-- `AdvisoryBudgetHeld`: the admitted advisory bytes of the last gate ≤
-  advisory budget, unless `hardOver`.
-- `DeferredExactlyOnce`: a queue entry is never admitted twice and never
-  re-queued after admission (`admEids ∩ queue = {}`).
+- `AdvisoryBudgetHeld` / `MemoryBudgetHeld`: the admitted advisory (memory)
+  bytes of the last gate ≤ its class budget, unless `hardOver`. Both classes
+  are checked; the memory side exists because the backlog's admitted bytes and
+  the fresh batch share one budget.
+- `DispositionPartition`: a queue entry is never both admitted and dropped.
+- `AdmittedAtMostOnce`: no entry id is ever admitted more than once
+  (`admCount[eid] <= 1`), which the earlier queue-membership form could not
+  detect.
+- `AdmittedEverCommitted`: the plugin's never-admitted flag equals the
+  oracle's (the r1 sentinel bug).
 - `ObserveClean`: in observe mode the real admitted batch is empty and the
   real state is unchanged.
 
@@ -106,4 +117,19 @@ window 3, TTL 2, advisor cap 1.
   universe by construction.
 - A4: budgets are symbolic small numbers; class semantics, not scale, carry
   the properties.
-- Bounds: batch ≤ 3, queue ≤ 3, gateSeq ≤ 6, 6 messages.
+- A5: the enter budget (`EB`) is a **flag-only** abstraction: the model
+  records `hardOver` but never re-trims on it. Doc 1's enter-budget pass and
+  its `hardOver` semantics are therefore proven by neither backend (recorded
+  in the Lean coverage table as an explicit cross-backend gap).
+- A6: fresh-batch trimming walks the batch newest-first so that budget
+  exhaustion defers the OLDEST messages (doc 1 "FIFO-oldest trim"); the
+  admitted order re-emitted into the batch is arrival order.
+- A7: observe-mode simulated state (doc 7's simulate-then-report bookkeeping)
+  is out of scope; only real-pipeline isolation is checked.
+- A8: dedupe suppression drops a message while cap overflow defers it (doc 7
+  routes cap overflow to the governor's trim), so the two arms are modeled
+  separately.
+- A9: a never-admitted key is admitted unconditionally; once admitted, the
+  window rule `gap >= W` admits (strict comparison at the boundary).
+- Bounds: batch ≤ 2, queue ≤ 4, gateSeq ≤ 4, 7 messages, advisory budget 3
+  (so two 2-byte advisories cannot both fit and the defer arm is live).

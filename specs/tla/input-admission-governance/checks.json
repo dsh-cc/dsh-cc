@@ -19,11 +19,17 @@
         "DedupeCommitted",
         "CapCommitted",
         "AdvisoryBudgetHeld",
-        "DeferredExactlyOnce",
-        "ObserveClean"
+        "MemoryBudgetHeld",
+        "ObserveClean",
+        "AdmittedEverCommitted",
+        "AdmittedAtMostOnce",
+        "DispositionPartition"
       ],
       "properties": [],
-      "limits": { "timeoutMs": 600000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "strict-commit-at-check",
@@ -35,9 +41,20 @@
         "ObserveMutates": "FALSE",
         "Enforce": "TRUE"
       },
-      "invariants": ["TypeOK", "DedupeCommitted", "CapCommitted"],
+      "invariants": [
+        "TypeOK",
+        "MemoryBudgetHeld",
+        "DedupeCommitted",
+        "CapCommitted",
+        "AdmittedEverCommitted",
+        "AdmittedAtMostOnce",
+        "DispositionPartition"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "strict-unknown-as-advisory",
@@ -49,9 +66,19 @@
         "ObserveMutates": "FALSE",
         "Enforce": "TRUE"
       },
-      "invariants": ["TypeOK", "NeverTouched"],
+      "invariants": [
+        "TypeOK",
+        "MemoryBudgetHeld",
+        "NeverTouched",
+        "AdmittedEverCommitted",
+        "AdmittedAtMostOnce",
+        "DispositionPartition"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "strict-observe-mutates",
@@ -63,9 +90,19 @@
         "ObserveMutates": "TRUE",
         "Enforce": "FALSE"
       },
-      "invariants": ["TypeOK", "ObserveClean"],
+      "invariants": [
+        "TypeOK",
+        "MemoryBudgetHeld",
+        "ObserveClean",
+        "AdmittedEverCommitted",
+        "AdmittedAtMostOnce",
+        "DispositionPartition"
+      ],
       "properties": [],
-      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
     },
     {
       "id": "x-observe-clean",
@@ -79,13 +116,20 @@
       },
       "invariants": [
         "TypeOK",
+        "MemoryBudgetHeld",
         "NeverTouched",
         "DedupeCommitted",
         "CapCommitted",
-        "ObserveClean"
+        "ObserveClean",
+        "AdmittedEverCommitted",
+        "AdmittedAtMostOnce",
+        "DispositionPartition"
       ],
       "properties": [],
-      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
     }
   ]
 }

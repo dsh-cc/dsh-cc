@@ -29,14 +29,21 @@
       "requirementId": "REQ-4",
       "declaration": "Formal.window_boundary_admits",
       "statement": "forall (lastAdmitted window : Nat), 0 < window -> Formal.withinWindow (lastAdmitted + window) lastAdmitted window = false",
-      "witnessDeclaration": "Formal.window_witness"
+      "witnessDeclaration": "Formal.window_above_witness"
     },
     {
       "id": "window-below-suppresses",
       "requirementId": "REQ-4",
       "declaration": "Formal.window_below_suppresses",
       "statement": "forall (lastAdmitted delta window : Nat), delta < window -> Formal.withinWindow (lastAdmitted + delta) lastAdmitted window = true",
-      "witnessDeclaration": "Formal.oversize_witness"
+      "witnessDeclaration": "Formal.window_witness"
+    },
+    {
+      "id": "window-above-admits",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.window_above_admits",
+      "statement": "forall (now lastAdmitted window : Nat), lastAdmitted <= now -> window < now - lastAdmitted -> Formal.withinWindow now lastAdmitted window = false",
+      "witnessDeclaration": "Formal.window_above_witness"
     }
   ],
   "limits": {

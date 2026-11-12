@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "featureId": "input-admission-governance",
+  "tlaModel": "specs/tla/input-admission-governance",
+  "leanModel": "specs/lean/input-admission-arithmetic",
+  "operations": [
+    {
+      "id": "advisory-budget-admission",
+      "requirementId": "REQ-2",
+      "tlaOperator": "Gate",
+      "leanFunction": "Formal.fits",
+      "propertyIds": ["admission-preserves-bound"],
+      "domain": "advisory class bytes against a per-class budget, with the TLA gate enforcing the same inequality per message before admission",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "oversize-drop",
+      "requirementId": "REQ-3",
+      "tlaOperator": "WalkFresh",
+      "leanFunction": "Formal.oversize",
+      "propertyIds": ["oversize-never-fits"],
+      "domain": "messages whose own bytes exceed their class budget; both sides must classify them as never-admittable rather than deferrable",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "dedupe-window-boundary",
+      "requirementId": "REQ-4",
+      "tlaOperator": "DedupeEligible",
+      "leanFunction": "Formal.withinWindow",
+      "propertyIds": ["window-boundary-admits", "window-below-suppresses", "window-above-admits"],
+      "domain": "gate-invocation gaps measured from the last committed admission; the TLA operator and the Lean predicate use the same strict comparison",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    }
+  ]
+}
