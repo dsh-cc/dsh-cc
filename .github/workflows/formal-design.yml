@@ -148,12 +148,53 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # The toolchain is ~200 MB per run. Cache it under a key derived from the
+      # pin file (scripts/lean-toolchain.json), so a pin bump misses and
+      # re-provisions instead of silently reusing the wrong Lean. The receipt is
+      # cached next to the root: lean-provision writes <root>.receipt.json and
+      # lean-preflight demands it, so a root without its receipt is unusable.
+      # Unlike the pnpm store (single writer: presubmit's quality-gates), this
+      # job is the only consumer of this cache, so it is also its writer.
+      # There is deliberately NO restore-keys fallback: a pin bump must miss and
+      # re-download, never reuse a different Lean under a new pin.
+      - name: Restore the pinned Lean toolchain
+        id: lean-toolchain
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/lean-4.35.0
+            ${{ runner.temp }}/lean-4.35.0.receipt.json
+          key: lean-toolchain-${{ runner.os }}-${{ hashFiles('dsh-cc/packages/plugin/dsh-cc-agents/skills/formal-design/scripts/lean-toolchain.json') }}
       - name: Provision the pinned Lean toolchain (checksum-validated)
+        id: lean-provision
         working-directory: dsh-cc
         run: |
-          node packages/plugin/dsh-cc-agents/skills/formal-design/scripts/lean-provision.mjs \
-            --dest "$RUNNER_TEMP/lean-4.35.0" --platform linux-x64
-          echo "FORMAL_DESIGN_LEAN_ROOT=$RUNNER_TEMP/lean-4.35.0" >> "$GITHUB_ENV"
+          root="$RUNNER_TEMP/lean-4.35.0"
+          # A restored toolchain is only trusted when its receipt is present and
+          # the interpreter is executable; lean-preflight re-validates both the
+          # receipt's archive hash and the recomputed content digest, so a
+          # corrupt or partial restore still fails closed there.
+          if [ -f "$root.receipt.json" ] && [ -x "$root/bin/lean" ]; then
+            echo "reusing the cached toolchain at $root"
+            echo "provisioned=skipped" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache miss: provisioning the pinned toolchain"
+            rm -rf "$root" "$root.receipt.json"
+            node packages/plugin/dsh-cc-agents/skills/formal-design/scripts/lean-provision.mjs \
+              --dest "$root" --platform linux-x64
+            echo "provisioned=done" >> "$GITHUB_OUTPUT"
+          fi
+          echo "FORMAL_DESIGN_LEAN_ROOT=$root" >> "$GITHUB_ENV"
+      # Save only on a miss and only after provisioning succeeded, so a failed
+      # download never publishes a broken entry other runs would restore.
+      - name: Save the pinned Lean toolchain
+        if: steps.lean-provision.outputs.provisioned == 'done'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/lean-4.35.0
+            ${{ runner.temp }}/lean-4.35.0.receipt.json
+          key: ${{ steps.lean-toolchain.outputs.cache-primary-key }}
       - name: Contract, packaged default and real Lean integration tests
         working-directory: dsh-cc
         env:
