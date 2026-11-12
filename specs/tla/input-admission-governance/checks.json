@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "modelId": "input-admission-governance",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "FALSE",
+        "UnknownAsAdvisory": "FALSE",
+        "ObserveMutates": "FALSE",
+        "Enforce": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NeverTouched",
+        "DedupeCommitted",
+        "CapCommitted",
+        "AdvisoryBudgetHeld",
+        "DeferredExactlyOnce",
+        "ObserveClean"
+      ],
+      "properties": [],
+      "limits": { "timeoutMs": 600000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-commit-at-check",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "TRUE",
+        "UnknownAsAdvisory": "FALSE",
+        "ObserveMutates": "FALSE",
+        "Enforce": "TRUE"
+      },
+      "invariants": ["TypeOK", "DedupeCommitted", "CapCommitted"],
+      "properties": [],
+      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-unknown-as-advisory",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "FALSE",
+        "UnknownAsAdvisory": "TRUE",
+        "ObserveMutates": "FALSE",
+        "Enforce": "TRUE"
+      },
+      "invariants": ["TypeOK", "NeverTouched"],
+      "properties": [],
+      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+    },
+    {
+      "id": "strict-observe-mutates",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "FALSE",
+        "UnknownAsAdvisory": "FALSE",
+        "ObserveMutates": "TRUE",
+        "Enforce": "FALSE"
+      },
+      "invariants": ["TypeOK", "ObserveClean"],
+      "properties": [],
+      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+    },
+    {
+      "id": "x-observe-clean",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "FALSE",
+        "UnknownAsAdvisory": "FALSE",
+        "ObserveMutates": "FALSE",
+        "Enforce": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NeverTouched",
+        "DedupeCommitted",
+        "CapCommitted",
+        "ObserveClean"
+      ],
+      "properties": [],
+      "limits": { "timeoutMs": 300000, "heapMiB": 1024 }
+    }
+  ]
+}

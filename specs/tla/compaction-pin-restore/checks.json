@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "modelId": "compaction-pin-restore",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "RequireCheckpoint": "TRUE",
+        "RestoreEnabled": "TRUE",
+        "BeltEnabled": "TRUE",
+        "MaxPinned": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoPhantom",
+        "AtMostOneLivePerPin",
+        "NoStalePromise",
+        "ScheduleAccounting"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-blind-rule-b",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "RequireCheckpoint": "FALSE",
+        "RestoreEnabled": "TRUE",
+        "BeltEnabled": "TRUE",
+        "MaxPinned": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoPhantom"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-no-restore",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "RequireCheckpoint": "TRUE",
+        "RestoreEnabled": "FALSE",
+        "BeltEnabled": "TRUE",
+        "MaxPinned": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoStalePromise"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-belt-off-blind",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "RequireCheckpoint": "FALSE",
+        "RestoreEnabled": "TRUE",
+        "BeltEnabled": "FALSE",
+        "MaxPinned": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoPhantom"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "x-belt-off-fixed",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "RequireCheckpoint": "TRUE",
+        "RestoreEnabled": "TRUE",
+        "BeltEnabled": "FALSE",
+        "MaxPinned": "2"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoPhantom",
+        "AtMostOneLivePerPin",
+        "NoStalePromise",
+        "ScheduleAccounting"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "x-ring-eviction",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "RequireCheckpoint": "TRUE",
+        "RestoreEnabled": "TRUE",
+        "BeltEnabled": "TRUE",
+        "MaxPinned": "1"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoPhantom",
+        "AtMostOneLivePerPin"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
