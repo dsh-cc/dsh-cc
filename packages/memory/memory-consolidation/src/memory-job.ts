@@ -15,7 +15,10 @@ import {
   carveEntrypointRoom,
   commitMemoryWrites,
   mergeIndexContent,
+  parseMemoryFile,
   pointerAdditions,
+  renderExtractionPointer,
+  upsertExtractionPointer,
   validateMemoryWrites,
   writeMemoryFiles,
   ENTRYPOINT_NAME,
@@ -23,6 +26,7 @@ import {
   MAX_ENTRYPOINT_BYTES,
   truncateEntrypointContent,
 } from '@dsh-cc/memory'
+import type { MemoryWrite } from '@dsh-cc/memory'
 
 /** Structural subset of the subagent seam used here. */
 interface SubagentService {
@@ -53,6 +57,26 @@ interface SubagentResultLike {
 
 /** The job-done outcome: resolves only, per the JobHooks contract. */
 export type JobOutcome = { status: 'completed' } | { status: 'killed' } | { status: 'failed'; detail: string }
+
+/**
+ * The only labels a memory fork may be dispatched under (design §B). The label
+ * selects the write-back policy — `memory-consolidation` keeps the dream's
+ * full-index rewrite, `extract-memories` gets the host-side upsert — so an
+ * unknown label must never silently default to either.
+ */
+export const MEMORY_JOB_LABELS = ['extract-memories', 'memory-consolidation'] as const
+
+/** A validated memory-job label. */
+export type MemoryJobLabel = typeof MEMORY_JOB_LABELS[number]
+
+/**
+ * Narrow a raw label to the dispatchable set.
+ * @param label - the raw label.
+ * @returns true when the label is known.
+ */
+function isMemoryJobLabel(label: string): label is MemoryJobLabel {
+  return (MEMORY_JOB_LABELS as readonly string[]).includes(label)
+}
 
 /**
  * The control object {@link startMemoryJob} resolves to, named so callers can
@@ -139,24 +163,41 @@ function splitIndexWrite(
 }
 
 /**
- * The §3.4 write-back pipeline: a batch without a `MEMORY.md` write is a plain
- * validated write; a batch with one commits through the optimistic index
- * protocol, where the model's rewrite is the base, the concurrent additions
- * beyond `baselineIndex` are appended, and `carveEntrypointRoom` makes room
- * for them under the entrypoint caps (subsuming the old over-limit fallback).
- * The builder owns validation, so a rejection (invalid payload, additions
- * alone over the caps) exits the commit loop immediately.
+ * The §3.4 write-back pipeline, dispatched by job label.
+ *
+ * `memory-consolidation` (the dream) is unchanged: a batch without a `MEMORY.md`
+ * write is a plain validated write; a batch with one commits through the
+ * optimistic index protocol, where the model's rewrite is the base, the
+ * concurrent additions beyond `baselineIndex` are appended, and
+ * `carveEntrypointRoom` makes room for them under the entrypoint caps
+ * (subsuming the old over-limit fallback). The builder owns validation, so a
+ * rejection (invalid payload, additions alone over the caps) exits the commit
+ * loop immediately.
+ *
+ * `extract-memories` ignores the fork's index write entirely and lets the host
+ * upsert one pointer per batch topic (design
+ * docs/plans/2026-11-12-extraction-index-coverage-fix.md §A):
+ * `baselineIndex` is not consumed at all, so a capped prompt baseline can no
+ * longer be mistaken for concurrent additions.
  * @param fs - the filesystem seam.
  * @param dir - the memory directory root.
  * @param structured - the fork's raw structured report.
- * @param baselineIndex - the exact index snapshot the model's input was fixed against.
+ * @param baselineIndex - the exact index snapshot the model's input was fixed against (dream only).
+ * @param label - the validated job label.
+ * @param warn - sink for degradation warnings of the committed attempt.
  */
 async function writeBackReport(
   fs: FileSystem,
   dir: string,
   structured: unknown,
   baselineIndex: string,
+  label: MemoryJobLabel,
+  warn: (message: string) => void,
 ): Promise<void> {
+  if (label === 'extract-memories') {
+    await writeExtractionReport(fs, dir, structured, warn)
+    return
+  }
   const split = splitIndexWrite(structured)
   if (split === undefined) {
     await writeMemoryFiles(fs, dir, validateMemoryWrites(structured))
@@ -177,6 +218,87 @@ async function writeBackReport(
 }
 
 /**
+ * Remove every `MEMORY.md` entry from a fork report (design §A.1). The drop
+ * happens BEFORE validation on purpose: an over-cap or malformed fork index is
+ * going to be ignored anyway, so it must never fail the batch. Non-array /
+ * malformed payloads pass through untouched and are rejected by
+ * `validateMemoryWrites` as usual.
+ * @param structured - the fork's raw structured report.
+ * @returns the report with its index writes removed.
+ */
+function dropIndexWrites(structured: unknown): unknown {
+  if (typeof structured !== 'object' || structured === null || Array.isArray(structured)) return structured
+  const raw = (structured as { writes?: unknown }).writes
+  if (!Array.isArray(raw)) return structured
+  const isIndexWrite = (entry: unknown): boolean =>
+    typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+    && (entry as { path?: unknown }).path === ENTRYPOINT_NAME
+  return { ...(structured as object), writes: raw.filter(entry => !isIndexWrite(entry)) }
+}
+
+/**
+ * The extraction write-back (design §A.3): the fork supplies topic files only;
+ * the host derives each pointer from that topic's own frontmatter and upserts it
+ * into the durable index inside the existing optimistic commit loop.
+ *
+ * Per attempt the upserts are re-derived from the fresh index (stateless across
+ * CAS rounds), and the attempt's warnings ride out as metadata — only the
+ * committed attempt's warnings are ever emitted. No index write is emitted when
+ * the resulting content is byte-identical to the fresh index: that covers an
+ * empty payload, an index frozen at its cap, and every skipped upsert, and it
+ * guarantees a pre-existing over-cap index never produces a failing write (the
+ * host-generated index is not re-validated through `validateMemoryWrites`).
+ * @param fs - the filesystem seam.
+ * @param dir - the memory directory root.
+ * @param structured - the fork's raw structured report.
+ * @param warn - sink for the committed attempt's warnings.
+ */
+async function writeExtractionReport(
+  fs: FileSystem,
+  dir: string,
+  structured: unknown,
+  warn: (message: string) => void,
+): Promise<void> {
+  // Validate the topic payload only; an empty payload after the drop is legal —
+  // the job completes with zero writes.
+  const topicWrites = validateMemoryWrites(dropIndexWrites(structured))
+  if (topicWrites.length === 0) return
+  const commit = await commitMemoryWrites(fs, dir, async (fresh) => {
+    const warnings: string[] = []
+    const unparseable: string[] = []
+    let index = fresh
+    // Batch order: a skipped upsert leaves the running index untouched, so a
+    // later (smaller) pointer is still judged against what would really land.
+    for (const write of topicWrites) {
+      const parsed = parseMemoryFile(write.content)
+      if (parsed === undefined) {
+        // Degraded visibility, documented and warned: the topic commits with no
+        // index line and no scan/recall presence — grep only. Never a failure.
+        unparseable.push(write.path)
+        continue
+      }
+      const rendered = renderExtractionPointer(write.path, parsed.frontmatter)
+      warnings.push(...rendered.warnings)
+      const upsert = upsertExtractionPointer(index, write.path, rendered.line)
+      if (upsert.warning !== undefined) warnings.push(upsert.warning)
+      index = upsert.content
+    }
+    if (unparseable.length > 0) {
+      warnings.push(
+        `memory-consolidation: extraction write-back: no index pointer for `
+        + `${unparseable.map(path => `"${path}"`).join(', ')} (unparseable frontmatter); the topic file(s) were `
+        + 'written and are discoverable by grep only',
+      )
+    }
+    const writes: MemoryWrite[] = index === fresh
+      ? topicWrites
+      : [...topicWrites, { path: ENTRYPOINT_NAME, content: index }]
+    return { writes, meta: { warnings } }
+  })
+  for (const message of commit.meta.warnings) warn(message)
+}
+
+/**
  * Start a memory-scoped forked subagent as a background job. The fork reports
  * its file set via `outputSchema`; on settlement the plugin validates the
  * batch and writes it host-side under a policy confined to `dir`. Resolves to
@@ -185,8 +307,10 @@ async function writeBackReport(
  *
  * `baselineIndex` is the exact index content the model's input was fixed
  * against (extraction: the prompt-injected string; dream: the strict read
- * taken before dispatch). The write-back merge treats any pointer beyond it
- * as a concurrent addition, so a save landing after the capture survives.
+ * taken before dispatch). The dream's write-back merge treats any pointer
+ * beyond it as a concurrent addition, so a save landing after the capture
+ * survives; the extraction write-back does not consume it at all (its pointers
+ * are host-derived upserts, see `writeExtractionReport`).
  */
 export async function startMemoryJob(
   ctx: Context,
@@ -197,6 +321,9 @@ export async function startMemoryJob(
   prompt: string,
   baselineIndex: string,
 ): Promise<MemoryJobControl> {
+  if (!isMemoryJobLabel(label)) {
+    throw new Error(`unknown memory job label "${label}": expected one of ${MEMORY_JOB_LABELS.join(', ')}`)
+  }
   const subagents = ctx.get('subagents') as SubagentService | undefined
   if (subagents === undefined) {
     return { abort: () => {}, settled: Promise.resolve(false), done: Promise.resolve({ status: 'failed', detail: 'subagents seam unavailable' }) }
@@ -241,7 +368,14 @@ export async function startMemoryJob(
         return { status: 'failed', detail: 'fs seam unavailable for memory write-back' }
       }
       try {
-        await writeBackReport(fs, dir, res.structured, baselineIndex)
+        await writeBackReport(
+          fs,
+          dir,
+          res.structured,
+          baselineIndex,
+          label,
+          (message: string) => { ctx.logger.warn(message) },
+        )
         return { status: 'completed' }
       } catch (err) {
         // Exhausted rebases: the dream's bounded retry (or a later eligible

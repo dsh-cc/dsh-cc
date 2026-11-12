@@ -30,8 +30,8 @@ export const MEMORY_SAVE_TOOL = 'memory_save'
 
 /** Topic slugs are kebab-case; the file is `<name>.md`. */
 const NAME_RULE = /^[a-z0-9][a-z0-9-]*$/
-/** One-line relevance description cap. */
-const MAX_DESCRIPTION_CHARS = 200
+/** One-line relevance description cap (also the extraction pointer's clamp). */
+export const MAX_DESCRIPTION_CHARS = 200
 
 /**
  * Appended to the model-visible rejection/warning text when the pressure
