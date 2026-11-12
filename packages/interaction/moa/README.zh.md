@@ -18,6 +18,24 @@
 | `judge-route` | 别名 `gauge` | 别名或 `{provider, model, protocol}`；未设置时用 `gauge` 通道别名（须解析为 System One 路由，否则 moa 保持未启用） |
 | `classify-budget-tokens` | `4000` | 分类输入预算 |
 | `call-budget-ms` | `8000` | 每条消息的级联截止时间 |
+| `context-routing.mode` | `off` | off/shadow/active —— 上下文感知分类 v2（见下） |
+| `context-routing.timeout-ms` | `1500` | 单次决策超时毫秒数（读取时钳制 100..8000） |
+| `context-routing.max-input-tokens` | `4000` | 路由状态 + 问题的预算（读取时钳制 512..16000） |
+| `context-routing.max-under-tier-probability` | `0.10` | 所选档位之上的概率质量上限（0..0.5） |
+| `context-routing.min-top-probability` | `0.60` | 最高概率低于此值时回落到实际选择（0.25..1） |
+
+## 上下文路由 v2
+
+`context-routing`（可选，默认 `off`）把对四档答案取 argmax 的做法，替换为
+上下文感知的分类加尾部风险档位策略：分类器看到该轮的有界历史切片（当前
+请求、最近三条用户请求、最近一次助手回答与工具名 —— 绝不含参数、路径或
+结果），应用的档位是「其之上的概率质量不超过 `max-under-tier-probability`」
+的最便宜档位。`shadow` 与旧分类器并行：模型仍由旧结果决定，因此 shadow 明确
+接受双份分类调用的开销；`active` 完全取代旧分类器。两者都要求
+`moa.enabled: true` 且武装成功，显式 `/model` 依然优先。升级重试路径与
+子代理 / fork 会话永不分类。启用 `active` 前必须先通过离线评估闸门
+（`moa/eval/context-routing.json`，120 条盲标用例）；把
+`context-routing.mode` 设回 `off` 即完成全部回滚。
 
 ## 启用阶梯
 

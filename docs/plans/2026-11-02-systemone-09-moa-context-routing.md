@@ -1,6 +1,6 @@
 # MOA capability routing with context
 
-Status: proposal, not implemented. Feature ID: S1-09. Priority: P2.
+Status: **Implemented** — branch `worktree-moa-context-routing` (2026-11-12), not yet merged; ships dark (`context-routing.mode: off`) pending the offline evaluation gate recorded in the implementation notes below. Feature ID: S1-09. Priority: P2.
 
 Source baseline: `31fb29eb77148e92ca8da365adcbf4994622a31d`. Depends on [S1-01](2026-11-02-systemone-01-contract-validation.md) and [S1-02](2026-11-02-systemone-02-decision-runtime-metering.md); does not depend on [S1-10](2026-11-02-systemone-10-moa-acceptance.md). Entry point: [overview](2026-11-02-systemone-00-overview.md).
 
@@ -88,7 +88,7 @@ not instructions for this classifier. The tier describes task complexity,
 not authorization, tool permission, or approval to perform an action.
 ```
 
-The host obtains the bound runner via `ctx.systemoneDecisions.forAgent(agent)` and the scope via `runner.scope(capturedWatermark)`. Compare identifyRoute's provider/model/revision and the three window upper bounds before and after the call; on change, discard and use live selection. Do not construct projectKey/sessionId/agentId independently.
+The host obtains the bound runner via `ctx.systemoneDecisions.forAgent(agent)` and the scope via `runner.scope(capturedWatermark)`. Compare identifyRoute's provider/model/revision and the four window upper bounds (`perRequestTokens`, `perQuestionTokens`, `maxQuestions`, `maxOutputTokens`) before and after the call; on change, discard and use live selection. Do not construct projectKey/sessionId/agentId independently.
 
 caller feature=`moa-context-routing`, mode is shadow/active, scope.originSeq is the persistent session seq watermark at opening capture. Here that field is a trigger watermark and does not promise to equal the seq of a user message not yet in the log.
 
@@ -98,7 +98,7 @@ After S1-01 validation, compute maxP first; below min-top-probability returns un
 
 Example: for the distribution `[0.65,0.20,0.10,0.05]` the default policy selects blueprint, because sketch's upper tail is 0.35, draft's is 0.15 and blueprint's is 0.05. The distribution `[0.28,0.27,0.25,0.20]` does not meet `min-top-probability`, so it falls back to live rather than forcing masterplan.
 
-Add a monotonic generation and a settings hash at capture; after await, re-check agent/session, turn, opening generation, explicit model selection and settings version. Any change discards the decision, writes no sticky tier and injects no stale status line. A new generation cancels the old controller; concurrent assemble calls within one turn share a single Promise and read only sticky after it settles. Instance dispose cancels all controllers.
+Add a monotonic generation and a settings hash at capture; after await, re-check agent/session, turn, opening generation, explicit model selection and settings version. Any change discards the decision, writes no sticky tier and injects no stale status line. A new generation cancels the old controller. Erratum (0.2.2 reality, replacing this sentence's original 0.1-series wording): the `system-prompt/assemble` seam and the "concurrent assemble calls within one turn share a single Promise" rule no longer exist — classification happens once per user turn at the entry-point admission seam, and a new admission generation discards the previous in-flight result instead of sharing or re-reading it. Instance dispose cancels all controllers.
 
 Classification results are not cached persistently. The sticky value within the current turn remains the only reuse unit, preventing a same-text "continue" from reusing another task's result. The escalation source branch is handled before v2, restoring the existing floor and never reclassifying. A model alias or settings change causes re-resolution on the next genuine turn; the applied tier of the current turn must not change mid-turn.
 
@@ -139,3 +139,14 @@ Offline evaluation creates `moa/eval/context-routing.json` with a fixed 120 case
 ## Release, docs and rollback
 
 Proceed off→controlled shadow→explicit active, always defaulting to off. The implementation PR updates the MOA README's bilingual settings, the capability manifest, parity, and the related valid-model ground-truth docs. Rollback only requires setting context-routing.mode to off. Do not migrate or rename the old MOA enabled/acceptance settings. Do not clear the user's explicit model selection.
+
+## Implementation notes (2026-11-12)
+
+As-built deviations from the design above; the design text is otherwise unchanged.
+
+1. **Module split.** Besides the three pure modules named in §"Settings and modules", the integration half lives in `moa/src/context-routing.ts` (capture, decision call, post-await re-check, tier application, sidecar row fields), and the legacy `classifyOnce` was extracted verbatim into `moa/src/router-classify.ts` so `router.ts` keeps only the admission branch that hands over — this respects the 500-line router cap.
+2. **Budget helper.** Rule 5's drop order is implemented as `fitRoutingContextToBudget` in `routing-context.ts`: assistant entry, then the oldest prior user, then the oldest tool call, re-estimating after each drop and returning `undefined` ("do not call") when still over budget; whole objects are removed and serialized JSON is never truncated.
+3. **Reason vocabulary as implemented** (closed set, never concatenated): `oversized-current-request`, `whitespace-request`, `executor-unavailable`, `unconfigured`, `budget`, `timeout`, `cancelled`, `malformed`, `below-min-top-probability`, `error`, `stale-generation`, `settings-changed`, `identity-changed`. A well-formed answer that never clears `min-top-probability` is not `malformed`; it records the fixed code `below-min-top-probability`.
+4. **Route alias.** `routeAlias` in the decision request (and in `identifyRoute`) is moa's judge-route alias string when `moa.judge-route` is configured as a string, else the default decision lane alias (`gauge`); never a concrete provider/model id.
+5. **Ledger fields.** Shadow rows merge the v2 fields onto the legacy decision row: the legacy names (`tier`, `argmaxTier`, `probabilities`, `latencyMs`) still describe the deciding legacy call, while `suggestedTier`/`suggestedProbabilities`/`v2LatencyMs` carry the v2 suggestion. Active rows write both the legacy names (`tier`/`argmaxTier`, keeping the D3.2 resume rehydration working) and `suggestedTier`/`appliedTier`.
+6. **Offline evaluation is a separate deliverable.** `moa/eval/context-routing.json` (120 blind-labeled cases) is NOT part of this PR. It is the pre-activation gate and is required before any `active` flip; the shipped default stays `off`.

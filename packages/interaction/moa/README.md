@@ -19,6 +19,28 @@ costs nothing. Subagents/forks are never overlaid.
 | `judge-route` | alias `gauge` | alias or `{provider, model, protocol}`; unset → the `gauge` lane alias (must resolve to a System One route, else moa stays unarmed) |
 | `classify-budget-tokens` | `4000` | classify input budget |
 | `call-budget-ms` | `8000` | per-message cascade deadline |
+| `context-routing.mode` | `off` | off/shadow/active — context-aware classification v2 (see below) |
+| `context-routing.timeout-ms` | `1500` | per-decision timeout in ms (read-time clamp 100..8000) |
+| `context-routing.max-input-tokens` | `4000` | budget for routing state + question (read-time clamp 512..16000) |
+| `context-routing.max-under-tier-probability` | `0.10` | maximum probability mass tolerated above the selected tier (0..0.5) |
+| `context-routing.min-top-probability` | `0.60` | below this top probability, fall back to live selection (0.25..1) |
+
+## Context routing v2
+
+`context-routing` (optional, default `off`) replaces the argmax over the
+four-tier answer with a context-aware classification plus a tail-risk tier
+policy: the classifier sees a bounded slice of the turn's history (the
+current request, the last three user requests, the last assistant answer and
+tool names — never arguments, paths or results), and the applied tier is the
+cheapest one whose probability mass above it stays under
+`max-under-tier-probability`. `shadow` runs alongside the legacy classifier:
+the legacy result still decides the model, so shadow accepts a double
+classification call; `active` replaces the legacy classifier entirely. Both
+require `moa.enabled: true` and a successful arming, and an explicit `/model`
+still wins. The escalation retry path and subagent/fork sessions never
+classify. Enabling `active` requires the offline evaluation gate
+(`moa/eval/context-routing.json`, 120 blind-labeled cases) to pass first;
+setting `context-routing.mode` back to `off` is the whole rollback.
 
 ## Arming ladder
 
