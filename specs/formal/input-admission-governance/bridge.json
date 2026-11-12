@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "featureId": "input-admission-governance",
+  "tlaModel": "specs/tla/input-admission-governance",
+  "leanModel": "specs/lean/input-admission-arithmetic",
+  "operations": [
+    {
+      "id": "admit-exact-advisory-0",
+      "requirementId": "REQ-2",
+      "tlaOperator": "WalkFresh",
+      "leanFunction": "Formal.fits",
+      "propertyIds": [
+        "admission-preserves-bound"
+      ],
+      "domain": "advisory admission at the exact remaining budget: the TLA walk admits when bytes <= budget - used, the Lean fits predicate states the same inequality; corpus case {budget 4, used 0, bytes 4}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "admit-over-advisory-1",
+      "requirementId": "REQ-2",
+      "tlaOperator": "WalkFresh",
+      "leanFunction": "Formal.fits",
+      "propertyIds": [
+        "admission-preserves-bound"
+      ],
+      "domain": "advisory admission one byte over: both sides must reject; corpus case {budget 4, used 1, bytes 4}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "oversize-above-4",
+      "requirementId": "REQ-3",
+      "tlaOperator": "WalkFresh",
+      "leanFunction": "Formal.oversize",
+      "propertyIds": [
+        "oversize-never-fits"
+      ],
+      "domain": "a message whose own bytes exceed its class budget is dropped at trim time and can never fit; corpus case {budget 4, bytes 5}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "oversize-at-4",
+      "requirementId": "REQ-3",
+      "tlaOperator": "WalkFresh",
+      "leanFunction": "Formal.oversize",
+      "propertyIds": [
+        "oversize-never-fits"
+      ],
+      "domain": "a message exactly at the class budget is not oversize; corpus case {budget 4, bytes 4}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "window-3-below",
+      "requirementId": "REQ-4",
+      "tlaOperator": "ProvisionalDedupeEligible",
+      "leanFunction": "Formal.withinWindow",
+      "propertyIds": [
+        "window-below-suppresses"
+      ],
+      "domain": "a gap below the window suppresses (strict comparison); corpus case {now 10, lastAdmitted 10, window 3}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "window-3-equal",
+      "requirementId": "REQ-4",
+      "tlaOperator": "ProvisionalDedupeEligible",
+      "leanFunction": "Formal.withinWindow",
+      "propertyIds": [
+        "window-boundary-admits"
+      ],
+      "domain": "a gap exactly equal to the window admits; corpus case {now 13, lastAdmitted 10, window 3}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "window-3-above",
+      "requirementId": "REQ-4",
+      "tlaOperator": "ProvisionalDedupeEligible",
+      "leanFunction": "Formal.withinWindow",
+      "propertyIds": [
+        "window-above-admits"
+      ],
+      "domain": "a gap above the window admits; corpus case {now 14, lastAdmitted 10, window 3}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    },
+    {
+      "id": "protected-governance-4096",
+      "requirementId": "REQ-1",
+      "tlaOperator": "ClassOf",
+      "leanFunction": "Formal.charged",
+      "propertyIds": [
+        "protected-never-charged"
+      ],
+      "domain": "governance-class messages are never charged against a budget regardless of size; corpus case {class governance, bytes 4096}",
+      "casesFile": "specs/formal/input-admission-governance/cases.json",
+      "implementationFiles": []
+    }
+  ]
+}

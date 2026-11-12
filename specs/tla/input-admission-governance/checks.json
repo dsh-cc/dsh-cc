@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "modelId": "input-admission-governance",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "FALSE",
+        "UnknownAsAdvisory": "FALSE",
+        "ObserveMutates": "FALSE",
+        "Enforce": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NeverTouched",
+        "DedupeCommitted",
+        "CapCommitted",
+        "AdvisoryBudgetHeld",
+        "MemoryBudgetHeld",
+        "ObserveClean",
+        "AdmittedEverCommitted",
+        "AdmittedAtMostOnce",
+        "DispositionPartition",
+        "Bridge_admit_exact_advisory_0",
+        "Bridge_admit_over_advisory_1",
+        "Bridge_oversize_above_4",
+        "Bridge_oversize_at_4",
+        "Bridge_window_3_below",
+        "Bridge_window_3_equal",
+        "Bridge_window_3_above",
+        "Bridge_protected_governance_4096"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 600000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "x-observe-clean",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "CommitAtCheck": "FALSE",
+        "UnknownAsAdvisory": "FALSE",
+        "ObserveMutates": "FALSE",
+        "Enforce": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "MemoryBudgetHeld",
+        "NeverTouched",
+        "DedupeCommitted",
+        "CapCommitted",
+        "ObserveClean",
+        "AdmittedEverCommitted",
+        "AdmittedAtMostOnce",
+        "DispositionPartition"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

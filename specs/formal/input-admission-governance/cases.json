@@ -1,0 +1,170 @@
+[
+  {
+    "id": "admit-exact-advisory-0",
+    "input": {
+      "class": "advisory",
+      "budget": "4",
+      "used": "0",
+      "bytes": "4",
+      "now": "0",
+      "lastAdmitted": "0",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "4",
+        "fits": true,
+        "oversize": false,
+        "suppressed": true
+      }
+    },
+    "tlaExpression": "BridgeFits(4, 0, 4)"
+  },
+  {
+    "id": "admit-over-advisory-1",
+    "input": {
+      "class": "advisory",
+      "budget": "4",
+      "used": "1",
+      "bytes": "4",
+      "now": "0",
+      "lastAdmitted": "0",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "4",
+        "fits": false,
+        "oversize": false,
+        "suppressed": true
+      }
+    },
+    "tlaExpression": "~BridgeFits(4, 1, 4)"
+  },
+  {
+    "id": "oversize-above-4",
+    "input": {
+      "class": "advisory",
+      "budget": "4",
+      "used": "0",
+      "bytes": "5",
+      "now": "0",
+      "lastAdmitted": "0",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "5",
+        "fits": false,
+        "oversize": true,
+        "suppressed": true
+      }
+    },
+    "tlaExpression": "BridgeOversize(4, 5)"
+  },
+  {
+    "id": "oversize-at-4",
+    "input": {
+      "class": "advisory",
+      "budget": "4",
+      "used": "0",
+      "bytes": "4",
+      "now": "0",
+      "lastAdmitted": "0",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "4",
+        "fits": true,
+        "oversize": false,
+        "suppressed": true
+      }
+    },
+    "tlaExpression": "~BridgeOversize(4, 4)"
+  },
+  {
+    "id": "window-3-below",
+    "input": {
+      "class": "advisory",
+      "budget": "4",
+      "used": "0",
+      "bytes": "2",
+      "now": "10",
+      "lastAdmitted": "10",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "2",
+        "fits": true,
+        "oversize": false,
+        "suppressed": true
+      }
+    },
+    "tlaExpression": "BridgeWithinWindow(10, 10, 3)"
+  },
+  {
+    "id": "window-3-equal",
+    "input": {
+      "class": "advisory",
+      "budget": "4",
+      "used": "0",
+      "bytes": "2",
+      "now": "13",
+      "lastAdmitted": "10",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "2",
+        "fits": true,
+        "oversize": false,
+        "suppressed": false
+      }
+    },
+    "tlaExpression": "~BridgeWithinWindow(13, 10, 3)"
+  },
+  {
+    "id": "window-3-above",
+    "input": {
+      "class": "advisory",
+      "budget": "4",
+      "used": "0",
+      "bytes": "2",
+      "now": "14",
+      "lastAdmitted": "10",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "2",
+        "fits": true,
+        "oversize": false,
+        "suppressed": false
+      }
+    },
+    "tlaExpression": "~BridgeWithinWindow(14, 10, 3)"
+  },
+  {
+    "id": "protected-governance-4096",
+    "input": {
+      "class": "governance",
+      "budget": "4",
+      "used": "2",
+      "bytes": "4096",
+      "now": "0",
+      "lastAdmitted": "0",
+      "window": "3"
+    },
+    "expected": {
+      "ok": {
+        "charged": "0",
+        "fits": false,
+        "oversize": true,
+        "suppressed": true
+      }
+    },
+    "tlaExpression": "~IsBudgeted(mG)"
+  }
+]
