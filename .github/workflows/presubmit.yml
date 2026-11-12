@@ -543,6 +543,15 @@ jobs:
         continue-on-error: true
         run: pnpm check:token-efficiency
 
+      # Deterministic offline arms only (no network): judge-stub is the
+      # pre-registered F1 gate per docs/plans/2026-11-12-tool-discovery-activation.md
+      # § Flip policy; `live` is an evidence arm, not a CI gate (see the package README).
+      - name: Tool-discovery eval gate (selfcheck + judge-stub)
+        working-directory: dsh-cc
+        run: |
+          node packages/core/tool-search/scripts/eval-discovery.mjs --mode selfcheck
+          node packages/core/tool-search/scripts/eval-discovery.mjs --mode judge-stub
+
       - name: check:subagent-paste
         working-directory: dsh-cc
         run: pnpm check:subagent-paste

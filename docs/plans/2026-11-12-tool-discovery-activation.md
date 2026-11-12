@@ -1,7 +1,7 @@
 # Tool Discovery Activation (extend existing eval → flip)
 
 - Date: 2026-11-12
-- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim). Eval harness (corpus v2 classes, judge-stub gate arm, live runtime arm) implemented in this PR; the sampling sidecar, real-lane adapter, shadow window, and mode flips remain later PRs per § Flip policy.
 
 r3 → r4 fold: admitted-restriction rationale corrected (judge never sees denied candidates — scope-of-judgment, not TN-padding; micro-F1 excludes true negatives arithmetically).
 - Program: context-engineering input governance (doc 6 of 8)

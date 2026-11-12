@@ -64,15 +64,29 @@ Settings live in the `cc-tool-discovery` namespace; raw keys are kebab-case:
 
 These thresholds are first-round evaluation parameters, not measured quality guarantees. Any invalid value disables the judgment entirely: the runner is not called, the lexical path runs, and the failure is reported once through `ctx.logger.warn`. The same whole-path fallback applies when the route, the service, or a complete answer is missing, and when a hard bound is exceeded — an oversized query or metadata field, a pool over `max-candidates`, a batch that cannot be split into whole groups that fit the request window, a timeout, caller cancellation, or a catalog/permission change before activation. A partial judgment is never blended with lexical hits, and a valid judgment that finds nothing relevant activates nothing (it is not backfilled from lexical hits). Admission is checked on both ends: a candidate the scope denies never enters the pool, and `activate()` re-checks the permission gate before loading, so a recommendation can never widen a scope.
 
-The offline evaluator replays the pure policy layer against a redacted fixture — the human target set plus a lexical control, split into Chinese, synonym, no-relevant-tool, and restricted-tool subsets — with no network access:
+The offline evaluator (`scripts/eval-discovery.mjs`) runs against one local, redacted corpus and never touches the network. It has four modes:
+
+| `--mode` | Purpose |
+| --- | --- |
+| `replay` | **Oracle integrity pin.** The judgment is synthesized from each case's `expectedNames`, so an F1 number here would be tautological by construction. It stays a pure policy-layer pin — pool, questions, batching, scoring and selection against the redacted fixture — and is never gated on F1. |
+| `selfcheck` | **Corpus health.** Schema integrity, the legacy subset floors, and the per-class coverage floors. |
+| `judge-stub` | **The F1 gate arm CI runs.** A frozen, deliberately imperfect keyword/rule scorer over candidate metadata drives the real policy layer; gold labels are used for scoring only, never for judging, so the F1 line is meaningful and deterministic. |
+| `live` | **Evidence, not a gate.** The shipped `createDiscoveryRuntime` driven through a scripted fake lane adapter: multi-batch sequences sharing one deadline, over-cap candidate pools, `unavailable`, cancellation, and the `exact` short-circuit. |
+
+The `judge-stub` thresholds are pre-registered in the design doc (§ Scoring) and gated on the tune split only: aggregate restricted micro-F1 ≥ 0.85, per-class restricted micro-F1 ≥ 0.80 for classes with at least 12 items (and positives), and — because the negative-only class has no positives and its F1 is undefined — that class is gated on false-activation ≤ 0.10 plus exact-set accuracy 1.0 instead.
+
+**Corpus schema v2** (`scripts/lib/eval-corpus.mjs`): `{ schemaVersion: 2, corpusVersion, description?, cases[] }`. `corpusVersion` is an integer bumped whenever the cases change, and every report pins it. Each case carries a `class` — the gating dimension, one of `direct-fit`, `lexical-trap` (lexical overlap / wrong-server traps), `multi-intent`, `negative-only` (`expectedNames: []`), `keyword-stuffing` (metadata keyword-stuffing) — plus optional `alsoClasses` for declared multi-label membership, which is how the corpus reaches ≥ 12 memberships per class without an exclusive split. The legacy `subset: chinese|synonym|none|restricted` filter and its floors are kept. A query may not equal a candidate's `name`: an exact-name query short-circuits the judge before it is ever called, so such a case could not measure judge quality.
+
+**Splits.** `--split tune|held-out|full` (default `tune`). Ordering the cases by the hash of their id cuts the corpus 2/3 tune / 1/3 held-out; only `tune` is ever gated, `held-out` is reserved for the one-time flip evaluation, and `full` is for inspection.
+
+Run either way:
 
 ```bash
-node packages/core/tool-search/scripts/eval-discovery.mjs \
-  --corpus packages/core/tool-search/tests/fixtures/discovery-corpus.json --mode replay
-node packages/core/tool-search/scripts/eval-discovery.mjs --mode selfcheck
+node packages/core/tool-search/scripts/eval-discovery.mjs --mode <mode>
+pnpm --filter @dsh-cc/tool-search run eval:discovery -- --mode <mode>
 ```
 
-`--mode replay` prints Recall@3 per subset beside the lexical control, plus activation precision, admission leaks, and a reproducibility check, and emits only aggregate numbers and case ids — never query text. `--mode selfcheck` validates the corpus schema alone.
+Every mode prints aggregate numbers, class labels and case ids only — never query text, candidate descriptions or notes. `replay` adds Recall@3 per subset beside the lexical control, activation precision, admission leaks and a reproducibility check; `judge-stub` prints the per-class F1 table and the gate verdict; `live` asserts the failure battery and reports micro-F1 plus nominal/tail latency ungated (p95 on a corpus this size is the ~3rd-largest sample). CI runs `selfcheck` and `judge-stub` only; no arm needs the network.
 
 ## Model Experience
 
