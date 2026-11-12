@@ -1,7 +1,9 @@
 # Tool Discovery Activation (extend existing eval → flip)
 
 - Date: 2026-11-12
-- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
+- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+
+r3 → r4 fold: admitted-restriction rationale corrected (judge never sees denied candidates — scope-of-judgment, not TN-padding; micro-F1 excludes true negatives arithmetically).
 - Program: context-engineering input governance (doc 6 of 8)
 - Depends on: nothing hard; doc 3's ledger (`toolsCount/toolsBytes` rows) is the post-flip monitoring instrument.
 - Literature basis: ToolMenuBench (CMTF 32.1% → 85.7% success); Signals and Queries (cheap classifier pre-filter).
@@ -45,7 +47,7 @@ The existing runner has two modes — `replay` and `selfcheck` (`eval-discovery.
 ### Scoring (pre-registered, no post-hoc)
 
 - Gold labels apply at the **(query, candidate)** pair level; judge output is the **production activation set after `selectNames`** — never the raw question answers and never the `exact`-short-circuit path (excluded from judge-quality scoring; grok + codex convergent).
-- Primary metric: micro-F1 over (query, candidate) labels **restricted to admitted candidates** (critic delta fold: `admitted:false` candidates are excluded from the pool by the permission gate, so every such pair is an automatic true negative padding micro-F1). Report both restricted and unrestricted numbers; only the restricted line is gated.
+- Primary metric: micro-F1 over (query, candidate) labels **restricted to admitted candidates** (the judge never sees a denied candidate, so those pairs measure permission gating, not judge quality — codex delta correction: micro-F1 computation itself excludes true negatives; the rationale is scope-of-judgment, not TN-padding as earlier text incorrectly said). Report both restricted and unrestricted numbers; only the restricted line is gated.
 - Secondary diagnostics: per-item exact-set accuracy; per-class breakdowns.
 - Class (d) has no positives → F1 undefined there (codex): (d) is gated on **false-activation rate** (`|activated| / |catalog candidates| ≤ 0.10`) and exact-set accuracy = 1.0, and is explicitly **exempt** from the universal per-class F1 floor (zero-denominator semantics; the :55 per-class floor applies to classes with positives only — codex delta fold).
 - Latency: report p50/p90/**max** (p95 on ~50 items is the ~3rd-largest sample — report the small-sample caveat in the gate file; critic fold).

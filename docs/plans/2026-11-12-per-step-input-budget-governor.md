@@ -1,7 +1,9 @@
 # Per-step Input Budget Governor
 
 - Date: 2026-11-12
-- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
+- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+
+r3 → r4 fold: observe mode drops the `wouldTrim`/`wouldDefer` pseudo-fields (decisions live in the shared `trimmed` array under `mode: 'observe'`); `cc-shell-glue` moved advisory → **passthrough in v1 as an algorithmic rule** (pre-delivery latch makes enforced drops silent one-shot misses; doc 7 keeps it observe-only, cross-doc consistent); kind-enumeration test re-specified as a repo scan including harness-side kinds (explicit passthrough).
 - Program: context-engineering input governance (doc 1 of 8)
 - Depends on: doc 3 (`@dsh-cc/input-ledger` — row schemas GovernorRow/DedupeRow/CapRow live there; single schema source). Doc 7 plugs into this package's `govern()` pipeline.
 - Literature basis: Mei et al. `C* = argmax U(C) s.t. |C| ≤ L`; ContextPipe (2609.00749); Anthropic "smallest high-signal token set"; ToolMenuBench.
@@ -53,10 +55,12 @@ New package `packages/context/input-budget` (`@dsh-cc/input-budget`). One `agent
 | governance | `turn-rules`, `edit-recovery-hint`, `completion-gate`, `permission-rules`, `agent-instructions`, `hooks-claude-code`, `compact-checkpoint`, `moa-escalation` | never trim, never defer; counted |
 | task | `user`, `progress-rebuild`, `moa`, `subagent-settled`, `cc-subagent-children`, `vwa-evidence`, `cc-workflow-completion` | never trim, never defer; counted (lifecycle/delivery wakes: losing them loses work product or settlement; classified via the doc-7 r1/delta reviews) |
 | memory | `memory` | trim/defer under `memory-budget-bytes` (its own budget, not the advisory pool) |
-| advisory | `cc-shell-glue`*(observe-only in v1 — see doc 7 latch analysis)*, `advisor`, `retry-attendant`, `compaction-micro`, `compaction-cost-gate` | trim/defer under `advisory-budget-bytes` |
-| passthrough | `command-preset`, `side-query`, `tool-web-fetch`, `tool-registry`, **everything else / unknown** | never trim, never defer; counted |
+| advisory | `advisor`, `retry-attendant`, `compaction-micro`, `compaction-cost-gate` *(and `cc-shell-glue` — but that kind is observe-only in v1, see passthrough note)* | trim/defer under `advisory-budget-bytes` |
+| passthrough | `cc-shell-glue` **(v1 — hard rule)**, `command-preset`, `side-query`, `tool-web-fetch`, `tool-registry`, **everything else / unknown** | never trim, never defer; counted |
 
-A startup enumeration test asserts every kind declared in `MessageSourceMap` augmentations across the repo is covered by the map (guard against silent passthrough growth; the enumeration fixture in tests lists the full set in the table above — delta-round fold: the test will fail the design if the table and the fixture disagree).
+`cc-shell-glue` sits in passthrough in v1 as an **algorithmic rule**, not an annotation (delta-round two-seat finding): `mcpReadyNotice` commits its once-per-session latch **before** returning the notice (`mcpReadyNotice.ts:154` then `:157-163`) — any enforced trim/defer/oversize-rejection of a glue notice is a silent one-shot miss. Doc 7 therefore runs dedupe/caps on `cc-shell-glue` in observe mode only until a producer-side latch-after-admission contract exists. This also keeps the governor kind table and doc 7's exclusion list consistent.
+
+A startup enumeration test asserts that a **repo scan** of every kind declared in `MessageSourceMap` augmentations (dsh-cc packages **and** the pinned harness copy, including harness kinds like `plan-mode`, `skill-invocation`, `runtime-context`, `developer`, `system-prompt`, `subagent-instructions`) is covered by the class map — harness kinds map to passthrough explicitly (grok delta: the enumeration is a repo-scan assert, not a doc-table fixture equality check).
 
 Clock: the governor maintains a **monotonic per-session invocation counter `gateSeq`** (incremented on every gate call). `agent/pre-step`'s `step` is **turn-local** (resets per turn — codex delta MAJOR) and is unusable as a session clock; `gateSeq` replaces it for defer-TTL aging and for doc 7's dedupe window.
 
@@ -84,8 +88,8 @@ Rationale: backlog-first respects FIFO aging; admitted-message order is otherwis
 
 `mode: 'observe'` runs the same computation against the real batch but **must not assume divergent history**: a defer that never happened in observe has no next-step admission pending. Therefore:
 
-- The defer queue exists in enforce mode only. In observe mode, per-invocation rows report `wouldTrim` (fresh batch decisions) and `wouldDefer`-style counters for the current batch **without maintaining simulated backlog state**.
-- Multi-step defer-impossibility claims (e.g. "TTL expiry rows in observe") are explicitly out: `drop-expired`/`drop-oversize` rows appear only in enforce mode. R1 finding accepted — scheduled-defer parity cannot be simulated from a one-sided world, and simulating it risks double-delivery illusions.
+- The defer queue exists in enforce mode only. In observe mode there is no simulated backlog; rows represent decisions for the current batch in the shared `GovernorRow.trimmed` array under `mode: 'observe'` (delta-round fold: all three seats flagged the earlier `wouldTrim`/`wouldDefer` pseudo-fields as a schema fork — there are no such fields; observe rows look exactly like enforce rows, only `applied`-family semantics differ by mode).
+- Multi-step defer-impossibility claims are explicitly out: `drop-expired` rows appear only in enforce mode; `drop-oversize` IS possible in observe (fresh-batch trim computation).
 - On `observe → enforce` flip, the queue starts empty at the flip boundary (no cross-mode carryover).
 
 ### GovernorRow

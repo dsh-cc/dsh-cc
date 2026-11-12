@@ -1,7 +1,9 @@
 # Compaction Governed-Message Pinning
 
 - Date: 2026-11-12
-- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
+- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+
+r3 → r4 fold: the stale "summary fires only on success" anchor sentence deleted and replaced by the summary-then-commit ordering with the end-error cancellation contract (the exact premise the belt rejects).
 - Program: context-engineering input governance (doc 2 of 8)
 - Depends on: nothing. Independent package and mechanism.
 - Literature basis: Governance Decay (arxiv 2606.22528 — pinning restores violation rate 30%→0%); ARCBench (2611.03223 — rules retained ≠ rules honored after compaction); Facts Without Rules (2608.29028).
@@ -27,7 +29,7 @@ Non-goals:
 
 ## Current behavior (anchors)
 
-- Compaction pipeline events (harness `compaction/compaction/src/types.ts` in the pinned copy): `compaction/end` payload is `{ compactionId, sourceCommandId?, turn, error? }` **only** (:72) — it does **not** carry `shadowedSeqs`/`summarySeq`/`shadowedTokenCount`. Those live on **`compaction/summary`** (:34-40), which fires only on successful completion of the summary+commit, and on the returned `CompactionResult` object (not an event). The r1 draft's claim that `compaction/end` carries the shadow list was a BLOCKER-level error found by all three seats.
+- Compaction pipeline events (harness `compaction/compaction/src/types.ts` in the pinned copy): `compaction/end` payload is `{ compactionId, sourceCommandId?, turn, error? }` **only** (:72) — it does **not** carry `shadowedSeqs`/`summarySeq`/`shadowedTokenCount`. Those live on **`compaction/summary`** (:34-40), which is appended **before** the checkpoint commit (`compaction/compaction-basic/src/region.ts:489-509` in the pinned harness copy; the failed-commit path emits `compaction/end` with `error` at `:237-245`), so a summary can exist without any actual shadowing — the Detect section keys schedules on summary and treats end-with-error as a load-bearing cancellation (delta-round fold; the earlier "summary fires only on success" sentence was deleted — its premise is exactly what the belt exists for). The same fields also appear on the returned `CompactionResult` object (not an event).
 - The checkpoint commit is a `user/message` appended with `surfaceOp: { op:'replace', startSeq, endSeq }` and `sourceEventSeqs` over the shadowed events (`compaction/compaction-basic/src/region.ts:506-509` in the pinned harness copy; r1 path anchor corrected from `compaction/basic/src/region.ts`).
 - Compaction sources and their triggers: manual `/compact` (idle only, `interaction/command-compact/src/index.ts:69-70`), harness pressure auto at `agent/pre-step` (`compaction/compaction-basic/src/index.ts:157-175` in the pinned copy), **cost-gate idle on `agent/status` → compactNow (`compaction-cost-gate/src/index.ts:150-152,300`)**, and in-request retry paths (overflow/model-switch) inside the agent loop (`compaction/compaction-basic/src/index.ts:183-256` in the pinned copy + `core/agent-loop/src/agent.ts:444-563` in the pinned copy). The r1 draft's "automatic = pre-step" claim was incomplete; cost-gate and in-request paths are the two missed sources.
 - Session/event firehose is an allowed observation channel (`hooks-claude-code/src/register-events.ts:264`). Mutation from within a `session/event` observer throws `reenter` — `publicationEntry()` at `core/session/src/index.ts:880-882` in the pinned harness copy (r1 anchor :740-743 was stale).

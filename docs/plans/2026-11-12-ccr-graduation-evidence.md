@@ -1,7 +1,9 @@
 # CCR Graduation Evidence Framework
 
 - Date: 2026-11-12
-- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
+- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+
+r3 → r4 fold: `decideCrush` inputs enlarged with `projectKey?`/`storeAvailable` and reframed as a pure decision table (no `store.put`/ledger writes inside); identifier grammars collapsed to exactly two (SEARCH_ROW capture for original grep rows and stub `== path ==` headers for retained paths; free-text mention grammar for log-kind spans and all downstream references).
 - Program: context-engineering input governance (doc 5 of 8)
 - Depends on: doc 3 (ledger — production-side monitoring). Fixture replay is offline.
 - Literature basis: Referential Dangling (2608.04569); Later Questions (2610.27301); What Does Context Compression Cost (2608.16370 — completion-only evaluation masks re-acquisition); Paritok-4B (~96% identifier presence for coding agents); AGORA (granularity must match action grammar).
@@ -45,13 +47,23 @@ In `packages/context/context-crusher`, extract the acceptance predicate chain in
 
 ```ts
 decideCrush(
-  input: { blocks: readonly ContentBlock[]; isError: boolean; toolName: string },
+  input: {
+    blocks: readonly ContentBlock[];
+    isError: boolean;
+    toolName: string;
+    projectKey?: string;        // resolved by the caller; absent → defer/store branches collapse to dry-run behavior
+    storeAvailable: boolean;    // caller-side store presence (enabled && store !== undefined)
+  },
   cfg: ResolvedCrusherConfig,
   estimate: (content) => number,
 ): CrushDecision
 ```
 
-The decision input carries everything the production predicate chain reads — result-level `isError` (including the isError 2×minBytes rule), `toolName` (protected-tools and `context_retrieve` skips), and the content-block array (multi-block join and shape checks), because none of these are recoverable from a bare `ContentBlock` alone (delta-round fold, all three seats — r2's `(content, cfg, estimate)` signature could not express the chain it claimed to extract). Only these checks live inside `decideCrush`: eligibility (enabled/store/protected/retrieve, isError handling, block shape, minBytes via `estimate`), savings ratio, and defer/projectKey routing. Intentionally **outside** the pure function (documented): the caller-side `PostToolDecision` value/content discrimination and ledger writes.
+The decision input carries everything the production predicate chain reads — result-level `isError` (including the isError 2×minBytes rule), `toolName` (protected-tools and `context_retrieve` skips), the content-block array (multi-block join and shape checks), `projectKey` (defer/store branch selection), and `storeAvailable` — because none of these are recoverable from a bare `ContentBlock` alone and two seats flagged the earlier three-field signature as unrepresentable (delta-round). The function is a pure **decision table**, not a runner: it returns the branch (dry-run row / resident-record intent / replacement intent), never performs `store.put` or ledger writes.
+
+Inside `decideCrush` (the shared logic): eligibility on content shape, isError handling, minBytes via `estimate`, savings ratio, protected/retrieve skips, and branch **selection**.
+
+Intentionally **outside** (documented): the `enabled || store === undefined` early-outs (they need no decision), the `PostToolDecision` value/content discrimination (caller-side assembly), `store.put`, and all ledger writes.
 
 Production passes `tokenMeter.estimateMessage`; the eval passes the same production estimator — never a `text.length` proxy. Both the listener and the eval call `decideCrush`; drift-free by construction. This is the only production-code change this doc requires, shipped with unit tests pinning evaluation-vs-production predicate identity (mutation pin).
 
@@ -73,11 +85,10 @@ For each fixture: parse events; reconstruct tool results per step; for each resu
 
 ### Metrics
 
-**M1 — stub-side evidence retention (the gate).** Identifier classes and their grammars, per usage site (delta-round fold — single-grammar-over-everything was wrong twice over):
+**M1 — stub-side evidence retention (the gate).** Identifier classes and their grammars, per usage site — **two grammars total** (the r3 "triangulated" trio was underspecified; both external seats flagged the missing third grammar):
 
-- **grep/search rows** (stub-side extraction): capture group 1 of the production `SEARCH_ROW` (`packages/context/context-crusher/src/router.ts:33`, pattern `^(\.{0,2}\/?[\w.@\/-]+?):(\d+):(.*)$` — the `reducer/router.ts` path cited earlier does not exist; that anchor is corrected here).
-- **log-kind spans** (stub-side): the standalone path grammar below.
-- **Free-text mentions** (M2/M3 downstream reference detection in assistant text and tool arguments): a separate mention grammar — `/[\w\-./]+\.[a-z0-9]{1,6}\b` with the leading-`/` requirement dropped and Windows/relative forms admitted, plus canonicalization to the same path form (strip query/fragment, normalize separators and `./` prefixes). `SEARCH_ROW` itself only matches `path:line:content` rows and would undercount free-text mentions to near zero (codex + grok, convergent).
+1. **Search-row capture** (stub-side extraction from grep/search-shaped originals): capture group 1 of the production `SEARCH_ROW` (`packages/context/context-crusher/src/router.ts:33`, `^(\.{0,2}\/?[\w.@\/-]+?):(\d+):(.*)$`). On the **stub side**, retained paths are extracted from the emitted stub headers `== <path> ==` (`router.ts:54-61` — the retained-block format itself) — not by re-running SEARCH_ROW over the stub, which the stub's header framing does not match (codex delta MAJOR).
+2. **Free-text mention grammar** (log-kind spans on both sides; M2/M3 downstream-reference detection in assistant text and tool arguments): `/[\w\-./]+\.[a-z0-9]{1,6}\b` with the leading-`/` requirement dropped and Windows/relative forms admitted, plus canonicalization to a single path form (strip query/fragment, normalize separators and `./` prefixes). There is no third grammar: **log-kind spans use this same grammar** (stated explicitly so two implementers cannot invent different log extractors).
 
 Additional classes: hex digests ≥7; URLs; backticked tokens ≥8 chars. For each crushed span: retention = |identifiers in stub| ⁄ |identifiers in original|, reported per class; stub vs store in **separate columns**.
 

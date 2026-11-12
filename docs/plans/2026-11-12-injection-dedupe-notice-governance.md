@@ -1,7 +1,9 @@
 # Injection Dedupe & Notice Governance
 
 - Date: 2026-11-12
-- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
+- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+
+r3 → r4 fold: stale `payload.step` window instruction deleted (gateSeq is the only dedupe clock); provisional-reservation rollback semantics added (trimmed reservations discarded; suppression distances measure committed admissions only; per-batch atomic commits); mixed observe×enforce commit contract defined (actual vs simulated batches, separate state advance); mounting matrix completed to the full 3×3 + off combinations.
 - Program: context-engineering input governance (doc 7 of 8)
 - Depends on: doc 1 (same package `@dsh-cc/input-budget`; plugs into `govern()` at the stage order **dedupe → caps → budget trim**; the class registry is referenced from doc 1's r2, not restated). Doc 3 (DedupeRow/CapRow live in its single-schema union).
 - Literature basis: Silent Failures (2606.14589); Signal-Driven Observation (2606.06708 — observation over-ingestion).
@@ -28,7 +30,7 @@ Non-goals:
 ## Current behavior (anchors)
 
 - Gate seam and pipeline order are doc 1's: outermost pre-step listener; `dedupe → caps → budget trim`.
-- Step identity: the pre-step payload carries `{ agent, messages, turn, step, signal, modelSelection }` (harness `core/agent/src/runtime-types.ts:350`). r2 verification note: grok's r1 claim that the payload has no `step` was checked against the runtime type — `step` is present; grok read a consumer's destructuring subset (`hooks-claude-code/src/register-events.ts:70`), which only picks fields. Dedupe window arithmetic uses **`payload.step`**.
+- Step identity: the pre-step payload carries `{ agent, messages, turn, step, signal, modelSelection }` (harness `core/agent/src/runtime-types.ts:350`; r2 note retained: grok's r1 "no step" claim was a consumer-subset reading). **Window arithmetic in this document uses the governor's monotonic `gateSeq` (doc 1), not `payload.step`** — `step` is turn-local and resets per turn (`agent-loop/src/agent.ts:431`; deleted instruction: the text that stood here in earlier revisions pointed the window at `payload.step`, which is superseded — codex/critic/grok all flagged the contradiction).
 - Defer queue (`agent.inject`) mechanics and the governor's defer/TTL contract come from doc 1.
 - `advisor-watchdog` batches several notes per inject and already has its own producer-side `sessionCap: 24` **notes** (`advisor-watchdog/src/settings.ts:58,77`): units differ from this design's cap (injects), stated explicitly below.
 - `mcpReadyNotice`/`one-shot-notice` latch before delivery; caps on lifecycle-adjacent kinds were removed from scope (above).
@@ -45,9 +47,15 @@ Cross-step self-suppression is fixed by committing only at final admission (r2 f
 2. **Budget trim** (doc 1) computes the final batch.
 3. **Commit phase**: only after the final batch is decided, entries that made it into the batch update dedupe/cap state. Deferred entries do not update state (never admitted); when later admitted from the backlog, the key commits then. Ledger rows are emitted **after trim/commit**, carrying the final decision (grok delta: emitting "at check time with the eventual decision" fights the two-phase model).
 
+Provisional-reservation rollback (codex delta MAJOR): provisional admissions exist only inside one `govern()` call — **if a provisionally-admitted message is later trimmed from the final batch, its provisional reservation is discarded** (it never counts as an admission for any downstream computation). Dedupe suppression rows (`suppressedWithin`) measure distance from the last **committed** admission only; provisional reservations never enter that arithmetic. Dedupe state commit is atomic per batch (no partial commits).
+
 Deferred-entry identity is the original message — its key recomputes identically at re-offer time.
 
 Clock: dedupe and TTL arithmetic use the governor's **monotonic per-session `gateSeq`** (doc 1) — the payload's `step` is **turn-local** and resets per turn (codex delta; it exists on the payload at `runtime-types.ts:350`, but a session-wide window cannot be built on it).
+
+### Mixed-mode commit contract (observe × enforce across stages)
+
+Two batches exist conceptually: the **actual batch** (what the final decision admits into the step, always real) and each stage's **simulated batch** (what that stage computes as admitted when in observe mode). State advance rules: an enforce-mode stage advances its real state from the actual batch (commit phase above); an observe-mode stage advances only its simulated state from its own simulated batch (and only simulated-admitted entries advance it — suppression counters live only in rows). The two never mix: observe-stage simulated admissions are invisible to enforce stages and vice versa.
 
 ### Dedupe
 
@@ -81,11 +89,14 @@ Dedupe and caps are **one notice-governance stage** (not three independent stage
 
 | budget (`cc-input-budget`) | this stage (`cc-input-notice-governance`) | pipeline executed |
 |---|---|---|
-| disabled | disabled | no listener mounted |
+| disabled | off (`enabled:false`) | no listener mounted |
+| disabled | observe | dedupe/caps observe only |
+| disabled | enforce | dedupe/caps enforce only |
 | observe | off | budget observe only |
 | observe | observe | dedupe/caps observe + budget observe |
-| enforce | observe | dedupe/caps observe + budget enforce |
 | observe | enforce | dedupe/caps enforce + budget observe |
+| enforce | off | budget enforce only |
+| enforce | observe | dedupe/caps observe + budget enforce |
 | enforce | enforce | both enforce |
 
 Each stage's mode flip resets only its own runtime state (this stage: dedupe map + cap counters; budget: defer queue) — never the other's. "off" for this stage (via `enabled:false`) leaves its state dormant.

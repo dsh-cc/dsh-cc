@@ -1,7 +1,9 @@
 # Selective System-Prompt Sections
 
 - Date: 2026-11-12
-- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
+- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+
+r3 → r4 fold: first-pass formula moved fully to `min-entry-bytes` with UTF-8-safe byte slicing (char-boundary cuts); call-site phrasing corrected to the single real `renderCatalog` call (`catalog.ts:234`) with settings threaded through the shared `render()` path.
 - Program: context-engineering input governance (doc 4 of 8)
 - Depends on: nothing hard; doc 3's `AssembleRow.sections[].bytes` is the distribution instrument that tunes the defaults.
 - Literature basis: PAACE (plan-aware context slicing); Less Context (token ↓~63%).
@@ -33,7 +35,7 @@ Non-goals:
 - Combined index ordering is **alphabetical by filename** (`memory/src/scan.ts:82`, `section.ts:363`); MEMORY.md pointers append on write (`memory/src/save.ts:83-96`). No recency ordering exists anywhere in the render path.
 - Catalog ordering is `localeCompare` over `agentType` (`catalog.ts:151,233`) — alphabetical, not relevance-ranked.
 - `MemorySection.render` runs over cached scan state (`section.ts:184-197`) and is re-entered by the first-assembly readiness refresh (one-shot `withinBudget(..., READINESS_BUDGET_MS = 500)`, `section.ts:38,140-145` — **not** a periodic refresh; delta-round wording correction) and by `system-prompt/change` re-renders (`:191-197`, `:238`) — all paths route through the same render function.
-- `renderCatalog(defs)` is pure (`catalog.ts:285-295`); its two call sites (`catalog.ts:234`, `:253-254`) currently pass `renderCatalog(merged)` — the change threads the resolved settings object explicitly through both call sites (purity preserved; delta-round fold — critic noted the threading was only described for the memory section).
+- `renderCatalog(defs)` is pure (`catalog.ts:285-295`); there is **one** production render call site (`catalog.ts:234` inside `render()`); the snapshot write at `:253-254` only stores what `render()` produced. Settings therefore thread through the shared `render()` method so both the ordinary path and the readiness-completion path render identically (delta-round fold: the r3 text's "two call sites" phrasing pointed at a non-render line).
 
 ## Measurement and unit contract (folded from codex + grok)
 
@@ -74,7 +76,7 @@ New namespace `cc-subagent-catalog`:
 `renderCatalog(defs, settings)` stays pure, all cutting byte-measured (`Buffer.byteLength` — grok delta fold: a char-sliced `whenToUse` over a byte budget overflows on CJK content; the knob is renamed accordingly):
 
 1. Reserve header + trailer + ellipsis line.
-2. First pass: keep every `agentType` name; per-entry `whenToUse` truncates to a slice of `max(min-entry-chars, floor((budget - reserved) / N))`.
+2. First pass: keep every `agentType` name; per-entry `whenToUse` truncates to a slice of `max(min-entry-bytes, floor((budget - reserved) / N))` — cutting is **UTF-8-safe byte slicing** (slice on char boundaries only, counted by `Buffer.byteLength`; a char index never splits a multi-byte sequence).
 3. Second pass: if still over, keep the first K entries with truncated text; remaining agents collapse into one names-only line, plus the ellipsis note. K = largest count that fits. K is **alphabetical** — stated, not embellished.
 4. **Oversized-names floor** (codex + grok r1 fold): if even the names-only render (header + trailer + all names) exceeds `max-bytes`, the names line itself truncates with `… (N more agents omitted by cc-subagent-catalog.max-bytes; the catalog's usage line stays)`. Names are dropped only in this documented overflow form, never silently — that is the consistency fix for the two-seat BLOCKER that name-preservation and hard-cap are mutually impossible on large rosters.
 

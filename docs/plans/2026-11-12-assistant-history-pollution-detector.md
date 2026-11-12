@@ -1,7 +1,9 @@
 # Assistant-History Pollution Detector (offline v1)
 
 - Date: 2026-11-12
-- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
+- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+
+r3 → r4 fold: effective-view replay re-anchored to the **positional surface fold** (shadowed set = positional slice on current nodes; `sourceEventSeqs` demoted to a validated superset include-check with extra-seq tolerance — checkpoints legitimately carry start/summary seqs); abstain rules defined for invalid ops and chained replaces.
 - Program: context-engineering input governance (doc 8 of 8)
 - Depends on: doc 3 (ledger — optional input; the detector's primary source is raw session logs).
 - Literature basis: AC3 (2611.00518); Speech-LLM History Interference (2611.05124); Silent Failures (2606.14589).
@@ -39,13 +41,14 @@ Second CLI inside `@dsh-cc/context-eval` (doc 5's package): `pnpm eval:history-p
 
 **Ingestion (delta-round correction, all three seats).** The session-forensics package is reused **only for file discovery and decompression** (v4-first location of `<DSH_HOME>/sessions/<projectKey>/<sessionId>/session.v4.jsonl.zstd`, v3/legacy fallback — `session-forensics/src/scan.ts:278-295`). Its `parseStream`/`scanSessions` output is **unsuitable** as the event source: they emit ToolRecords only, with no assistant text, no `seq`/`surfaceOp`, and result text head-truncated at 4096 chars (`scan.ts:38,70-81,207-220`). The detector therefore ships its own **raw v3/v4 event iterator** over the decompressed JSONL, preserving every event with seq, full text, assistant messages, and surface operations. The analysis core stays pure and unit-testable.
 
-### Effective-view reconstruction (per session, canonical fold)
+### Effective-view reconstruction (per session, canonical surface fold)
 
-Linear replay over raw events, applying `surfaceOp` semantics **positionally, via the actual shadowed set** — not arithmetic seq intervals (codex delta MAJOR: an append's `sourceEventSeqs` is the real shadow set — `core/session/src/surface.ts:419-433,570` in the pinned harness copy — and chained replaces nest fine under this rule):
+Maintain an ordered list of **current surface nodes** (seqs), exactly as the harness surface fold does (`core/session/src/surface.ts:419-433,537,570` in the pinned harness copy). Replay semantics — **positional replacement, with `sourceEventSeqs` as a validated superset include-check, never as the shadow set itself** (all three r3 seats flagged the r3 text's treatment of `sourceEventSeqs` as the shadow set: the harness derives the shadowed set from the current-surface positions of `startSeq`/`endSeq`; `sourceEventSeqs` must *contain* every shadowed interval node but legally carries extra seqs — the compaction checkpoint includes `startEvent.seq` and `summaryEvent.seq`, `region.ts` commit body — so treating it as the shadow set would both over-shadow and misclassify well-formed checkpoints as inconsistent):
 
-- On a surface event with `{ op:'replace', ... }`: the replacement enters the effective view; every seq in its `sourceEventSeqs` (falling back to the `[startSeq, endSeq]` interval when the list is absent) is marked shadowed.
-- Claims and evidence produced *after* the replace are analyzed against the post-replace view; those produced *before* keep the pre-replace view (keyed by seq).
-- Abstain (`inconsistent`) when a replace's range/lists reference unseen seqs (truncated logs).
+- On a surface event with `{ op:'replace', startSeq, endSeq }`: locate `startSeq` and `endSeq` **on the current node list**; the shadowed set is the positional slice `nodes[idx(startSeq) .. idx(endSeq)]`; the replacement takes that slice's position.
+- `sourceEventSeqs` when present is validated as an include-check: every shadowed positional seq must be a member; extra members are tolerated (superset semantics). A violation (a shadowed seq missing from the list) ⇒ abstain (`inconsistent`).
+- A replace whose `startSeq`/`endSeq` is not found on the current surface ⇒ abstain (`inconsistent`) — e.g. truncated logs or a chained replace whose earlier replace shadowed the anchor. Chained replaces nest fine **under the positional rule** (each applies to the then-current node list).
+- Claims/evidence produced *after* a replace analyze against the post-replace view; those produced *before* keep the pre-replace view (keyed by seq).
 
 This deliberately differs from `buildExtractionWindow`: it keeps replacements — the content the model actually saw — and drops the shadow (grok's r1 BLOCKER resolution, retained).
 
