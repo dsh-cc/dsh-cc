@@ -1,7 +1,7 @@
 # Selective System-Prompt Sections
 
 - Date: 2026-11-12
-- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
+- Status: Implemented — PR #402 (against main; rebased off the #398 squash merge)
 
 r3 → r4 fold: first-pass formula moved fully to `min-entry-bytes` with UTF-8-safe byte slicing (char-boundary cuts); call-site phrasing corrected to the single real `renderCatalog` call (`catalog.ts:234`) with settings threaded through the shared `render()` path.
 - Program: context-engineering input governance (doc 4 of 8)
