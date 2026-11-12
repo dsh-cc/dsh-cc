@@ -63,15 +63,29 @@ ctx.toolSearch.registerDeferred({
 
 这些阈值是第一轮评估参数，而非已测的质量保证。任何一个值非法都会彻底关闭判断：不调用 runner，运行词法路径，并通过 `ctx.logger.warn` 只报告一次。同样的整路回退也适用于路由、服务或完整答案缺失，以及越过任何硬性边界的情况——查询或元数据字段过长、候选池超过 `max-candidates`、批次无法拆成装得进请求窗口的整组、超时、调用方取消，或激活前目录/权限发生变化。部分判断绝不与词法命中混合；判断有效但没有找到相关工具时不激活任何东西（不会用词法命中回填）。准入在两端都检查：作用域拒绝的候选根本不进池，`activate()` 在加载前再查一次权限闸，因此推荐绝不会扩大作用域。
 
-离线评估器针对一份脱敏 fixture 回放纯策略层——人工目标集加上词法对照，分为中文、同义词、无相关工具、受限工具四个子集——全程不访问网络：
+离线评估器（`scripts/eval-discovery.mjs`）只针对一份本地脱敏语料运行，全程不访问网络。它有四种模式：
+
+| `--mode` | 用途 |
+| --- | --- |
+| `replay` | **oracle 完整性钉。** 判断由每个用例的 `expectedNames` 合成，因此这里的 F1 在构造上就是同义反复。它只作纯策略层钉——候选池、问题、分批、打分与选取，对照脱敏 fixture——永不因 F1 被门控。 |
+| `selfcheck` | **语料健康度。** 校验 schema、既有的 subset 下限，以及按类的覆盖下限。 |
+| `judge-stub` | **CI 运行的 F1 门禁臂。** 一个冻结的、故意不完美的关键词/规则打分器对候选元数据打分，驱动真实策略层；金标只用于算分，绝不参与判断，因此 F1 线既有意义又是确定性的。 |
+| `live` | **证据臂，不做门禁。** 用真实的 `createDiscoveryRuntime` 通过脚本化的假 lane 适配器跑：共享同一截止时间的多批序列、超限候选池、`unavailable`、取消，以及 `exact` 短路。 |
+
+`judge-stub` 的阈值在设计文档（§ Scoring，计分）里预先登记，且只对 tune 划分生效：受限 micro-F1 总体 ≥ 0.85；对至少有 12 条（且有正样本）的类，受限 micro-F1 ≥ 0.80；而 negative-only 类没有正样本、F1 无定义，故改为门控误激活率 ≤ 0.10 与精确集合准确率 1.0。
+
+**语料 schema v2**（`scripts/lib/eval-corpus.mjs`）：`{ schemaVersion: 2, corpusVersion, description?, cases[] }`。`corpusVersion` 是整数，用例一变就递增，每份报告都会带上它。每个用例带一个 `class`——即门控维度，取值为 `direct-fit`、`lexical-trap`（词法重叠/错误服务陷阱）、`multi-intent`、`negative-only`（`expectedNames: []`）、`keyword-stuffing`（元数据关键词堆砌）——外加可选的 `alsoClasses` 声明多标签归属；正是靠它在不做排他划分的前提下也能达到每类 ≥ 12 条归属。既有的 `subset: chinese|synonym|none|restricted` 过滤及其下限保留。查询不得等于某个候选的 `name`：精确名字查询会在判断器被调用之前短路，这种用例根本量不出判断质量。
+
+**划分。** `--split tune|held-out|full`（默认 `tune`）。按用例 id 的哈希排序把语料切成 2/3 tune、1/3 held-out；只有 `tune` 会被门控，`held-out` 留给一次性的翻转评估，`full` 用于检视。
+
+两种运行方式：
 
 ```bash
-node packages/core/tool-search/scripts/eval-discovery.mjs \
-  --corpus packages/core/tool-search/tests/fixtures/discovery-corpus.json --mode replay
-node packages/core/tool-search/scripts/eval-discovery.mjs --mode selfcheck
+node packages/core/tool-search/scripts/eval-discovery.mjs --mode <mode>
+pnpm --filter @dsh-cc/tool-search run eval:discovery -- --mode <mode>
 ```
 
-`--mode replay` 按子集打印 Recall@3 并与词法对照并列，同时给出激活精确率、准入泄漏与可复现性检查，只输出聚合数字与用例 id——绝不输出查询文本。`--mode selfcheck` 只校验语料 schema。
+每种模式只输出聚合数字、类标签与用例 id——绝不输出查询文本、候选描述或备注。`replay` 另按子集打印 Recall@3 并与词法对照并列，给出激活精确率、准入泄漏与可复现性检查；`judge-stub` 打印按类的 F1 表与门禁结论；`live` 断言故障电池，并无门控地报告 micro-F1 与标称/尾部延迟（这个规模的语料上 p95 只是第 3 大样本）。CI 只跑 `selfcheck` 与 `judge-stub`，没有任何模式需要联网。
 
 ## 模型体验
 

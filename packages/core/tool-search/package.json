@@ -8,6 +8,9 @@
     "directory": "packages/core/tool-search"
   },
   "type": "module",
+  "scripts": {
+    "eval:discovery": "node scripts/eval-discovery.mjs"
+  },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
