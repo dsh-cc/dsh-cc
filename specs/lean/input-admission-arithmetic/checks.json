@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "backend": "lean",
+  "modelId": "input-admission-arithmetic",
+  "properties": [
+    {
+      "id": "protected-never-charged",
+      "requirementId": "REQ-1",
+      "declaration": "Formal.protected_never_charged",
+      "statement": "forall (cls : Formal.Class) (bytes : Nat), Formal.budgeted cls = false -> Formal.charged cls bytes = 0",
+      "witnessDeclaration": "Formal.protected_example"
+    },
+    {
+      "id": "admission-preserves-bound",
+      "requirementId": "REQ-2",
+      "declaration": "Formal.admission_preserves_bound",
+      "statement": "forall (budget used bytes : Nat), used <= budget -> Formal.fits budget used bytes = true -> used + bytes <= budget",
+      "witnessDeclaration": "Formal.admissible_example"
+    },
+    {
+      "id": "oversize-never-fits",
+      "requirementId": "REQ-3",
+      "declaration": "Formal.oversize_never_fits",
+      "statement": "forall (budget used bytes : Nat), Formal.oversize budget bytes = true -> Formal.fits budget used bytes = false",
+      "witnessDeclaration": "Formal.oversize_witness"
+    },
+    {
+      "id": "window-boundary-admits",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.window_boundary_admits",
+      "statement": "forall (lastAdmitted window : Nat), 0 < window -> Formal.withinWindow (lastAdmitted + window) lastAdmitted window = false",
+      "witnessDeclaration": "Formal.window_witness"
+    },
+    {
+      "id": "window-below-suppresses",
+      "requirementId": "REQ-4",
+      "declaration": "Formal.window_below_suppresses",
+      "statement": "forall (lastAdmitted delta window : Nat), delta < window -> Formal.withinWindow (lastAdmitted + delta) lastAdmitted window = true",
+      "witnessDeclaration": "Formal.oversize_witness"
+    }
+  ],
+  "limits": {
+    "proofTimeoutMs": 180000,
+    "conformanceTimeoutMs": 120000,
+    "maxHeartbeats": 2000000,
+    "maxRecDepth": 2048,
+    "maxCases": 10000
+  }
+}
