@@ -90,6 +90,51 @@ jobs:
           const actual = createHash('sha1').update(fs.readFileSync(skill + '/toolchain/tla2tools.jar')).digest('hex');
           if (actual !== pin.sha1) throw new Error('Bundled TLC is missing or has the wrong checksum');
           JS
+      # Preflight every committed model, but do NOT run TLC. This closes the
+      # visibility gap that let a committed model rot unread (the Lean job
+      # enumerates specs/lean; nothing ever enumerated specs/tla). It is safe to
+      # sweep unconditionally because preflight asserts only structural facts -
+      # schema, paths, pinned JAR, generated cfg bytes - and makes no verdict:
+      # a model whose probes are designed to be red still passes here.
+      # A full TLC sweep is a different decision (cost, and "green" would start
+      # standing in for "design verified"); this step must not become that.
+      - name: Preflight every committed TLA model (structure only, no TLC)
+        working-directory: dsh-cc
+        run: |
+          unset TLA2TOOLS_JAR
+          node --input-type=module - <<'JS'
+          import { readdirSync, statSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { spawnSync } from 'node:child_process';
+
+          const root = process.cwd();
+          const scripts = 'packages/plugin/dsh-cc-agents/skills/formal-design/scripts';
+          // Code-point path order: UTF-8 byte comparison, matching the Lean job.
+          const byteOrder = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b));
+          const regularFile = path => { try { return statSync(path).isFile(); } catch { return false; } };
+
+          function run(args) {
+            const result = spawnSync('node', args, { cwd: root, stdio: 'inherit' });
+            if (result.error) throw result.error;
+            if (result.status !== 0) throw new Error(`node ${args.join(' ')} exited ${result.status}`);
+          }
+
+          const base = join(root, 'specs/tla');
+          const modelIds = readdirSync(base, { withFileTypes: true })
+            .filter(entry => entry.isDirectory())
+            .map(entry => entry.name)
+            .sort(byteOrder);
+          if (modelIds.length === 0) throw new Error('no committed TLA models were discovered under specs/tla');
+          for (const id of modelIds) {
+            const model = `specs/tla/${id}`;
+            if (!regularFile(join(root, model, 'checks.json'))) {
+              throw new Error(`discovered TLA model directory ${model} has no regular checks.json`);
+            }
+            console.log(`preflighting committed TLA model ${model}`);
+            run([`${scripts}/preflight.mjs`, '--project', root, '--model', model]);
+          }
+          console.log(`preflight passed for all ${modelIds.length} committed TLA models`);
+          JS
       - name: Contract, packaged default and real TLC integration tests
         working-directory: dsh-cc
         env:
