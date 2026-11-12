@@ -229,7 +229,7 @@ This project uses dsh-cc for development. Its model routes are user configuratio
 | Subagents | 0 | 4 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 6 | 0 | 0 |
-| Settings | 2 | 1 | 1 | 0 |
+| Settings | 2 | 3 | 1 | 0 |
 | Permissions | 0 | 1 | 0 | 0 |
 | Models | 0 | 1 | 0 | 0 |
 | Workspace | 0 | 4 | 0 | 0 |

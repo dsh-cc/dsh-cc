@@ -5958,6 +5958,51 @@
         "kind": "none"
       }
     },
+    "settings.memory-section-budget": {
+      "title": "Memory section index budget",
+      "category": "settings",
+      "plane": "host",
+      "upstream": {
+        "summary": "Claude Code has no counterpart: the memory topic index rendered into the system prompt is not byte-capped by a settings namespace."
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "divergent"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/memory/memory/src/section-settings.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/memory/memory/src/section.ts",
+          "anchor": "fitIndexEntries"
+        },
+        {
+          "type": "test",
+          "path": "packages/memory/memory/tests/section-index-budget.spec.ts"
+        },
+        {
+          "type": "test",
+          "path": "packages/memory/memory/tests/section-settings.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "Deliberate dsh-cc extension: the `cc-memory-section` settings namespace ({ truncate: bool default true, max-bytes: int default 8192, bounds 1024..65536, provisional default }) byte-caps only the combined memory topic index block of the memory system-prompt section; header, per-layer fragments, and the search guidance block render byte-identical to the uncapped form. Truncation keeps whole alphabetical entries from the top and appends an ellipsis line counting omitted topics; a documented floor keeps header + guidance + ellipsis when even one entry exceeds the budget. truncate: false restores the uncapped render. Settings are read live per render."
+      }
+    },
     "settings.migrations": {
       "title": "Settings migrations",
       "category": "settings",
@@ -6027,6 +6072,48 @@
       ],
       "deviation": {
         "kind": "none"
+      }
+    },
+    "settings.subagent-catalog-budget": {
+      "title": "Subagent catalog byte budget",
+      "category": "settings",
+      "plane": "host",
+      "upstream": {
+        "summary": "Claude Code has no counterpart: the subagent roster rendered into the system prompt is not byte-capped by a settings namespace."
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "divergent"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/subagent/task/src/catalog-settings.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/subagent/task/src/catalog-budget.ts",
+          "anchor": "renderCatalogBudgeted"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/catalog.spec.ts",
+          "anchor": "byte budget"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "Deliberate dsh-cc extension: the `cc-subagent-catalog` settings namespace ({ truncate: bool default true, max-bytes: int default 8192, bounds 1024..65536, min-entry-bytes: int default 40, bounds 20..400; defaults provisional }) byte-caps the subagent catalog section render. Pass 1 preserves every agent name and truncates each whenToUse with UTF-8-safe byte slicing; pass 2 keeps the first K alphabetical entries and collapses the rest into a names-only line; a documented oversized-names floor drops names only with an explicit ellipsis line. truncate: false restores the uncapped render. Settings are read live per render."
       }
     },
     "permissions.rules": {
