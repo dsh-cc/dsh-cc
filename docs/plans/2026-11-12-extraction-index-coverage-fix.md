@@ -1,7 +1,7 @@
 # Extraction Write-Back Index Coverage Fix (v2.1)
 
 - Date: 2026-11-12
-- Status: Design v2.1 (r3) — review converged: critic GO-WITH-CONCERNS (architecture approved, all P1s folded), codex findings all folded through r3 (its own prescribed single-target replacement rule adopted); grok seat down (auth)
+- Status: Implemented — PR #405 (open, pending merge); review converged at v2.1 r3 (critic + codex; grok seat down on auth)
 - Program: memory integrity (incident-driven)
 - Depends on: nothing hard. The dream path and the optimistic index commit protocol (`commitMemoryWrites`, modeled by `specs/tla/memory-write-lifecycle`) are unchanged.
 
