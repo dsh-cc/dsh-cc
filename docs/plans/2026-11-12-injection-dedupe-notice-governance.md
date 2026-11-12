@@ -15,7 +15,7 @@ r3 → r4 fold: stale `payload.step` window instruction deleted (gateSeq is the 
 - triggerIds: FD-T2 (dedupe windows and deferred re-offers are late-message effects on admission), FD-L1 (advisory-kind eligibility composition with stated exclusion invariants), FD-L2 (window/cap arithmetic with monotonic gateSeq).
 - backends: `["tla", "lean"]`
 - modelDirs: `{"tla": "specs/tla/input-admission-governance", "lean": "specs/lean/input-admission-arithmetic"}`
-- model status: `specs/tla/input-admission-governance + specs/lean/input-admission-arithmetic` — as for the governor doc — same shared models.
+- model status: as for the governor doc — same shared models (bridge-bound TLA model + red-by-design probes model + Lean face with fixture conformance).
 - rationale: two-phase commit-on-admission, provisional in-batch allocation with rollback, and observe/enforce state separation are ordering-sensitive state properties; the window and cap rules are deterministic arithmetic. One model covers both docs' stages.
 
 ## Problem

@@ -109,3 +109,31 @@ exactly. Every item below was a real modeling defect, not a design finding:
   cross-backend gap, recorded in the Lean coverage table as well.
 - `cc-shell-glue` and lifecycle kinds are excluded from the universe by
   construction (v1 observe-only / never-trim classes).
+
+## CI round 1 (bridge flow) — folded findings
+
+The `formal-design-lean` job failed twice on the first pushes; both causes
+were mine, not the tooling:
+
+1. **A proof-only Lean manifest is not a shippable state in this repo** —
+   the job runs `lean-check-conformance` for every `specs/lean/*` model and
+   rejects one with no conformance contract. Fixed by binding the
+   model-local fixture (see the Lean model's implementation.md).
+2. **The bridge flow requires the bridged model's aggregate to be
+   `verified`**, and my first bridge package did not conform to the strict
+   schema at all (free-form cases.json, operations not bound to corpus
+   case ids, no `Bridge_<id>` invariants). Two structural fixes:
+   - the manifest split: the four deliberately-red fault-injection probes
+     moved to `specs/tla/input-admission-governance-probes` (same
+     Model.tla; aggregate expected `counterexample`), so the bridge-bound
+     model aggregates `verified`;
+   - the bridge package rewritten to the contract: operations are corpus
+     case ids with `propertyIds == covers`, `cases.json` is a bare array
+     of `{id, input, expected, tlaExpression}` rows canonically equal to
+     the corpus, and the eight `Bridge_<id>` invariants are declared in
+     Model.tla from `BridgeFits` / `BridgeOversize` /
+     `BridgeWithinWindow` and checked by the convention case.
+
+Final local bridge flow: TLA aggregate verified; Lean proof verified;
+conformance 55/55 passed; `check-combined-evidence` valid,
+acceptanceReady=true. The probes model's evidence is separately valid.

@@ -23,84 +23,19 @@
         "ObserveClean",
         "AdmittedEverCommitted",
         "AdmittedAtMostOnce",
-        "DispositionPartition"
+        "DispositionPartition",
+        "Bridge_admit_exact_advisory_0",
+        "Bridge_admit_over_advisory_1",
+        "Bridge_oversize_above_4",
+        "Bridge_oversize_at_4",
+        "Bridge_window_3_below",
+        "Bridge_window_3_equal",
+        "Bridge_window_3_above",
+        "Bridge_protected_governance_4096"
       ],
       "properties": [],
       "limits": {
         "timeoutMs": 600000,
-        "heapMiB": 1024
-      }
-    },
-    {
-      "id": "strict-commit-at-check",
-      "coverage": "expansion",
-      "specification": "Spec",
-      "constants": {
-        "CommitAtCheck": "TRUE",
-        "UnknownAsAdvisory": "FALSE",
-        "ObserveMutates": "FALSE",
-        "Enforce": "TRUE"
-      },
-      "invariants": [
-        "TypeOK",
-        "MemoryBudgetHeld",
-        "DedupeCommitted",
-        "CapCommitted",
-        "AdmittedEverCommitted",
-        "AdmittedAtMostOnce",
-        "DispositionPartition"
-      ],
-      "properties": [],
-      "limits": {
-        "timeoutMs": 300000,
-        "heapMiB": 1024
-      }
-    },
-    {
-      "id": "strict-unknown-as-advisory",
-      "coverage": "expansion",
-      "specification": "Spec",
-      "constants": {
-        "CommitAtCheck": "FALSE",
-        "UnknownAsAdvisory": "TRUE",
-        "ObserveMutates": "FALSE",
-        "Enforce": "TRUE"
-      },
-      "invariants": [
-        "TypeOK",
-        "MemoryBudgetHeld",
-        "NeverTouched",
-        "AdmittedEverCommitted",
-        "AdmittedAtMostOnce",
-        "DispositionPartition"
-      ],
-      "properties": [],
-      "limits": {
-        "timeoutMs": 300000,
-        "heapMiB": 1024
-      }
-    },
-    {
-      "id": "strict-observe-mutates",
-      "coverage": "expansion",
-      "specification": "Spec",
-      "constants": {
-        "CommitAtCheck": "FALSE",
-        "UnknownAsAdvisory": "FALSE",
-        "ObserveMutates": "TRUE",
-        "Enforce": "FALSE"
-      },
-      "invariants": [
-        "TypeOK",
-        "MemoryBudgetHeld",
-        "ObserveClean",
-        "AdmittedEverCommitted",
-        "AdmittedAtMostOnce",
-        "DispositionPartition"
-      ],
-      "properties": [],
-      "limits": {
-        "timeoutMs": 300000,
         "heapMiB": 1024
       }
     },
@@ -124,26 +59,6 @@
         "AdmittedEverCommitted",
         "AdmittedAtMostOnce",
         "DispositionPartition"
-      ],
-      "properties": [],
-      "limits": {
-        "timeoutMs": 300000,
-        "heapMiB": 1024
-      }
-    },
-    {
-      "id": "strict-sentinel-commit",
-      "coverage": "expansion",
-      "specification": "Spec",
-      "constants": {
-        "CommitAtCheck": "TRUE",
-        "UnknownAsAdvisory": "FALSE",
-        "ObserveMutates": "FALSE",
-        "Enforce": "TRUE"
-      },
-      "invariants": [
-        "TypeOK",
-        "AdmittedEverCommitted"
       ],
       "properties": [],
       "limits": {

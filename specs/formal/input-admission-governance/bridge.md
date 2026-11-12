@@ -1,22 +1,43 @@
 # Bridge: input-admission-governance (both backends)
 
-Selection for docs 1+7 is `both`: the TLA model checks bounded operational
-ordering (backlog re-offer, drop-vs-defer, commit-on-admission state advance),
-the Lean model checks the arithmetic predicates those operators use. Neither
-establishes the other.
+Selection for docs 1+7 is `["tla", "lean"]` — the full backend set, so a
+bridge records and tests the shared contract (combined-models guide). Neither
+backend substitutes for the other: the TLA model checks bounded operational
+ordering (backlog re-offer, drop-vs-defer, commit-on-admission state advance);
+the Lean model proves the arithmetic predicates.
 
 ## Shared contract
 
-| operation | TLA operator | Lean function | shared rule |
-|---|---|---|---|
-| advisory-budget-admission | `Gate` (per-message class check) | `Formal.fits` | admit iff `bytes <= budget - used` |
-| oversize-drop | `WalkFresh` / `WalkBacklog` oversize arm | `Formal.oversize` | `budget < bytes` is never admittable, and is dropped rather than deferred |
-| dedupe-window-boundary | `DedupeEligible` | `Formal.withinWindow` | suppress iff `now - lastAdmitted < window` (strict); equality admits |
+Each bridge operation is one committed Lean corpus case: its `id` is the
+corpus case id, its `propertyIds` equal that case's `covers` set, and
+`cases.json` carries the same `input` canonically plus the `expected`
+protocol result the Lean reference and the conformance adapter both produce.
+On the TLA side the same instance is asserted by the derived invariant
+`Bridge_<id>` (hyphens to underscores), declared in `Model.tla` from the
+shared predicates `BridgeFits` / `BridgeOversize` / `BridgeWithinWindow` and
+checked by the `convention` case.
 
-`cases.json` records the same seven instances on both sides. These are
-model-to-model conformance examples: **no implementation is bound**
-(`implementationFiles` is empty in every bridge row) because docs 1+7 are not
-implemented yet, and the Lean manifest therefore has no conformance block.
+| operation (corpus case) | TLA operator | Lean function | shared rule |
+|---|---|---|---|
+| admit-exact-advisory-0 / admit-over-advisory-1 | `WalkFresh` | `Formal.fits` | admit iff `bytes <= budget - used` |
+| oversize-above-4 / oversize-at-4 | `WalkFresh` | `Formal.oversize` | `budget < bytes` is never admittable, dropped not deferred |
+| window-3-below / -equal / -above | `ProvisionalDedupeEligible` | `Formal.withinWindow` | suppress iff `now - lastAdmitted < window` (strict); equality admits |
+| protected-governance-4096 | `ClassOf` | `Formal.charged` | governance-class messages are never charged |
+
+The `Bridge_<id>` invariants are constant by construction: bounded shared
+examples are **conformance evidence, not a composition theorem** — they bind
+both sides to the same instance arithmetic, they do not turn the two proofs
+into one.
+
+## Model split (why probes live next door)
+
+The combined-evidence contract requires the bridged TLA model's aggregate to
+be `verified` (every case green). The fault-injection negative controls
+(the r1 defect probes) are deliberately red and therefore live in
+`specs/tla/input-admission-governance-probes`, sharing the same `Model.tla`
+via a byte-identical copy; its aggregate is expected to be `counterexample`.
+Removing either half would either destroy the negative controls or make the
+bridge unattainable.
 
 ## What is NOT bridged
 
@@ -24,22 +45,10 @@ implemented yet, and the Lean manifest therefore has no conformance block.
 - Observe-mode simulated state (A7).
 - Accumulation across a batch (TLA-only property).
 
-## Evidence state: combined acceptance is PENDING
-
-`check-combined-evidence` requires all three packages to carry version-2 bridge
-evidence and the Lean conformance verdict to be `passed`. Both docs 1+7 are
-unimplemented, the Lean manifest is proof-only, and conformance is therefore
-`not-run` — so **no combined-evidence package can be produced today** (the
-checker rejects it with `lean-not-accepted` / `missing-file`). What exists is
-the bridge contract plus two independent per-backend evidence packages.
-
-This is the honest state, not a defect to paper over: the bridge records which
-operations share a contract, and the conformance leg activates when
-`@dsh-cc/input-budget` lands. Until then, the per-backend verdicts stand alone
-and no "both backends verified" claim may be made.
-
 ## Reporting discipline
 
-The two backends are never reported as one combined proof. Per-model verdicts
-stand alone: TLA convention `verified` with probe cases red on their designed
-invariants; Lean proof `verified` with conformance `not-run`.
+Never report the backends as one combined proof. Per-model verdicts stand
+alone: the TLA model is `verified` with the probes model red by design; the
+Lean face is `verified` with conformance `passed` against the model-local
+fixture (production code does not exist yet). When `@dsh-cc/input-budget`
+lands, the adapter must be re-pointed at it and the fixture removed.

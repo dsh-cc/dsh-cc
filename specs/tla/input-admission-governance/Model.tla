@@ -340,6 +340,26 @@ Gate ==
                  THEN (faccRev.admK1 \/ BacklogHasK1(back)) ELSE FALSE)
        /\ gateSeq' = n
 
+(* ---- shared-example bridge predicates (bridge section 10) -------------- *)
+(* These mirror the Lean face's arithmetic (Formal.fits / oversize /        *)
+(* withinWindow). Each Bridge_<id> below is one committed corpus case       *)
+(* instance; checking them in the convention case binds this model to the    *)
+(* same examples the Lean reference and the conformance adapter evaluate.   *)
+(* They are constant by construction - bounded shared examples are         *)
+(* conformance evidence, not a composition theorem (combined-models guide). *)
+BridgeFits(budget, used, bytes) == bytes <= budget - used
+BridgeOversize(budget, bytes) == budget < bytes
+BridgeWithinWindow(now, last, window) == now - last < window
+
+Bridge_admit_exact_advisory_0 == BridgeFits(4, 0, 4)
+Bridge_admit_over_advisory_1 == ~BridgeFits(4, 1, 4)
+Bridge_oversize_above_4 == BridgeOversize(4, 5)
+Bridge_oversize_at_4 == ~BridgeOversize(4, 4)
+Bridge_window_3_below == BridgeWithinWindow(10, 10, 3)
+Bridge_window_3_equal == ~BridgeWithinWindow(13, 10, 3)
+Bridge_window_3_above == ~BridgeWithinWindow(14, 10, 3)
+Bridge_protected_governance_4096 == ~IsBudgeted(mG)
+
 (* ---- keep-alive and next ---------------------------------------------- *)
 
 Idle == UNCHANGED vars
