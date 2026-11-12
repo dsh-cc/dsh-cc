@@ -15,6 +15,7 @@ r3 → r4 fold: observe mode drops the `wouldTrim`/`wouldDefer` pseudo-fields (d
 - triggerIds: FD-T2 (defer backlog re-offers are late messages affecting admission outcomes), FD-L1 (class eligibility composition with stated never-trim invariants whose violation changes effective behavior), FD-L2 (byte budgets with stated bounds, FIFO ordering, monotonic gateSeq arithmetic).
 - backends: `["tla", "lean"]`
 - modelDirs: `{"tla": "specs/tla/input-admission-governance", "lean": "specs/lean/input-admission-arithmetic"}`
+- model status: `specs/tla/input-admission-governance + specs/lean/input-admission-arithmetic` — TLA convention verified (216,524 states); probes red: commit-at-check, unknown-as-advisory, observe-mutates; green: observe-clean. Lean: 5 properties verified, proof-only (conformance not-run — unimplemented).
 - rationale: the cross-step invariants (no-self-suppression, commit-on-admission atomicity, observe/enforce state separation, protected-class preservation) are state-machine properties; the class map and budget arithmetic are deterministic rules with stated conservation/bounds — both backends apply, and neither substitutes for the other.
 
 ## Problem
