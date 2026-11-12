@@ -1,7 +1,7 @@
 # Fix Design: SystemOne consumers never dispatch in real sessions (issue #359)
 
 - **Date**: 2026-11-10
-- **Status**: implemented — issue #359, PR #360 (open, pending merge)
+- **Status**: implemented — issue #359, PR #360 (merged 2026-11-10)
 - **Issue**: #359
 - **Affected features**: S1-03 memory-recall (`shadow`/`active`), S1-05 tool-discovery (all modes)
 - **Not affected**: S1-04 memory-extraction-gate (wiring verified correct against the root bridge; dispatches at session stop, still pending live verification — no change in this PR)
