@@ -14,6 +14,7 @@
  * @module @dsh-cc/memory/section
  */
 
+import { Buffer } from 'node:buffer'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { delegationDepthOf } from '@deepseek-ai/dsh-subagent'
@@ -22,6 +23,8 @@ import { scanMemoryDirectory } from './scan.ts'
 import type { MemoryDirectoryState } from './scan.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 import { resolveTeamMemoryRoot } from './team.ts'
+import { DEFAULT_MEMORY_SECTION_SETTINGS } from './section-settings.ts'
+import type { MemorySectionSettingsReader } from './section-settings.ts'
 
 /** Default order slot for the memory section (before tool guidance). */
 export const MEMORY_SECTION_ORDER = 90
@@ -64,6 +67,25 @@ export interface MemoryLayer {
 }
 
 /**
+ * Budget for the COMBINED topic-index block (design
+ * docs/plans/2026-11-12-selective-system-prompt-sections.md §A). The parameter
+ * is optional everywhere: omitting it keeps the historical uncapped render, so
+ * the public `renderLayers` / `renderMemorySection` / `renderTeamMemorySection`
+ * exports stay source- and behavior-compatible for callers that predate the
+ * budget.
+ */
+export interface CombinedIndexBudget {
+  /**
+   * Whether the index block is capped at all. Defaults to `true` when a budget
+   * object is passed; `false` renders the index uncapped (it never removes the
+   * section).
+   */
+  truncate?: boolean
+  /** UTF-8 byte ceiling for the whole index block; defaults to the settings default. */
+  maxBytes?: number
+}
+
+/**
  * Extract the assembling agent from an `AssembleContext`. The agent loop
  * assembles with `scope: agent` (a runtime contract; `ScopeKey` is opaque),
  * so the scope IS the agent whenever a session drives the assembly.
@@ -87,20 +109,30 @@ export class MemorySection {
   private readonly teamEnabled: boolean
 
   /**
+   * Live `cc-memory-section` reader. Stored, never snapshotted: it is consulted
+   * on EVERY render, so a settings write applies to the next render of any path
+   * (the direct section callback, the first-assembly readiness refresh, and
+   * `system-prompt/change` re-renders all funnel through {@linkcode render}).
+   */
+  private readonly readSettings: MemorySectionSettingsReader | undefined
+
+  /**
    * Create a cache holder bounded to a memory home.
    * @param ctx - the host context whose `fs` seam and `system-prompt/change`
    *   channel drive refresh.
    * @param home - the memory home: the global layer's directory, and the root
    *   under which each workspace's private directory lives (`projects/<slug>`).
    * @param options - when `teamEnabled` is set, each workspace also surfaces
-   *   its shared team directory (`<workspaceDir>/team`).
+   *   its shared team directory (`<workspaceDir>/team`); `readSettings` supplies
+   *   the live combined-index budget (absent = the settings defaults).
    */
   constructor(
     private readonly ctx: Context,
     private readonly home: string,
-    options: { teamEnabled?: boolean } = {},
+    options: { teamEnabled?: boolean; readSettings?: MemorySectionSettingsReader } = {},
   ) {
     this.teamEnabled = options.teamEnabled ?? false
+    this.readSettings = options.readSettings
   }
 
   /** Register the `memory` section, its assemble-waterfall reconciliation,
@@ -194,7 +226,18 @@ export class MemorySection {
       const unknown = this.layersFor(agent).some(layer => layer.state === undefined)
       if (unknown) void this.refresh(agent)
     }
-    return renderLayers(this.layersFor(agent))
+    return renderLayers(this.layersFor(agent), this.indexBudget())
+  }
+
+  /**
+   * The current combined-index budget. Read per render (never cached) so a
+   * settings update — or a rejected update that keeps the previous snapshot —
+   * is observed by the very next render. No reader, or a reader that resolves
+   * `undefined` (no settings service / nothing registered), means the defaults.
+   */
+  private indexBudget(): CombinedIndexBudget {
+    const settings = this.readSettings?.() ?? DEFAULT_MEMORY_SECTION_SETTINGS
+    return { truncate: settings.truncate, maxBytes: settings.maxBytes }
   }
 
   /**
@@ -320,8 +363,18 @@ function renderLayerFragment(layer: MemoryLayer): string {
   return `## ${ENTRYPOINT_NAME} (${layer.label})\n\n${body}`
 }
 
-/** Compose the full section text from the observed layers. */
-export function renderLayers(layers: readonly MemoryLayer[]): string {
+/**
+ * Compose the full section text from the observed layers.
+ *
+ * Only the combined topic index is budgeted: the section header, the per-layer
+ * `MEMORY.md` fragments (already capped by `truncateEntrypointContent`) and the
+ * "Searching past context" guidance render byte-identical whether or not a
+ * budget is passed. Omitting `budget` keeps the historical uncapped behavior.
+ * @param layers - the layers this render observes.
+ * @param budget - optional combined-index budget.
+ * @returns the rendered section.
+ */
+export function renderLayers(layers: readonly MemoryLayer[], budget?: CombinedIndexBudget): string {
   const workspace = layers.find(layer => layer.scope === 'workspace')
   const global = layers.find(layer => layer.scope === 'global')
   const team = layers.find(layer => layer.scope === 'team')
@@ -347,7 +400,7 @@ export function renderLayers(layers: readonly MemoryLayer[]): string {
   )
   const ordered = [workspace, team, global].filter((layer): layer is MemoryLayer => layer !== undefined)
   lines.push(ordered.map(layer => renderLayerFragment(layer)).join('\n\n'))
-  const index = renderCombinedIndex(ordered)
+  const index = renderCombinedIndex(ordered, budget)
   if (index.length > 0) lines.push('', ...index)
   const search = renderSearch(ordered)
   if (search.length > 0) lines.push('', ...search)
@@ -355,7 +408,7 @@ export function renderLayers(layers: readonly MemoryLayer[]): string {
 }
 
 /** A combined topic index with each layer's scope tagged, sorted by filename. */
-function renderCombinedIndex(layers: readonly MemoryLayer[]): string[] {
+function renderCombinedIndex(layers: readonly MemoryLayer[], budget?: CombinedIndexBudget): string[] {
   const combined = layers.flatMap(layer =>
     (layer.state?.topics ?? []).map(topic => ({ ...topic, scope: layer.scope })),
   )
@@ -365,7 +418,52 @@ function renderCombinedIndex(layers: readonly MemoryLayer[]): string[] {
     const type = topic.frontmatter.type === undefined ? '' : ` [${topic.frontmatter.type}]`
     return `- [${escapeLinkText(topic.frontmatter.name)}](${topic.filename}) — ${topic.frontmatter.description} (${topic.scope})${type}`
   })
-  return ['## Memory index', '', ...lines]
+  return [...INDEX_HEADER, ...fitIndexEntries(lines, budget)]
+}
+
+/** The index block's fixed heading lines. */
+const INDEX_HEADER = ['## Memory index', '']
+
+/**
+ * The line standing in for the omitted tail of the alphabetical topic list.
+ * `omitted` counts ENTRIES, not lines.
+ * @param omitted - how many topic entries were dropped.
+ * @returns the ellipsis line.
+ */
+function indexEllipsisLine(omitted: number): string {
+  return `… (${omitted} more memory topics; grep the memory directory for older entries)`
+}
+
+/** UTF-8 size of an index block, newline-joined exactly as it renders. */
+function indexBlockBytes(lines: readonly string[]): number {
+  return Buffer.byteLength(lines.join('\n'), 'utf8')
+}
+
+/**
+ * Fit the entry lines into the block budget by dropping whole entries from the
+ * BOTTOM of the alphabetical list — never a partial line, so multi-byte (CJK)
+ * text can never be sliced mid-character. The retained prefix keeps the same
+ * alphabetical order the uncapped render produced.
+ *
+ * Floor rule: the ellipsis line (and therefore the retrieval guidance that
+ * follows it) always survives. When not even one entry fits beside it, the
+ * block renders the header plus the ellipsis line with no entries — the budget
+ * is a cap above the floor, never below it.
+ * @param entries - the rendered entry lines, alphabetical.
+ * @param budget - the optional budget; absent or `truncate: false` = uncapped.
+ * @returns the entry lines to render (uncapped, truncated, or none).
+ */
+function fitIndexEntries(entries: readonly string[], budget?: CombinedIndexBudget): string[] {
+  if (budget === undefined || budget.truncate === false) return [...entries]
+  const maxBytes = budget.maxBytes ?? DEFAULT_MEMORY_SECTION_SETTINGS.maxBytes
+  if (indexBlockBytes([...INDEX_HEADER, ...entries]) <= maxBytes) return [...entries]
+  for (let kept = entries.length - 1; kept > 0; kept -= 1) {
+    const candidate = [...INDEX_HEADER, ...entries.slice(0, kept), indexEllipsisLine(entries.length - kept)]
+    if (indexBlockBytes(candidate) <= maxBytes) return candidate.slice(INDEX_HEADER.length)
+  }
+  // Floor: no entry fits beside the ellipsis line; the section keeps its
+  // retrieval guidance and loses only enumeration.
+  return [indexEllipsisLine(entries.length)]
 }
 
 function renderSearch(layers: readonly MemoryLayer[]): string[] {

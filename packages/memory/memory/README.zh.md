@@ -146,6 +146,39 @@ selector）。**没有任何 profile 默认启用该特性**：`cc` preset 会�
 { "cc-systemone-memory-recall": { "mode": "shadow" } }
 ```
 
+## 记忆 section 预算（`cc-memory-section`，默认开启）
+
+本节中**合并主题索引**是唯一没有被其他上限覆盖的表面：每层 `MEMORY.md` 片段已由
+`truncateEntrypointContent` 截断（每层 200 行 / 25 KB），因此该命名空间只限制索引块——
+section 标题、各层片段与「Searching past context」检索指引块始终与未设上限时**逐字节
+一致**。预算位于独立命名空间 `cc-memory-section`（通过 `registerNamespaceSafe` 注册，
+键名为 kebab-case），并在**每次渲染**时重新读取——settings 写入对下一次组装立即生效，
+包括首次组装的就绪重渲染与每次 `system-prompt/change` 重渲染。没有 settings 服务的宿主
+完全按下列默认值运行。
+
+| 字段 | 默认值 | 范围与含义 |
+|---|---|---|
+| `truncate` | `true` | 索引上限的显式开关。`false` 表示索引**不设上限**——绝不会移除该 section（恢复旧行为的开关） |
+| `max-bytes` | `8192`（**暂定**） | 1024-65536；整个索引块（`## Memory index` 标题加条目）的 UTF-8 字节上限。**暂定值**，待组装账本给出 section 字节分布后再调整；取值非法即被拒绝、绝不夹取，被拒的更新保留上一个有效快照 |
+
+截断语义（所有尺寸均为 UTF-8 字节，与 `truncateEntrypointContent` 的度量方式一致）：
+
+1. 索引块超过 `max-bytes` 时，从**字母序**列表底部丢弃整条条目——绝不产生半行，因此
+   多字节（如中文）描述不会被截断在字符中间；保留的前缀与未设上限时的字母序完全一致。
+   省略与相关性无关：字母序 ≠ 相关性。
+2. 块末追加 `… (N more memory topics; grep the memory directory for older entries)`，
+   其中 **N 统计条目数**，不是行数。
+3. **地板规则**：若连一条条目都无法与该行一起容纳，则块内只渲染 `## Memory index`
+   标题与该省略行、**不含任何条目**——section 保留检索指引，只失去枚举。预算永远是
+   地板之上的上限、绝不低于地板，这也是低于 1024 的 `max-bytes` 会被拒绝的原因。
+
+召回不受影响：它直接扫描记忆目录，不读这个索引。
+
+```jsonc
+// settings 级联
+{ "cc-memory-section": { "max-bytes": 4096 } }
+```
+
 ## Model Experience
 
 基准开销：每步一次同步渲染缓存的 section 文本（无 I/O）。最便宜路径还会扫描
@@ -160,8 +193,11 @@ selector）。**没有任何 profile 默认启用该特性**：`cc` preset 会�
 - `parseMemoryFile(raw)` —— 将主题文件拆分为 frontmatter 与正文。
 - `scanMemoryDirectory(fs, dir, signal?)` —— 读取入口与主题索引。
 - `renderMemorySection(globalDir, workspaceDir, ...)` /
-  `renderTeamMemorySection(...)` / `renderLayers(layers)` /
+  `renderTeamMemorySection(...)` / `renderLayers(layers, budget?)` /
   `saveGuidance(workspaceDir, globalDir)` —— section 文本构建器。
+  `renderLayers` 接受**可选**的 `CombinedIndexBudget`（`{ truncate?, maxBytes? }`）；
+  不传即保持不设上限的旧行为，`renderMemorySection` / `renderTeamMemorySection`
+  永不设上限（它们不传 budget）。
 - `MemorySection` —— section 的后台刷新缓存持有者（一次注册，按 agent 呈现
   工作区层）。
 - `registerMemorySaveTool(ctx, home, section)` / `MEMORY_SAVE_TOOL` /
@@ -177,6 +213,11 @@ selector）。**没有任何 profile 默认启用该特性**：`cc` preset 会�
   `DEFAULT_RECALL_DECISION_SECTION` / `recallDecisionSettings(section)` /
   `registerRecallDecisionSettings(ctx)` —— `cc-systemone-memory-recall` 命名空间
   （kebab-case 字段）、其设计默认值，以及各召回切片消费的 camelCase reader。
+- `MEMORY_SECTION_SETTINGS_NAMESPACE` / `DEFAULT_MEMORY_SECTION_SETTINGS` /
+  `MIN_INDEX_MAX_BYTES` / `MAX_INDEX_MAX_BYTES` /
+  `memorySectionSettings(section)` / `registerMemorySectionSettings(ctx)` /
+  `validateMemorySectionSettings(section)` —— `cc-memory-section` 命名空间
+  （kebab-case 字段）、其暂定默认值，以及 section 每次渲染都会查询的 camelCase 实时 reader。
 - `truncateEntrypointContent(raw)` —— 施加行/字节上限。
 - `resolveMemoryHome`、`resolveWorkspaceMemoryDir`、`canonicalMemoryRoot`、
   `projectSlug`、`cwdOf`、`resolveProjectMemoryRoot` —— memdir 根与工作区解析辅助。

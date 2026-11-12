@@ -190,6 +190,49 @@ nothing, and a mode without the plugin only ever falls back.
 { "cc-systemone-memory-recall": { "mode": "shadow" } }
 ```
 
+## Memory section budget (`cc-memory-section`, on by default)
+
+The section's **combined topic index** is the one surface no other cap reaches.
+Per-layer `MEMORY.md` fragments are already capped by
+`truncateEntrypointContent` (200 lines / 25 KB per layer), so this namespace
+caps the index block only: the section header, the per-layer fragments and the
+"Searching past context" guidance block always render **byte-identical** to the
+uncapped form. The budget lives in its own settings namespace, `cc-memory-section`
+(registered through `registerNamespaceSafe`; keys are kebab-case there), and is
+re-read on **every** render — a settings write applies to the next assembly,
+including the first-assembly readiness re-render and every
+`system-prompt/change` re-render. A host without a settings service keeps
+exactly these defaults.
+
+| Key | Default | Range and meaning |
+|---|---|---|
+| `truncate` | `true` | explicit on/off for the index cap. `false` renders the index **uncapped** — it never removes the section (the restore-previous-behavior valve) |
+| `max-bytes` | `8192` (**provisional**) | 1024-65536; UTF-8 byte ceiling for the whole index block (`## Memory index` header + entries). Provisional until the assemble ledger reports section-byte distributions; values are rejected, never clamped, and a rejected update keeps the previous valid snapshot |
+
+Truncation semantics (all sizes are UTF-8 bytes, measured like
+`truncateEntrypointContent`):
+
+1. When the index block exceeds `max-bytes`, whole entries are dropped from the
+   bottom of the **alphabetical** list — never a partial line, so a multi-byte
+   (e.g. CJK) description can never be cut mid-character. The retained prefix
+   keeps the alphabetical order the uncapped render produced. Omission is not
+   relevance-based: alphabetical ≠ relevance.
+2. The block ends with
+   `… (N more memory topics; grep the memory directory for older entries)`,
+   where **N counts entries**, not lines.
+3. **Floor rule:** when not even one entry fits beside that line, the block
+   renders the `## Memory index` header plus the ellipsis line with **no
+   entries** — the section keeps its retrieval guidance and loses only
+   enumeration. The budget is a cap above the floor, never below it, which is
+   why `max-bytes` below 1024 is rejected.
+
+Recall is unaffected: it scans the memory directory itself, not this index.
+
+```jsonc
+// settings cascade
+{ "cc-memory-section": { "max-bytes": 4096 } }
+```
+
 ## Model Experience
 
 Baseline cost: one synchronous render of the cached section text per step (no
@@ -207,8 +250,11 @@ service is mounted.
 - `parseMemoryFile(raw)` — split a topic file into frontmatter + body.
 - `scanMemoryDirectory(fs, dir, signal?)` — read the entrypoint and topic index.
 - `renderMemorySection(globalDir, workspaceDir, ...)` /
-  `renderTeamMemorySection(...)` / `renderLayers(layers)` /
+  `renderTeamMemorySection(...)` / `renderLayers(layers, budget?)` /
   `saveGuidance(workspaceDir, globalDir)` — the section text builders.
+  `renderLayers` takes an OPTIONAL `CombinedIndexBudget` (`{ truncate?, maxBytes? }`);
+  omitting it keeps the uncapped render, and `renderMemorySection` /
+  `renderTeamMemorySection` never cap (they pass no budget).
 - `MemorySection` — background-refresh cache holder for the section (one
   registration, per-agent workspace layers).
 - `registerMemorySaveTool(ctx, home, section)` / `MEMORY_SAVE_TOOL` /
@@ -226,6 +272,12 @@ service is mounted.
   `registerRecallDecisionSettings(ctx)` — the `cc-systemone-memory-recall`
   namespace (kebab-case fields), its design defaults and the camelCase reader, which
   the recall slices consume.
+- `MEMORY_SECTION_SETTINGS_NAMESPACE` / `DEFAULT_MEMORY_SECTION_SETTINGS` /
+  `MIN_INDEX_MAX_BYTES` / `MAX_INDEX_MAX_BYTES` /
+  `memorySectionSettings(section)` / `registerMemorySectionSettings(ctx)` /
+  `validateMemorySectionSettings(section)` — the `cc-memory-section` namespace
+  (kebab-case fields), its provisional defaults and the camelCase live reader
+  the section consults per render.
 - `truncateEntrypointContent(raw)` — apply the line/byte caps.
 - `resolveMemoryHome`, `resolveWorkspaceMemoryDir`, `canonicalMemoryRoot`,
   `projectSlug`, `cwdOf`, `resolveProjectMemoryRoot` — memdir root and
