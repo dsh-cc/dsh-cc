@@ -1,7 +1,7 @@
 # Injection Dedupe & Notice Governance
 
 - Date: 2026-11-12
-- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
 
 r3 → r4 fold: stale `payload.step` window instruction deleted (gateSeq is the only dedupe clock); provisional-reservation rollback semantics added (trimmed reservations discarded; suppression distances measure committed admissions only; per-batch atomic commits); mixed observe×enforce commit contract defined (actual vs simulated batches, separate state advance); mounting matrix completed to the full 3×3 + off combinations.
 - Program: context-engineering input governance (doc 7 of 8)

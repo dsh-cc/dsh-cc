@@ -1,7 +1,7 @@
 # Compaction Governed-Message Pinning
 
 - Date: 2026-11-12
-- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
 
 r3 → r4 fold: the stale "summary fires only on success" anchor sentence deleted and replaced by the summary-then-commit ordering with the end-error cancellation contract (the exact premise the belt rejects).
 - Program: context-engineering input governance (doc 2 of 8)

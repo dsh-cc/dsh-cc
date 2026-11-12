@@ -1,9 +1,13 @@
 # Assistant-History Pollution Detector (offline v1)
 
 - Date: 2026-11-12
-- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
 
-r3 → r4 fold: effective-view replay re-anchored to the **positional surface fold** (shadowed set = positional slice on current nodes; `sourceEventSeqs` demoted to a validated superset include-check with extra-seq tolerance — checkpoints legitimately carry start/summary seqs); abstain rules defined for invalid ops and chained replaces.
+r3 → r4 fold: effective-view replay re-anchored to the **positional surface fold** (shadowed set = positional slice on current nodes; `sourceEventSeqs` demoted to a validated superset include-check with extra-seq tolerance — checkpoints legitimately carry start/summary seqs); abstain rules defined for invalid ops and chained replaces; the include-check is mandatory (a nonempty-range replace lacking `sourceEventSeqs` ⇒ abstain — codex r4 single-clause remedy, applied verbatim).
+
+## Review convergence (final)
+
+Four rounds, three blind seats each (internal critic, grok lane, codex lane): r1 full review → r2 delta → r3 micro-confirmation → r4 final itemized confirmation. Final seat results: critic CONFIRMED on all items; grok CONFIRMED on all items; codex CONFIRMED on 6/7 with one prescribed clause (include-check mandatory), which is applied verbatim above. Document lineage: r1 (three NO-GO-class verdicts on foundations; 4 GWC / 3 NO-GO-class on the rest) → r2 → r3 → r4. All fold ledgers are maintained at document tails.
 - Program: context-engineering input governance (doc 8 of 8)
 - Depends on: doc 3 (ledger — optional input; the detector's primary source is raw session logs).
 - Literature basis: AC3 (2611.00518); Speech-LLM History Interference (2611.05124); Silent Failures (2606.14589).
@@ -46,7 +50,7 @@ Second CLI inside `@dsh-cc/context-eval` (doc 5's package): `pnpm eval:history-p
 Maintain an ordered list of **current surface nodes** (seqs), exactly as the harness surface fold does (`core/session/src/surface.ts:419-433,537,570` in the pinned harness copy). Replay semantics — **positional replacement, with `sourceEventSeqs` as a validated superset include-check, never as the shadow set itself** (all three r3 seats flagged the r3 text's treatment of `sourceEventSeqs` as the shadow set: the harness derives the shadowed set from the current-surface positions of `startSeq`/`endSeq`; `sourceEventSeqs` must *contain* every shadowed interval node but legally carries extra seqs — the compaction checkpoint includes `startEvent.seq` and `summaryEvent.seq`, `region.ts` commit body — so treating it as the shadow set would both over-shadow and misclassify well-formed checkpoints as inconsistent):
 
 - On a surface event with `{ op:'replace', startSeq, endSeq }`: locate `startSeq` and `endSeq` **on the current node list**; the shadowed set is the positional slice `nodes[idx(startSeq) .. idx(endSeq)]`; the replacement takes that slice's position.
-- `sourceEventSeqs` when present is validated as an include-check: every shadowed positional seq must be a member; extra members are tolerated (superset semantics). A violation (a shadowed seq missing from the list) ⇒ abstain (`inconsistent`).
+- `sourceEventSeqs` when present is validated as an include-check: every shadowed positional seq must be a member; extra members are tolerated (superset semantics). A violation (a shadowed seq missing from the list) ⇒ abstain (`inconsistent`). **A replace with a nonempty shadowed range that lacks `sourceEventSeqs` is invalid by the harness contract (`surface.ts:338-363,537`) ⇒ abstain** — the include-check is mandatory, not optional (codex r4 single-clause remedy, applied verbatim).
 - A replace whose `startSeq`/`endSeq` is not found on the current surface ⇒ abstain (`inconsistent`) — e.g. truncated logs or a chained replace whose earlier replace shadowed the anchor. Chained replaces nest fine **under the positional rule** (each applies to the then-current node list).
 - Claims/evidence produced *after* a replace analyze against the post-replace view; those produced *before* keep the pre-replace view (keyed by seq).
 

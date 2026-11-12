@@ -1,7 +1,7 @@
 # Per-step Input Budget Governor
 
 - Date: 2026-11-12
-- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
 
 r3 → r4 fold: observe mode drops the `wouldTrim`/`wouldDefer` pseudo-fields (decisions live in the shared `trimmed` array under `mode: 'observe'`); `cc-shell-glue` moved advisory → **passthrough in v1 as an algorithmic rule** (pre-delivery latch makes enforced drops silent one-shot misses; doc 7 keeps it observe-only, cross-doc consistent); kind-enumeration test re-specified as a repo scan including harness-side kinds (explicit passthrough).
 - Program: context-engineering input governance (doc 1 of 8)

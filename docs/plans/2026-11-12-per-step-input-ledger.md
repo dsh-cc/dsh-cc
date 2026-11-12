@@ -1,7 +1,7 @@
 # Per-step Input Ledger
 
 - Date: 2026-11-12
-- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
 - Program: context-engineering input governance (doc 3 of 8)
 - Depends on: nothing (substrate). Docs 1 and 7 define *their* row payload shapes here by reference (single schema source, per review finding).
 - Literature basis: Four-condition evidence-utilization protocol; interaction-budget auditing of context compression (arxiv 2608.16370); "Context Is a Pipeline" (2610.36114).

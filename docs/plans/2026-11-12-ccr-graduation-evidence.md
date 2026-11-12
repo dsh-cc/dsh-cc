@@ -1,7 +1,7 @@
 # CCR Graduation Evidence Framework
 
 - Date: 2026-11-12
-- Status: Design — r4 (r1 full review, r2 delta review, r3 micro-confirmation folded by three seats; pending final sign-off)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
 
 r3 → r4 fold: `decideCrush` inputs enlarged with `projectKey?`/`storeAvailable` and reframed as a pure decision table (no `store.put`/ledger writes inside); identifier grammars collapsed to exactly two (SEARCH_ROW capture for original grep rows and stub `== path ==` headers for retained paths; free-text mention grammar for log-kind spans and all downstream references).
 - Program: context-engineering input governance (doc 5 of 8)
