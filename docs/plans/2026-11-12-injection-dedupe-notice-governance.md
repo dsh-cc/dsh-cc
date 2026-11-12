@@ -1,7 +1,7 @@
 # Injection Dedupe & Notice Governance
 
 - Date: 2026-11-12
-- Status: Design — r2 (critic + grok + codex r1 findings folded; codex was NO-GO on the admission-ordering bug, now fixed by a two-phase commit design)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 7 of 8)
 - Depends on: doc 1 (same package `@dsh-cc/input-budget`; plugs into `govern()` at the stage order **dedupe → caps → budget trim**; the class registry is referenced from doc 1's r2, not restated). Doc 3 (DedupeRow/CapRow live in its single-schema union).
 - Literature basis: Silent Failures (2606.14589); Signal-Driven Observation (2606.06708 — observation over-ingestion).
@@ -37,25 +37,29 @@ Non-goals:
 
 All code lives in `packages/context/input-budget` (doc 1's package): `dedupe.ts`, `caps.ts`, driven from `govern.ts`.
 
-### Two-phase admission (fixes the r1 BLOCKER)
+### Two-phase admission within one batch (provisional state)
 
-Naively recording "seen" at check time lets a suppressed message poison its own later admission (codex's BLOCKER): a dropped dedupe entry updates `lastStepSeen`; when the same message is re-offered from the governor's defer backlog, it suppresses *itself* although it never reached the model. The design is therefore two-phase inside `govern()`:
+Cross-step self-suppression is fixed by committing only at final admission (r2 fold). The remaining hole (codex delta MAJOR): two same-key messages in **one** batch could both pass a read-only check and both be admitted. Checks therefore evaluate against **committed state ∪ provisionally-admitted-this-batch** in batch order:
 
-1. **Check phase (read-only)**: for each advisory message compute its key and test dedupe/cap eligibility against *committed* state (previous admissions).
-2. **Budget trim** (doc 1) computes the final admitted set.
-3. **Commit phase**: only after the final batch is decided, admitted entries update dedupe/cap state. Deferred entries **do not** update state (they were not admitted); when they later get admitted from the backlog, their key then commits normally. Deferred-entry identity is the original message — its key recomputes identically at re-offer time.
+1. **Check phase**: for each advisory message in order, compute the key; eligibility tested against committed state plus keys already provisionally admitted in this batch.
+2. **Budget trim** (doc 1) computes the final batch.
+3. **Commit phase**: only after the final batch is decided, entries that made it into the batch update dedupe/cap state. Deferred entries do not update state (never admitted); when later admitted from the backlog, the key commits then. Ledger rows are emitted **after trim/commit**, carrying the final decision (grok delta: emitting "at check time with the eventual decision" fights the two-phase model).
 
-Observability: rows are emitted at check time with the eventual decision, marked by `applied`.
+Deferred-entry identity is the original message — its key recomputes identically at re-offer time.
+
+Clock: dedupe and TTL arithmetic use the governor's **monotonic per-session `gateSeq`** (doc 1) — the payload's `step` is **turn-local** and resets per turn (codex delta; it exists on the payload at `runtime-types.ts:350`, but a session-wide window cannot be built on it).
 
 ### Dedupe
 
 Key: `${kind}:${sha256(canonicalText).slice(0,12)}` over concatenated text blocks, verbatim (no normalization v1).
 
-State (per session): `Map<key, { lastAdmittedStep: number }>` — updated **only at commit**.
+State (per session): `Map<key, { lastAdmittedSeq: number }>` where the clock is `gateSeq` (see above) — updated **only at commit**.
 
-Rule: suppress when `lastAdmittedStep` exists and `step - lastAdmittedStep < dedupe-window-steps` (default **8**; strict `<`). Boundary worked examples pinned in tests: last admitted at step 3, window 8 → re-arrival at step 10 suppressed (7 < 8); step 11 admitted (8 ≮ 8). (r1 had `<=` which contradicted its own unit test — codex fold; the convention above is the one the tests pin.)
+Rule: suppress when `lastAdmittedSeq` exists and `gateSeq - lastAdmittedSeq < dedupe-window-steps` (default **8**; strict `<`). Boundary worked examples pinned in tests: last admitted at seq 3, window 8 → re-arrival at seq 10 suppressed (7 < 8); seq 11 admitted (8 ≮ 8).
 
-Applies to kinds: `advisor`, `retry-attendant`, `cc-shell-glue`, `compaction-micro`, `compaction-cost-gate` (explicit audit list; lifecycle kinds excluded per scope).
+Applies to kinds: `advisor`, `retry-attendant`, `compaction-micro`, `compaction-cost-gate`, and **`cc-shell-glue` in observe mode only** (see latch analysis below; explicit audit list; lifecycle kinds excluded per scope).
+
+**`cc-shell-glue` latch analysis (grok's delta MAJOR):** `mcpReadyNotice` sets its once-per-session latch **before** returning the appended notice (`mcpReadyNotice.ts:154` then `:157-163`) — so an enforced drop/defer of a glue notice is a silent one-shot miss, exactly the failure class that got lifecycle kinds excluded. v1 therefore excludes `cc-shell-glue` from enforced dropping entirely: its dedupe/caps run in observe mode only (rows emitted; no suppression), until a producer-side "latch after admission" contract exists in a later design.
 
 ### Caps (session-level, admission-committed)
 
@@ -65,40 +69,51 @@ Same commit-at-admission state: `Map<kind, runningCount>` incremented only at co
 |---|---|---|
 | `advisor` | 4 | injects (not notes; producer batches notes per inject and already enforces its own 24-note session cap — this cap is intentionally tighter, an outer floor) |
 | `retry-attendant` | 8 | injects |
-| `cc-shell-glue` | 4 | injects |
+| `cc-shell-glue` | 4 | injects — **observe-only in v1** (latch analysis above; the cap is recorded, never enforced, until the producer latch-after-admission contract lands) |
 
 Overflow at check time: ineligible → message goes to governor trim (defer/expiry handled by doc 1), row emitted at commit with the final outcome. Kebab key names are pinned in schemastery (`retry-attendant`, not `retryAttendant`; grok fold).
 
 Lifecycle kinds (`cc-subagent-children`, `subagent-settled`) and `compaction-micro`/`compaction-cost-gate` carry **no caps** (dedupe only for the latter two; lifecycle kinds excluded entirely).
 
-### Mounting and independent flips (codex's four-combo requirement)
+### Mounting and mode combinations (settings contract fixed per delta round)
 
-One physical pre-step listener (doc 1's) hosts three stages (dedupe, caps, budget). It mounts when **any** owning feature is enabled. Each stage has its own `enabled`/`mode`; stage states are independent; flipping a stage's mode resets only that stage's runtime state (dedupe map for dedupe, cap counters for caps, defer queue for budget — never the others'). Tests enumerate all enabled/disabled × observe/enforce combinations per stage.
+Dedupe and caps are **one notice-governance stage** (not three independent stages — r2 prose promised per-stage controls the settings table never exposed; codex + grok convergent). The single physical pre-step listener (doc 1's) mounts when **either** the budget feature (`cc-input-budget`) or this stage (`cc-input-notice-governance`) is enabled. Combinations enumerated and tested:
 
-### Observe mode (faithful would-have)
+| budget (`cc-input-budget`) | this stage (`cc-input-notice-governance`) | pipeline executed |
+|---|---|---|
+| disabled | disabled | no listener mounted |
+| observe | off | budget observe only |
+| observe | observe | dedupe/caps observe + budget observe |
+| enforce | observe | dedupe/caps observe + budget enforce |
+| observe | enforce | dedupe/caps enforce + budget observe |
+| enforce | enforce | both enforce |
 
-In observe mode the check/trim/commit pipeline runs identically, and **state advances as if the drops had happened** (simulated commits): a would-be-suppressed message updates the simulated state, so subsequent steps see the would-have world. The real batch is untouched. This is consistent with commit-on-admission because observe's simulated final batch *is* the "admission" being simulated (r2 resolution of grok-vs-codex's two directions; enforce defers have no observe analogue — dedupe/caps have no backlog, so no interference).
+Each stage's mode flip resets only its own runtime state (this stage: dedupe map + cap counters; budget: defer queue) — never the other's. "off" for this stage (via `enabled:false`) leaves its state dormant.
+
+### Observe mode (faithful would-have, codex delta correction)
+
+In observe mode the check/trim/commit pipeline runs identically against the would-be batch, and **simulated state updates only for simulated-admitted entries** — never for simulated-suppressed ones (r2 text said would-be-suppressed entries update simulated state, which would extend their suppression windows forever although enforce would have readmitted them — codex delta MAJOR). Mechanically: simulate the batch through the same three phases; simulated-commit the simulated-admitted set; keep suppression counters (`suppressedWithin`, `suppressedTotal`) in rows, separate from the simulated admission state. The real batch is untouched; dedupe/caps have no backlog, so there is no cross-mode interference (doc 1's defer queue stays enforce-only independently).
 
 ### Ledger rows (owned by doc 3's union; referenced)
 
-`DedupeRow { applied, kind, hash12, suppressedWithin }` — `suppressedWithin` = steps between this message's suppression and its last admission (`step - lastAdmittedStep`). `CapRow { applied, kind, runningCount, suppressedTotal }` — `runningCount` = admissions for this kind in this session so far; `suppressedTotal` = cumulative suppressions for the kind. Observe rows carry `applied: false`.
+`DedupeRow { applied, kind, hash12, suppressedWithin }` — `suppressedWithin` = `gateSeq` distance between this message's suppression and its last admission. `CapRow { applied, kind, runningCount, suppressedTotal }` — `runningCount` = committed admissions for this kind in this session so far; `suppressedTotal` = cumulative suppressions for the kind. Observe rows carry `applied: false`.
 
 ### Settings — `cc-input-notice-governance` (kebab, user-layer, hot-read)
 
 | key | type | default | bounds |
 |---|---|---|---|
-| `enabled` | bool | true | — |
+| `enabled` | bool | true | — (single stage toggle for dedupe+caps — delta-round fold: no per-stage keys exist) |
 | `mode` | `'observe'|'enforce'` | `'observe'` | — (flip resets this stage's state only) |
-| `dedupe-window-steps` | int | 8 | 1..64 |
-| `caps` | object | table above | values 0..64; kebab keys enforced |
+| `dedupe-window-steps` | int | 8 | 1..64 (measured in `gateSeq` invocations — the unit is stated in the README) |
+| `caps` | object | table above | values 0..64; kebab keys enforced; `cc-shell-glue` entry is observe-only in v1 |
 
 Four-surface default discipline + "no settings file → observe runs" wiring test.
 
 ## Verification
 
-- Unit: two-phase commit regression for the r1 BLOCKER (suppressed message deferred, re-offered later, admitted once distance ≥ window — never self-suppressing); window boundary examples above; LRU bound 512 entries/session; `session/disposed` cleanup; cap commit-on-admission (dropped messages don't consume cap); observe-state advances identically to enforce; four stage-combo mounting tests; boundary `step` provenance from `payload.step`.
-- Integration: synthetic producers repeating one advisory text across 12 steps; enforce admits exactly one in the window; pipeline order dedupe→caps→trim pinned by a composed-order test.
-- Live acceptance (observe, two weeks): repetition distributions per kind (steps denominator), then a sample audit before enforce: **all** suppressions if ≤ 100, else stratified sample of 100, with the acceptance criterion on self-inflicted valuable-loss stated as a one-sided 95% upper bound ≤ 5% (r1's "20 samples supports 1%" was statistically empty — codex fold: 0 losses in 20 samples only bounds ≤ ~14%).
+- Unit: two-phase commit regression for the r1 BLOCKER (suppressed message deferred, re-offered later, admitted once distance ≥ window — never self-suppressing); same-batch duplicate allocation (two same-key messages in one batch — second provisionally ineligible); observe-mode simulation correctness (only simulated-admitted entries advance simulated state); window boundary examples in `gateSeq`; LRU bound 512 entries/session; `session/disposed` cleanup; cap commit-on-admission (dropped messages don't consume cap); the six mounting/mode combinations in the matrix; **cc-shell-glue observe-only behavior** (a latch-before-return producer's notice is recorded but never suppressed in v1 — regression-pins grok's delta MAJOR).
+- Integration: synthetic producers repeating one advisory text across 12 gate invocations; enforce admits exactly one in the window; pipeline order dedupe→caps→trim pinned by a composed-order test; rows emitted after commit carry final decisions.
+- Live acceptance (observe, two weeks): repetition distributions per kind (gateSeq denominator), then a sample audit before enforce: **all** suppressions if ≤ 100, else a **uniform random sample** of 100 suppressions (uniform so a pooled Wilson bound is valid — codex delta fold: unspecified stratification breaks the confidence calculation), with the acceptance criterion on self-inflicted valuable-loss stated as a one-sided 95% upper bound ≤ 5%.
 
 ## Risks
 
@@ -109,3 +124,5 @@ Four-surface default discipline + "no settings file → observe runs" wiring tes
 ## Fold ledger
 
 r1 → r2 (critic GWC + grok GWC + codex NO-GO → folded): two-phase commit-on-admission fixes the self-suppression BLOCKER; dedupe/caps restricted to enumerated advisory kinds, lifecycle kinds excluded (`subagent-settled` established-wake risk; one-shot pre-latch silent-miss risk); window convention `delta < window`, counter = `payload.step` (grok's "no step in payload" claim verified false against `runtime-types.ts:350` — step is present; consumer subset annotations are the stale source); registry referenced from doc 1 r2 instead of restated (stale classes, `progress-brief`, memory class); mounting/stage-flip semantics for all four combos; DedupeRow/CapRow aligned to doc 3's union incl. `applied` and counter semantics; advisor inject-vs-note units and kebab pinning; observe-mode state advance defined as faithful would-have; audit sample size and confidence requirement specified.
+
+r2 → r3 delta (three seats): clock switched from turn-local `payload.step` to the governor's monotonic `gateSeq` (turn-local step resets per turn and cannot carry a session window — codex); provisional in-batch allocation closes the same-batch duplicate hole; rows emitted after trim/commit (not at check time); dedupe+caps collapsed to **one stage** with a six-combination mounting matrix (prose had promised per-stage controls the settings table lacked); observe-mode simulation corrected (only simulated-admitted entries advance state; suppression counters stay separate); `cc-shell-glue` made **observe-only in v1** (mcpReadyNotice latches before return — enforced drops would be silent one-shot misses; grok) with the caps table carrying the caveat; audit sampling made uniform-random for a valid pooled Wilson bound.

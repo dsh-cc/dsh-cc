@@ -1,7 +1,7 @@
 # Per-step Input Budget Governor
 
 - Date: 2026-11-12
-- Status: Design — r2 (three-seat blind review r1 folded; verdict was NO-GO; find-by-find address below)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 1 of 8)
 - Depends on: doc 3 (`@dsh-cc/input-ledger` — row schemas GovernorRow/DedupeRow/CapRow live there; single schema source). Doc 7 plugs into this package's `govern()` pipeline.
 - Literature basis: Mei et al. `C* = argmax U(C) s.t. |C| ≤ L`; ContextPipe (2609.00749); Anthropic "smallest high-signal token set"; ToolMenuBench.
@@ -32,7 +32,7 @@ Non-goals:
 - `agent/pre-step` payload is `{ agent, messages, turn, step, signal }`; `messages` is the claimed inbox batch for this step. `PreStepDecision`: `{kind:'enter', messages: UserMessage[]}` | `{kind:'reject'}`; rewriting = returning `{...decision, messages: newArray}` (append precedent `mcpReadyNotice.ts:157-163`; filter precedent `strip-instructions.ts:71-77`).
 - Durable injected messages (`agent.inject`) re-surface inside a later step's claimed batch, so a final pre-step gate sees them with no extra plumbing.
 - Prepend semantics: `prepend: true` listeners are **unshifted** (run earliest in the waterfall); among prepended listeners, later registration is outermost. Plain (non-prepend) listeners execute in registration order after all prepended ones. On the way back out of `next()`, the outermost listener sees the final decision produced by everything inside it. Verified against the actual registrations: `hooks-claude-code` `agent/pre-step` is registered **plain** (`hooks-claude-code/src/register-events.ts:90-97` — only its `tools/pre-execute` at `:102-130` is prepended); `mcpReadyNotice` and `one-shot-notice` are plain; `strip-instructions` is prepended but subagent-scoped (`strip-instructions.ts:70-77`). The r1 draft's claim that hooks/mcpReady prepend and its `agent.cordis.yml:416-418` row anchor were both false (that file is a 32-line wrapper; the shared `agent.shared.cordis.yml:410-418` lines are isolate keys, not pre-step rows).
-- Dynamically mounted listeners exist: the moa sanitizer installs a prepended pre-step listener per agent via TUI-time `installModelSelectionWithSanitizer` (`ui/tui/src/harness/model-selection-wiring.ts:16-19`) — after preset mount, therefore outer than any preset listener. Anything registered similarly late is outside the governor's view **by construction** (documented and accepted: classes default to passthrough, so outside-governor content is never harmed).
+- The complete census of **prepended** pre-step/batch rewriters at and after preset mount (delta-round fold, grok): `strip-instructions` (subagent-scoped, `strip-instructions.ts:71-77`), `suppress-settled` (`subagent/task/src/suppress-settled.ts:76-88`, mounted from `subagent/task/src/index.ts:275`), and the dynamically installed moa sanitizer (`ui/tui/src/harness/model-selection-wiring.ts:16-19`) — the last of which is mounted after preset apply and therefore sits outside the governor **by construction** (documented and accepted: classes default to passthrough, so outside-governor content is never harmed). All three are named in the composition pin below.
 - `agent-instructions` baseline content is spliced into the enter batch by harness (`context/agent-instructions/src/index.ts:330-355` in the pinned copy) with `source.kind === 'agent-instructions'`; hook additionalContext arrives with kind from hooks (`turn-safety.ts:157-160`). Both must be classed never-trim.
 - Real top-level kinds in use (r1 audit, corrected): `user`, `memory`, `turn-rules`, `edit-recovery-hint`, `moa`, `progress-rebuild`, `cc-shell-glue`, `cc-subagent-children`, `advisor`, `retry-attendant`, `completion-gate`, `permission-rules`, `compaction-micro`, `compaction-cost-gate`, `agent-instructions`, `compact-checkpoint`, `hooks-claude-code`, `subagent-settled`.
 
@@ -50,13 +50,15 @@ New package `packages/context/input-budget` (`@dsh-cc/input-budget`). One `agent
 
 | class | kinds (explicit) | policy |
 |---|---|---|
-| governance | `turn-rules`, `edit-recovery-hint`, `completion-gate`, `permission-rules`, `agent-instructions`, `hooks-claude-code`, `compact-checkpoint` | never trim, never defer; counted |
-| task | `user`, `progress-rebuild`, `moa`, `subagent-settled` | never trim, never defer; counted (`subagent-settled` wakes the parent after settlement — dropping it loses the wake; classified via the doc-7 r1 review) |
+| governance | `turn-rules`, `edit-recovery-hint`, `completion-gate`, `permission-rules`, `agent-instructions`, `hooks-claude-code`, `compact-checkpoint`, `moa-escalation` | never trim, never defer; counted |
+| task | `user`, `progress-rebuild`, `moa`, `subagent-settled`, `cc-subagent-children`, `vwa-evidence`, `cc-workflow-completion` | never trim, never defer; counted (lifecycle/delivery wakes: losing them loses work product or settlement; classified via the doc-7 r1/delta reviews) |
 | memory | `memory` | trim/defer under `memory-budget-bytes` (its own budget, not the advisory pool) |
-| advisory | `cc-shell-glue`, `cc-subagent-children`, `advisor`, `retry-attendant`, `compaction-micro`, `compaction-cost-gate` | trim/defer under `advisory-budget-bytes` |
-| passthrough | **everything else / unknown** | never trim, never defer; counted |
+| advisory | `cc-shell-glue`*(observe-only in v1 — see doc 7 latch analysis)*, `advisor`, `retry-attendant`, `compaction-micro`, `compaction-cost-gate` | trim/defer under `advisory-budget-bytes` |
+| passthrough | `command-preset`, `side-query`, `tool-web-fetch`, `tool-registry`, **everything else / unknown** | never trim, never defer; counted |
 
-A startup enumeration test asserts every kind declared in `MessageSourceMap` augmentations across the repo is covered by the map (guard against silent passthrough growth, r1 finding).
+A startup enumeration test asserts every kind declared in `MessageSourceMap` augmentations across the repo is covered by the map (guard against silent passthrough growth; the enumeration fixture in tests lists the full set in the table above — delta-round fold: the test will fail the design if the table and the fixture disagree).
+
+Clock: the governor maintains a **monotonic per-session invocation counter `gateSeq`** (incremented on every gate call). `agent/pre-step`'s `step` is **turn-local** (resets per turn — codex delta MAJOR) and is unusable as a session clock; `gateSeq` replaces it for defer-TTL aging and for doc 7's dedupe window.
 
 ### Budget model (per enter batch)
 
@@ -66,17 +68,17 @@ A startup enumeration test asserts every kind declared in `MessageSourceMap` aug
 4. Advisory budget: FIFO-oldest trim until `advisoryBytes ≤ advisory-budget-bytes` (default **8192**).
 5. Enter budget: if total > `enter-budget-bytes` (default **24576**), trim advisory (then memory) further; if budget cannot be met within trimmable classes, admit everything, set `hardOver: true`, trim nothing from protected classes (row records the overflow).
 
-### Defer queue (deterministic algorithm, r1 fold)
+### Defer queue (deterministic algorithm)
 
-Per-session `Deque<DeferredEntry>` where entry = `{ message, enqueuedAtStep, lastOfferedStep }`.
+Per-session `Deque<DeferredEntry>` where entry = `{ message, enqueuedAtSeq, lastOfferedSeq }` — both fields carry **gateSeq values** (the monotonic per-session invocation counter above; turn-local `step` is never used). Initialization/update semantics (codex delta fold): `enqueuedAtSeq` set at trim time; `lastOfferedSeq` initialized to `enqueuedAtSeq` and **updated at the end of every gate invocation in which the entry was evaluated** (regardless of admission outcome — admission, rejection, and re-defer all advance it).
 
 On each gate invocation (in order):
 
-1. Age: for each entry, `lastOfferedStep` older than `step - deferTtlSteps` (default 3) → drop, row action `drop-expired`.
-2. Backlog admission: walk backlog FIFO; admit head while the class budget has room; bytes over `advisory-budget-bytes` alone → drop `drop-oversize` immediately (one sentence in ledger row). Admitted entries are appended to this step's batch (they only re-enter via the governor's own return value — not via `agent.inject`, so no new claimed batches form).
-3. Fresh classification/trim (per Budget model); trimmed messages append to backlog tail.
+1. Age: entries with `gateSeq - enqueuedAtSeq > defer-ttl-steps` (default 3) → drop `drop-expired`.
+2. Backlog admission: walk backlog FIFO; admit head while the entry's own class budget has room (memory entries are evaluated against `memory-budget-bytes`, advisory entries against `advisory-budget-bytes` — codex delta fold: a 12 KiB memory entry must not be judged against the advisory limit). Admitted entries are appended to this step's batch (they only re-enter via the governor's own return value — not via `agent.inject`, so no new claimed batches form).
+3. Fresh classification/trim (per Budget model); a trimmed message whose own bytes **alone exceed its class budget** is dropped immediately as `drop-oversize` (never enqueued — critic/ledger fold: defer-then-drop would fake a deferral that could never succeed); the rest append to the backlog tail.
 
-Rationale: backlog-first respects FIFO aging; never reordering admitted messages beyond trim bookkeeping. TTL counts governor invocations where the entry waited, not admitted — stated bluntly so two implementers cannot diverge.
+Rationale: backlog-first respects FIFO aging; admitted-message order is otherwise never touched. TTL is wall-bounded by invocation count, not admission count — stated bluntly so two implementers cannot diverge.
 
 ### Observe mode (r1 fold: isolated shadow state)
 
@@ -129,3 +131,7 @@ Governor exception → return the unmodified decision, row `{ error: true }`. Ne
 ## R1 fold ledger (three seats: internal critic, grok, codex)
 
 Folded: kind classification inversion (unknown → passthrough; audited advisory list; `agent-instructions`/`hooks-claude-code` explicitly governance); `progress-brief` → `progress-rebuild` correction + moa classified; ordering section rewritten against real prepend semantics with three tested defenses and dynamic-listener boundary; memory gets its own budget class (r1: the cited biggest producer was never budgeted); deterministic defer algorithm; observe-mode shadow-state model with flip-boundary reset and no simulated backlog; GovernorRow schema ownership moved to doc 3; startup kind-enumeration guard test; settings authority/bounds/hot semantics.
+
+## R2 → R3 delta fold ledger (three seats)
+
+Folded: kind table completed (`cc-workflow-completion`, `command-preset`, `moa-escalation`, `side-query`, `tool-web-fetch`, `tool-registry`, `vwa-evidence` added with classes; `cc-subagent-children` promoted to task — pre-delivery latch analysis in doc 7); `gateSeq` monotonic per-session clock replaces turn-local `step` for defer-TTL and dedupe-window arithmetic; `lastOfferedSeq` init/update semantics defined; oversize evaluated at trim time against the entry's **own class budget** and dropped immediately (`drop-oversize`, never enqueued; GovernorRow action union reconciled with doc 3 — `drop-hard`/`drop-cap-memory` removed); backlog admission evaluates entries against their own class budgets (fixing the advisory-threshold misjudgment of deferred memory); the prepended-rewriter census expanded (`suppress-settled`, `strip-instructions`, moa sanitizer) and named in the composition pin.

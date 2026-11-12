@@ -1,7 +1,7 @@
 # Per-step Input Ledger
 
 - Date: 2026-11-12
-- Status: Design — r2 (three-seat blind review r1 folded; verdict was NO-GO/GWC; find-by-find address below)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 3 of 8)
 - Depends on: nothing (substrate). Docs 1 and 7 define *their* row payload shapes here by reference (single schema source, per review finding).
 - Literature basis: Four-condition evidence-utilization protocol; interaction-budget auditing of context compression (arxiv 2608.16370); "Context Is a Pipeline" (2610.36114).
@@ -35,7 +35,7 @@ Non-goals:
 - `agent/pre-step` payload carries `{ agent, messages, turn, step, signal }` (`core/agent/src/runtime-types.ts:350` in the pinned harness copy): both `turn` and the per-request `step` are available for attribution without inventing a parallel counter.
 - `sidecar-io` provides `appendJsonl` (tail-repair, best-effort, currently swallows write errors — `observability/sidecar-io/src/index.ts:71-97`) and `encodeSegment` (`:136`, handles `.`/`..`/surrogates). The earlier draft cited a harness-only path for encodeSegment; corrected.
 - `cwdProjectKey(agent)` in `@dsh-cc/handoff-store` is the projectKey convention; absent → row skipped.
-- Both `agent.cordis.yml:11` and `agent.vwa.cordis.yml:12` include `agent.shared.cordis.yml` (verified), so a preset-mounted `{global:true}` listener would double-register in a process running both presets → singleton guard required (Observer §Mounting).
+- Both `agent.cordis.yml:12` and `agent.vwa.cordis.yml:12` include `agent.shared.cordis.yml` (verified), so a preset-mounted `{global:true}` listener would double-register in a process running both presets → the reference-counted mount guard below.
 - `cache-health` already operates a 2000-row trim precedent for sidecar ledgers (`cache-health/src/ledger.ts:14`).
 
 ## Design
@@ -65,13 +65,13 @@ type RequestRow   = BaseRow & { type: 'request'; seqPerGen: number;
     toolResults: { count: number; bytes: number }; assistantBytes: number } }
 type GovernorRow  = BaseRow & { type: 'governor'; mode: 'observe' | 'enforce';
   bytesByClass: Record<string, number>;
-  trimmed: Array<{ kind: string; bytes: number; action: 'defer' | 'drop-expired' | 'drop-hard' | 'drop-cap-memory' }>;
+  trimmed: Array<{ kind: string; bytes: number; action: 'defer' | 'drop-expired' | 'drop-oversize' }>;
   offeredBacklog: number; hardOver: boolean; error?: true }
 type DedupeRow    = BaseRow & { type: 'dedupe'; applied: boolean; kind: string; hash12: string; suppressedWithin: number }
 type CapRow       = BaseRow & { type: 'cap'; applied: boolean; kind: string; runningCount: number; suppressedTotal: number }
 ```
 
-Units are **UTF-8 bytes everywhere** (r1 fold: no chars/bytes mix). `bySourceKind` key = `message.source?.kind` with `'user'` fallback. `runningCount` in `CapRow` exists so observe mode can answer distributional flip questions. All row types have `applied`/`mode` semantics defined by their producer docs (1, 7), counting on readers filtering unknown types.
+Units are **UTF-8 bytes everywhere** (r1 fold: no chars/bytes mix). `bySourceKind` key = `message.source?.kind` with `'user'` fallback. `runningCount` in `CapRow` exists so observe mode can answer distributional flip questions. Governor trim actions are exactly the three the governor's algorithm can take in doc 1: `defer` (moved to backlog), `drop-expired` (TTL), `drop-oversize` (alone exceeds its own class budget — evaluated at trim time, never enqueued). Observe mode represents its decisions with the same `trimmed` array under `mode: 'observe'` (`wouldTrim` is not a separate field — grok/codex delta fold). All row types have `applied`/`mode` semantics defined by their producer docs (1, 7), counting on readers filtering unknown types.
 
 ### Observer A — assembly observations (`system-prompt/assemble`)
 
@@ -114,9 +114,15 @@ getLedgerHealth(): { droppedRows: number }
 
 Pure functions; no cordis context required (docs 5/8 use these offline).
 
-### Mounting singleton
+### Mounting singleton (reference-counted, root-owned)
 
-Module-level `WeakSet<object>` keyed by root context: if this root already mounted the listeners, `apply` returns early (r1 fold: cc+vwa shared body must not double-emit rows for one scope).
+Cordis automatically unregisters a preset's listeners when that preset unloads (`vendor/cordis/src/events.ts:264-269` in the pinned harness copy) — so a naive `WeakSet<rootCtx>` guard would permanently suppress observation after the *owning* preset unloads while another preset remains mounted (codex delta MAJOR). The contract is therefore:
+
+- Listeners are registered **on the root context** (not the preset scope), at first mount, with a module-level `Map<rootCtx, { listenerCount: number; refs: number }>`.
+- Each preset mount increments `refs`; each unmount decrements. Listener disposal happens only when `refs → 0` (never tied to any single preset's unload). Idempotence: a second mount of the same preset body on the same root is a refs-only no-op (cc+vwa double-include covered).
+- Test: mount cc, mount vwa, unmount cc → listeners still fire; unmount vwa → listeners disposed.
+- The waterfall return type of the assemble path is `PromptPresentation` (`{ sections, contexts, variables }` — `core/system-prompt/src/index.ts:677-687` in the pinned harness copy): Observer A intentionally records `sections` only; `contexts`/`variables` are out of v1 scope (grok delta note, stated here so an implementer doesn't "fix" it).
+- The pre-step payload line is `{ agent, messages, turn, step, signal, modelSelection }` (`runtime-types.ts:350`); `modelSelection` is unused by the ledger (shape is not exhaustive — stale four-field subset quotations describe consumers, not the type).
 
 ### Settings — `cc-input-ledger` (kebab, user-layer, hot-read per event)
 
@@ -159,3 +165,7 @@ Package skeleton + README pair; preset row; composition.spec snapshot; capabilit
 ## R1 fold ledger (three seats: internal critic, grok, codex)
 
 Folded: system-from-messages (BLOCKER-equivalent); assemble-observation caveat + scope key; encodeSegment anchor; `onError` sink outcome; single-schema union incl. governor/dedupe/cap rows; turn/step from payload + gen; open purpose map; row rotation; byte units + `nonTextBlocks`; cc+vwa singleton; privacy boundary section; settings authority/bounds/hot semantics; stale `llm/stream` contract lines corrected.
+
+## R2 → R3 delta fold ledger (three seats)
+
+Folded: GovernorRow trim-action union reconciled with doc 1's actual algorithm (`defer`/`drop-expired`/`drop-oversize`; unreachable `drop-hard`/`drop-cap-memory` removed); observe mode maps its decisions onto the same `trimmed` field under `mode: 'observe'`; singleton replaced by a **reference-counted, root-owned** mount with load/unload lifetime tests (cordis unloads listeners with the owning preset — a plain WeakSet would orphan the observation); `agent.cordis.yml:12` include anchor corrected; `PromptPresentation` contexts/variables excluded-by-decision stated; pre-step payload shape corrected to include `modelSelection`.

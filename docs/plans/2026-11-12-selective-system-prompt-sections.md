@@ -1,7 +1,7 @@
 # Selective System-Prompt Sections
 
 - Date: 2026-11-12
-- Status: Design — r2 (critic + codex r1 findings folded; grok r1 pending)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 4 of 8)
 - Depends on: nothing hard; doc 3's `AssembleRow.sections[].bytes` is the distribution instrument that tunes the defaults.
 - Literature basis: PAACE (plan-aware context slicing); Less Context (token ↓~63%).
@@ -32,8 +32,8 @@ Non-goals:
 - Memory section render layout (`section.ts:324-354`): header → per-layer `MEMORY.md` fragments → combined index → "Searching past context" guidance block.
 - Combined index ordering is **alphabetical by filename** (`memory/src/scan.ts:82`, `section.ts:363`); MEMORY.md pointers append on write (`memory/src/save.ts:83-96`). No recency ordering exists anywhere in the render path.
 - Catalog ordering is `localeCompare` over `agentType` (`catalog.ts:151,233`) — alphabetical, not relevance-ranked.
-- `MemorySection.render` runs over cached scan state (`section.ts:184-197`) and is re-entered by the 500 ms refresh (`:140-145`) and `system-prompt/change` re-renders (`:191-197`, `:238`) — all paths route through the same render function.
-- `renderCatalog(defs)` is pure (`catalog.ts:285-295`).
+- `MemorySection.render` runs over cached scan state (`section.ts:184-197`) and is re-entered by the first-assembly readiness refresh (one-shot `withinBudget(..., READINESS_BUDGET_MS = 500)`, `section.ts:38,140-145` — **not** a periodic refresh; delta-round wording correction) and by `system-prompt/change` re-renders (`:191-197`, `:238`) — all paths route through the same render function.
+- `renderCatalog(defs)` is pure (`catalog.ts:285-295`); its two call sites (`catalog.ts:234`, `:253-254`) currently pass `renderCatalog(merged)` — the change threads the resolved settings object explicitly through both call sites (purity preserved; delta-round fold — critic noted the threading was only described for the memory section).
 
 ## Measurement and unit contract (folded from codex + grok)
 
@@ -69,9 +69,9 @@ New namespace `cc-subagent-catalog`:
 |---|---|---|---|
 | `truncate` | bool | true | explicit on/off |
 | `max-bytes` | int | 8192 (**provisional**) | 1024..65536 |
-| `min-entry-chars` | int | 40 | 20..400 |
+| `min-entry-bytes` | int | 40 | 20..400 |
 
-`renderCatalog(defs, settings)` stays pure (byte-measured via `Buffer.byteLength`):
+`renderCatalog(defs, settings)` stays pure, all cutting byte-measured (`Buffer.byteLength` — grok delta fold: a char-sliced `whenToUse` over a byte budget overflows on CJK content; the knob is renamed accordingly):
 
 1. Reserve header + trailer + ellipsis line.
 2. First pass: keep every `agentType` name; per-entry `whenToUse` truncates to a slice of `max(min-entry-chars, floor((budget - reserved) / N))`.
@@ -85,7 +85,7 @@ No preset row changes; two new settings namespaces via `registerNamespaceSafe`; 
 ## Verification
 
 - Unit (memory render): index-block-only capping (fragments and guidance byte-identical); whole-entry truncation with correct N; floor case (one oversized entry → header + search block + ellipsis, no entries); `truncate: false` → index uncapped; hot settings getter.
-- Unit (catalog): name preservation down to the names-only collapse; oversized-names overflow form (`… (N more agents omitted …)` present, names dropped only with the documented line); property test `bytes ≤ max-bytes` for all non-floor cases over random defs.
+- Unit (catalog): name preservation down to the names-only collapse; byte-accurate entry slicing (CJK `whenToUse` does not overflow `max-bytes`; `min-entry-bytes` knob); oversized-names overflow form (`… (N more agents omitted …)` present, names dropped only with the documented line); property test `bytes ≤ max-bytes` for all non-floor cases over random defs.
 - Integration (real preset assemble): caps respected on first render, after the 500 ms refresh, and after `system-prompt/change` re-render.
 - Acceptance: integration asserts UTF-8 byte sizes of the index block and catalog render ≤ `max-bytes` (non-floor); ledger (doc 3) reports section-byte distributions for the provisional-default re-tuning after one release of data.
 
@@ -97,3 +97,5 @@ No preset row changes; two new settings namespaces via `registerNamespaceSafe`; 
 ## Fold ledger
 
 r1 → r2 (critic + codex + grok, NO-GO → folded): false "newest-first" rationale removed (alphabetical order anchors: `scan.ts:82`, `save.ts:83-96`); whole-section cap redesigned to **cap the uncapped blocks only** — combined index + catalog (per-layer fragments already capped by `truncateEntrypointContent`, `truncate.ts:13-17`; grok's BLOCKER); whole-section truncation eating guidance/fragments resolved (index-block-level cap; grok BLOCKER); hard-cap-vs-preservation impossibility resolved by documented overflow forms (floor rules; codex BLOCKER + grok names-overflow MAJOR); recency/relevance claims removed everywhere (alphabetical, honest); units aligned to UTF-8 bytes (`truncate.ts:53` precedent; drops the text.length contract); explicit `truncate` on/off (grok: `enabled:false` must mean render-uncapped, never section removal); render-purity/settings threading across all three entry points; search-guidance block always preserved unmodified; 8192 defaults provisional.
+
+r2 → r3 delta (three seats; net result after folds: GO-class): catalog entry slicing moved fully to bytes (`min-entry-chars` → `min-entry-bytes`; CJK overflow hole — grok); "500 ms refresh" reworded to the one-shot first-assembly readiness budget it actually is; catalog settings threading stated explicitly for both `renderCatalog` call sites (`catalog.ts:234`, `:253-254` — critic).

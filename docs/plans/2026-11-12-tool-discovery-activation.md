@@ -1,7 +1,7 @@
 # Tool Discovery Activation (extend existing eval → flip)
 
 - Date: 2026-11-12
-- Status: Design — r2 (critic + grok + codex r1 findings folded; all three GWC-class; major correction: an existing eval runner must be extended, not forked)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 6 of 8)
 - Depends on: nothing hard; doc 3's ledger (`toolsCount/toolsBytes` rows) is the post-flip monitoring instrument.
 - Literature basis: ToolMenuBench (CMTF 32.1% → 85.7% success); Signals and Queries (cheap classifier pre-filter).
@@ -30,19 +30,24 @@ Non-goals:
 ### Corpus (extend, don't fork)
 
 - Keep `tests/fixtures/discovery-corpus.json`. Add top-level `corpusVersion` (integer; every report pins it; gate re-runs required on bump).
-- Add 10-20 entries to reach ≥ 12 per class with explicit `class` labels: (a) direct-fit, (b) lexical-overlap/wrong-server traps, (c) multi-intent (respects `maxActivations: 3`), (d) **negative-only** (zero acceptable activations; `expectedNames: []`), (e) metadata keyword-stuffing. Class labels are new schema fields (needed for class-level gates — codex fold).
+- Grow from 20 cases to **≥ 60 total** across five labeled classes — (a) direct-fit, (b) lexical-overlap/wrong-server traps, (c) multi-intent, (d) negative-only (`expectedNames: []`), (e) metadata keyword-stuffing — targeting ≥ 12 per class, or declaring intentional multi-label membership where a case carries more than one class (delta-round fold: `5 × 12` cannot fit an exclusive split of 20+10-20 entries).
+- One table extends the schema and resolves the dual taxonomy (existing `subset: chinese|synonym|none|restricted` vs new `class` labels): `class` is the gating dimension; `subset` stays as a legacy filter; the existing `selfcheck` floors keep working (class-(d) rows must also be `subset: none` or a dedicated `class-d` subset — grok fold that existing selfcheck would otherwise reject them). Codex's corollary: class (d) is excluded from per-class F1 requirements and gets its own gates (scoring section).
 
 ### Runner (extend `scripts/eval-discovery.mjs`)
 
-- `node scripts/eval-discovery.mjs --mode stub` (existing behavior; frozen-seed stub judge — this is the **CI-safe gate arm**).
-- `node scripts/eval-discovery.mjs --mode live` (new): drives the **production discovery runtime** in-process with an instrumented judge adapter over the developer's configured decision lane — not just the `buildQuestions` helpers. The runner must exercise: multi-batch sequences sharing one deadline, incomplete judgments (→ `incomplete`), over-cap candidate pools, `unavailable`, cancellation, and `exact` short-circuit (`discovery-runtime.ts:468-476`). Fallback anchor set corrected: `:448-451` (shadow returns lexical) and `:456-489`; **timeout folds into `incomplete`** (grok fold: there is no `timeout` reason), and reports must map accordingly.
-- Package script `eval:discovery` is added to `packages/core/tool-search/package.json` pointing at the node script (r1's `pnpm --filter … eval:discovery` referenced a script that doesn't exist yet — folded).
+The existing runner has two modes — `replay` and `selfcheck` (`eval-discovery.mjs:97-100`) — and `replay` is an **oracle**: its `answersFor` returns max relevance iff the name ∈ `expectedNames` (`:260-273`), so an F1 gate over `replay` is tautological (~1.0 by construction — grok's delta BLOCKER). The arm layout is therefore:
+
+- `--mode replay` / `--mode selfcheck` (existing, unchanged): schema/oracle integrity pins, kept forever; never gated on F1.
+- `--mode judge-stub` (new): a **deterministic, non-oracle stub judge** (frozen keyword/rule scorer over candidate metadata; deliberately imperfect so the F1 line is meaningful). This is the **CI-safe F1 gate arm**.
+- `--mode live` (new): drives the **production discovery runtime** in-process with an instrumented judge adapter over the developer's configured decision lane — exercising multi-batch sequences sharing one deadline, over-cap candidate pools, `unavailable`, cancellation, and `exact` short-circuit (`discovery-runtime.ts:468-476`). Fallback mapping corrected (codex + grok delta): **runner timeout → `unavailable`**; only shared-deadline exhaustion or unusable answers map to `incomplete` (`discovery-runtime.ts:318-346`; existing test contract `tests/discovery-runtime.spec.ts:124-130`). Reports map accordingly.
+- Package script `eval:discovery` is added to `packages/core/tool-search/package.json` pointing at the node script (r1 referenced a script that didn't exist yet — folded).
 
 ### Scoring (pre-registered, no post-hoc)
 
 - Gold labels apply at the **(query, candidate)** pair level; judge output is the **production activation set after `selectNames`** — never the raw question answers and never the `exact`-short-circuit path (excluded from judge-quality scoring; grok + codex convergent).
-- Primary metric: micro-F1 over (query, candidate) labels. Secondary diagnostics: per-item exact-set accuracy; per-class breakdowns.
-- Class (d) has no positives → F1 undefined there (codex): (d) is gated on **false-activation rate** (`|activated| / |catalog candidates| ≤ 0.10`) and exact-set accuracy = 1.0; excluded from F1 denominators by declared zero-denominator semantics.
+- Primary metric: micro-F1 over (query, candidate) labels **restricted to admitted candidates** (critic delta fold: `admitted:false` candidates are excluded from the pool by the permission gate, so every such pair is an automatic true negative padding micro-F1). Report both restricted and unrestricted numbers; only the restricted line is gated.
+- Secondary diagnostics: per-item exact-set accuracy; per-class breakdowns.
+- Class (d) has no positives → F1 undefined there (codex): (d) is gated on **false-activation rate** (`|activated| / |catalog candidates| ≤ 0.10`) and exact-set accuracy = 1.0, and is explicitly **exempt** from the universal per-class F1 floor (zero-denominator semantics; the :55 per-class floor applies to classes with positives only — codex delta fold).
 - Latency: report p50/p90/**max** (p95 on ~50 items is the ~3rd-largest sample — report the small-sample caveat in the gate file; critic fold).
 - Cost: report candidates judged, batch calls, cache hits/misses, and measured judge input/output tokens. Shadow cost is bounded by `maxCandidates`/`batchSize`/cache TTL — **not** by `maxActivations` (that only caps the published name list; grok + codex).
 
@@ -54,7 +59,7 @@ Pre-shadow prerequisites:
 
 1. Stub-mode gate green: micro-F1 ≥ 0.85 aggregate and ≥ 0.80 per labeled class with ≥ 12 items/class (frozen seed, deterministic — **not** subject to judge variance).
 2. Live-mode snapshot green: over the real lane, majority-of-3 runs per item (critic variance fold), same thresholds; reported separately from the stub gate (grok: no "3/3 live lottery" — the stub run is the gate; the live numbers are evidence).
-3. **Shadow-audit telemetry exists**: discovery runtime intentionally retains no queries/candidate names/answers (`discovery-runtime.ts:108-109,361-370`). Before the shadow window, a dev-only sampling sidecar flag lands (query hash8, candidate public names, outcome class, latency — no raw query text), so the manual audit has something to label. This is a small additive change in the same PR.
+3. **Shadow-audit telemetry exists**: discovery runtime intentionally retains no queries/candidate names/answers (`discovery-runtime.ts:108-109,361-370`). Before the shadow window, a dev-only sampling sidecar flag lands, recording per decision: `queryHash8`, the **suggested set** (names the judge would activate) and the **lexical set** (names plain ToolSearch would surface), outcome class, latency, and a **session/event locator** (sessionId + request seq) so the auditor can locally recover the query text and catalog context from the session log (codex delta fold: hash-only fields make disagreements unlabelable). No raw query text in the sidecar itself. Small additive change in the same PR.
 
 `shadow → active` (the later flip PR):
 
@@ -68,8 +73,8 @@ Eval may surface prompt/batching bugs (recall program precedent). Fixes land as 
 
 ## Verification
 
-- Unit: metric math over synthetic judge outputs; zero-denominator semantics (class d); held-out split determinism; fallback-reason mapping (timeout → `incomplete`).
-- Integration: `--mode stub` in CI as the gate arm; `--mode live` exercised with a scripted fake lane adapter (deterministic, CI-safe).
+- Unit: metric math over synthetic judge outputs (restricted vs unrestricted micro-F1); zero-denominator semantics (class d exempt from per-class F1 but gated on its own lines); held-out split determinism; fallback-reason mapping (runner timeout → `unavailable`; shared-deadline exhaustion → `incomplete`).
+- Integration: `--mode replay`/`selfcheck` kept as pins; `--mode judge-stub` in CI as the F1 gate arm (deterministic, non-oracle); `--mode live` exercised with a scripted fake lane adapter (deterministic, CI-safe).
 - Flip-surface audit (four surfaces) only in the later mode-flip PR; this PR changes no production default.
 
 ## Risks
@@ -81,3 +86,5 @@ Eval may surface prompt/batching bugs (recall program precedent). Fixes land as 
 ## Fold ledger
 
 r1 → r2 (critic + grok + codex, GWC → folded): replaced "invent a parallel YAML corpus" with **extend the existing `eval-discovery.mjs` + `discovery-corpus.json`** (grok's major correction — the runner exists); scoring pre-registered as micro-F1 over (query, candidate) after `selectNames`, `exact` path excluded; class labels added; negative-only class gated on false-activation rate with declared zero-denominator semantics; variance policy (stub = CI gate, live = majority-of-3 evidence); production-runtime driving incl. multi-batch/deadline/cancel/over-cap; shadow operational effects documented (await latency, cancellation-without-lexical); shadow-audit telemetry prerequisite (runtime retains no queries today); Wilson-LCB flip audit; cost bound corrected to candidates/batches/cache (not `maxActivations`); fallback anchors corrected (`:448-451`, `:456-489`; timeout ↦ `incomplete`); package script registered properly.
+
+r2 → r3 delta (three seats): runner arm layout re-anchored to the real modes — existing `replay` is an oracle (F1 gate there would be tautological; grok BLOCKER), kept as schema pins, with a new deterministic non-oracle `judge-stub` arm as the CI gate and `live` as evidence; class-(d) F1 contradiction resolved (exempt from the universal per-class floor, gated on its own false-activation/exact-set lines); micro-F1 restricted to admitted candidates (auto-TN padding); shadow-audit telemetry enriched to suggested+lexical sets + session/event locator (hash-only fields are unlabelable); fallback mapping corrected to production (runner timeout → `unavailable`, shared-deadline exhaustion → `incomplete`); corpus target ≥ 60 with subset↔class coexistence table.

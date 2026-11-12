@@ -1,7 +1,7 @@
 # CCR Graduation Evidence Framework
 
 - Date: 2026-11-12
-- Status: Design — r2 (critic + codex r1 findings folded; grok r1 pending)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 5 of 8)
 - Depends on: doc 3 (ledger — production-side monitoring). Fixture replay is offline.
 - Literature basis: Referential Dangling (2608.04569); Later Questions (2610.27301); What Does Context Compression Cost (2608.16370 — completion-only evaluation masks re-acquisition); Paritok-4B (~96% identifier presence for coding agents); AGORA (granularity must match action grammar).
@@ -44,16 +44,22 @@ New `packages/evaluation/context-eval` (`@dsh-cc/context-eval`), dev-time only (
 In `packages/context/context-crusher`, extract the acceptance predicate chain into an exported pure function:
 
 ```ts
-decideCrush(content: ContentBlock, cfg: ResolvedCrusherConfig, estimate: (content) => number): CrushDecision
+decideCrush(
+  input: { blocks: readonly ContentBlock[]; isError: boolean; toolName: string },
+  cfg: ResolvedCrusherConfig,
+  estimate: (content) => number,
+): CrushDecision
 ```
 
-with the token estimator injected (production passes `tokenMeter.estimateMessage`; the eval passes the same production estimator — never a `text.length` proxy). Both the production listener and the eval call `decideCrush`; drift-free by construction. This is the only production-code change this doc requires, shipped in the same PR with unit tests pinning evaluation-vs-production predicate identity (mutation test: change the predicate, eval must red).
+The decision input carries everything the production predicate chain reads — result-level `isError` (including the isError 2×minBytes rule), `toolName` (protected-tools and `context_retrieve` skips), and the content-block array (multi-block join and shape checks), because none of these are recoverable from a bare `ContentBlock` alone (delta-round fold, all three seats — r2's `(content, cfg, estimate)` signature could not express the chain it claimed to extract). Only these checks live inside `decideCrush`: eligibility (enabled/store/protected/retrieve, isError handling, block shape, minBytes via `estimate`), savings ratio, and defer/projectKey routing. Intentionally **outside** the pure function (documented): the caller-side `PostToolDecision` value/content discrimination and ledger writes.
+
+Production passes `tokenMeter.estimateMessage`; the eval passes the same production estimator — never a `text.length` proxy. Both the listener and the eval call `decideCrush`; drift-free by construction. This is the only production-code change this doc requires, shipped with unit tests pinning evaluation-vs-production predicate identity (mutation pin).
 
 ### Corpus + structure-preserving sanitization
 
 `fixtures/sessions/*.sanitized.jsonl` — 4-8 sessions (30-300 steps) from dsh-cc dogfood containing heavy tool output. `corpus.json` carries `corpusVersion`, per-fixture provenance.
 
-A new sanitizer is specified (the token-efficiency redactor is explicitly **not** used): preserve — event order, `tool-call` arguments, tool-result text, assistant text, surfaceOp/rewrite metadata, seqs; redact only — credential-shaped strings (existing `sk-…`/`Bearer`/long-token regex classes from `cache-health/tracker.ts` `excerpt`) and absolute local paths (mapped to stable `/WORKSPACE/…` forms). Every fixture is committed only after a human reviews the sanitization diff.
+A new sanitizer is specified (the token-efficiency redactor is explicitly **not** used): preserve — event order, `tool-call` arguments, tool-result text, assistant text, surfaceOp/rewrite metadata, seqs; redact only — credential-shaped strings from **exactly two** classes: `sk-…`-style keys and `Bearer …` tokens. The third cache-health excerpt class (`[A-Za-z0-9+/=_-]{32,}`) is **excluded** — it eats git SHAs and sha256 digests, which would make the `hex_digests` retention metric tautologically pass in both the original and the stub (delta-round BLOCKER from grok). Absolute local paths map to stable `/WORKSPACE/…` forms. Every fixture is committed only after a human reviews the sanitization diff.
 
 ### Deterministic replay (two paths), with a config matrix
 
@@ -67,7 +73,13 @@ For each fixture: parse events; reconstruct tool results per step; for each resu
 
 ### Metrics
 
-**M1 — stub-side evidence retention (the gate).** Identifier classes via grammars reused from production rather than fresh regexes: file paths per the crusher's own `SEARCH_ROW` path grammar (`reducer/router.ts:33` — my earlier hand-rolled path regex required a leading `/` and missed relative paths); hex digests ≥7; URLs; backticked tokens ≥8 chars. For each crushed span: retention = |identifiers in stub| ⁄ |identifiers in original|. Report stub-retention and store-recovery **in separate columns** (grok fold: never blended).
+**M1 — stub-side evidence retention (the gate).** Identifier classes and their grammars, per usage site (delta-round fold — single-grammar-over-everything was wrong twice over):
+
+- **grep/search rows** (stub-side extraction): capture group 1 of the production `SEARCH_ROW` (`packages/context/context-crusher/src/router.ts:33`, pattern `^(\.{0,2}\/?[\w.@\/-]+?):(\d+):(.*)$` — the `reducer/router.ts` path cited earlier does not exist; that anchor is corrected here).
+- **log-kind spans** (stub-side): the standalone path grammar below.
+- **Free-text mentions** (M2/M3 downstream reference detection in assistant text and tool arguments): a separate mention grammar — `/[\w\-./]+\.[a-z0-9]{1,6}\b` with the leading-`/` requirement dropped and Windows/relative forms admitted, plus canonicalization to the same path form (strip query/fragment, normalize separators and `./` prefixes). `SEARCH_ROW` itself only matches `path:line:content` rows and would undercount free-text mentions to near zero (codex + grok, convergent).
+
+Additional classes: hex digests ≥7; URLs; backticked tokens ≥8 chars. For each crushed span: retention = |identifiers in stub| ⁄ |identifiers in original|, reported per class; stub vs store in **separate columns**.
 
 **M2 — downstream-reference survival (stub-side gate).** Identifiers in a crushed span referenced by later assistant text or tool arguments within 10 steps: strict stub retention rate (classes (a),(b) only).
 
@@ -97,9 +109,12 @@ m3:  { exposureRateMax: 0.05 }                                              # fi
 2. Two consecutive weeks of dry-run production measurement (doc 3 ledger): crushed-intent coverage + tool-result byte distribution.
 3. ≥ 1 week live dogfood with `mode: 'on'` + ledger-monitored retrieval-call rates.
 
-### Mutation test (corrected)
+### Mutation test (corrected, delta round)
 
-Keep the fixture's **original span and downstream gold references fixed**; mutate the *treatment stub* or the *simulated recovery result* (delete an identifier from the stub / expire the store entry). The gate must flag M2/M3. (r1's form mutated the original span, which could delete evidence from the metric denominator itself — codex fold.)
+One mutation per metric family, each with **only the expected arm affected** (codex delta fold — the earlier form let a recovery-only mutation fail unrelated stub-side gates):
+
+1. **Stub mutation (gate must fail)**: keep the fixture's original span and downstream gold references fixed; delete a threshold-relevant identifier from the *treatment stub* (crossing a registered threshold, e.g. drop one path that pushes class (a) below 0.99) → the gate must flag M1/M2.
+2. **Recovery-arm mutation (only M2r moves)**: expire the store entry (TTL/LRU simulation) → M2r degrades; M1/M2/M3 are unchanged.
 
 ### Corpus lineage
 
@@ -120,3 +135,5 @@ Keep the fixture's **original span and downstream gold references fixed**; mutat
 ## Fold ledger
 
 r1 → r2 (critic + codex + grok, NO-GO → folded): sanitizer replaced by a structure-preserving spec (token-efficiency redactor destroys eval inputs: `redactor.ts:67-76,117-136,160-163`); gate narrows to **stub-side retention** with recovery as a separate TTL/LRU-modeled report-only arm (grok's sim-blend BLOCKER); M3 renamed to exposure with treatment-only definition (identical-zero delta); `decideCrush(content, cfg, estimate)` extraction threads the production token estimator (acceptance compares tokens, not bytes — `index.ts:206-208,305-309`); fixture config matrix pins defer-swap coverage (`deferRequests` default is 0, `config.ts:50`); path identifiers reuse the production `SEARCH_ROW` grammar (`router.ts:33`; my leading-`/` regex missed relative paths); stub-vs-store columns separated; gate statistics section (min denominators, aggregation, insufficient-data, empirical-not-confidence semantics); mutation test corrected (mutate treatment, not the gold span); reducer path out of scope with recorded-response replay only; corpusVersion lineage.
+
+r2 → r3 delta (three seats): `decideCrush` inputs enlarged to `{blocks, isError, toolName}` (the chain reads result-level metadata a bare block cannot carry — all three seats) with inside/outside splits declared; sanitizer's 32+ catch-all removed (it would eat SHAs and make `hex_digests` vacuous — grok BLOCKER); identifier grammar triangulated (SEARCH_ROW capture-1 for grep-row stubs, standalone path grammar for log-kind spans, free-text mention grammar for M2/M3 — single-grammar was wrong in both directions); mutation test now arms-matched (stub mutation fails the gate; recovery expiry moves only M2r).

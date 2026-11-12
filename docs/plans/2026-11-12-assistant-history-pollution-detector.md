@@ -1,7 +1,7 @@
 # Assistant-History Pollution Detector (offline v1)
 
 - Date: 2026-11-12
-- Status: Design — r2 (critic GO-with-minors + grok NO-GO + codex GWC folded; the two hard corrections were surface-reconstruction semantics and the failure-outcome vocabulary)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 8 of 8)
 - Depends on: doc 3 (ledger — optional input; the detector's primary source is raw session logs).
 - Literature basis: AC3 (2611.00518); Speech-LLM History Interference (2611.05124); Silent Failures (2606.14589).
@@ -35,11 +35,19 @@ Non-goals:
 
 ### Home & CLI
 
-Second CLI inside `@dsh-cc/context-eval` (doc 5's package): `pnpm eval:history-pollution -- <sessionDir | glob>`. Reads via the forensics scanner; the analysis core is pure and unit-testable.
+Second CLI inside `@dsh-cc/context-eval` (doc 5's package): `pnpm eval:history-pollution -- <sessionDir | glob>`.
 
-### Effective-view reconstruction (per session, sequential replay)
+**Ingestion (delta-round correction, all three seats).** The session-forensics package is reused **only for file discovery and decompression** (v4-first location of `<DSH_HOME>/sessions/<projectKey>/<sessionId>/session.v4.jsonl.zstd`, v3/legacy fallback — `session-forensics/src/scan.ts:278-295`). Its `parseStream`/`scanSessions` output is **unsuitable** as the event source: they emit ToolRecords only, with no assistant text, no `seq`/`surfaceOp`, and result text head-truncated at 4096 chars (`scan.ts:38,70-81,207-220`). The detector therefore ships its own **raw v3/v4 event iterator** over the decompressed JSONL, preserving every event with seq, full text, assistant messages, and surface operations. The analysis core stays pure and unit-testable.
 
-Linear scan over events, applying `surfaceOp` rules: on `{ op:'replace', startSeq, endSeq }` — the replacement event enters the view; all seqs in `[startSeq, endSeq]` are marked shadowed and excluded from evidence and claims produced *after* the replace (claims produced *before* the replace are still analyzed against the pre-replace view, keyed by seq). Abstain (record `inconsistent`, skip) when a replace's range references unseen seqs (truncated logs). This is deliberately not `buildExtractionWindow` — it keeps the replacement, which is what the model actually saw, and drops the shadow.
+### Effective-view reconstruction (per session, canonical fold)
+
+Linear replay over raw events, applying `surfaceOp` semantics **positionally, via the actual shadowed set** — not arithmetic seq intervals (codex delta MAJOR: an append's `sourceEventSeqs` is the real shadow set — `core/session/src/surface.ts:419-433,570` in the pinned harness copy — and chained replaces nest fine under this rule):
+
+- On a surface event with `{ op:'replace', ... }`: the replacement enters the effective view; every seq in its `sourceEventSeqs` (falling back to the `[startSeq, endSeq]` interval when the list is absent) is marked shadowed.
+- Claims and evidence produced *after* the replace are analyzed against the post-replace view; those produced *before* keep the pre-replace view (keyed by seq).
+- Abstain (`inconsistent`) when a replace's range/lists reference unseen seqs (truncated logs).
+
+This deliberately differs from `buildExtractionWindow`: it keeps replacements — the content the model actually saw — and drops the shadow (grok's r1 BLOCKER resolution, retained).
 
 ### Normalized event schema (parsing contract; codex MAJOR fold)
 
@@ -54,7 +62,9 @@ outcome = { status:'success'|'failure'|'cancelled'|'unknown',
             markers: string[] }        // parsed from the tail-marker family
 ```
 
-Linkages: tool-call ↔ result by `callId` (missing pairs ⇒ `unknown`); `turn` from event data where present; duplicate incidents suppressed on (rule, assertSeq, evidenceSeq) equality — overlapping rules fire separately and are counted with an overlap total in the report. Companion fixtures cover rendered failures, cancellations, rewritten (shadowed) evidence, and overlapped claims.
+Marker → status mapping (explicit, from `progress-rebuild/src/state.ts:76-84`; delta-round fold — it was unspecified): `[exit code: N≠0]` → `failure`; `[killed by signal: …]` → `failure`; `[timed out after …]` → `failure`; `[stopped: …]` → `cancelled`; `[still running after …]` → `unknown`; sandbox denial lines → `failure`; exit-0 renders no marker → `success`.
+
+Linkages: tool-call ↔ result by `callId` (missing pairs ⇒ `unknown`); `turn` from event data where present — **events without a usable `turn` are excluded from turn-clocked rules** (grok delta fold: it was unspecified); duplicate incidents suppressed on (rule, assertSeq, evidenceSeq) equality — overlapping rules fire separately and are counted with an overlap total in the report. Companion fixtures cover rendered failures, cancellations, rewritten (shadowed) evidence, and overlapped claims.
 
 ### Detector rules (v1, precision-first; all clocks in **turns** — r1 mixed turns/steps, folded)
 
@@ -62,9 +72,9 @@ Claim-pattern table (EN past/perfective only: "tests (all )?pass", "all green", 
 
 Subject extraction (data-driven, same yaml): path tokens (`/[\w\-./]+\.[a-z0-9]{1,6}/i`, length ≥ 4), or command-head tokens (first non-env-assignment token, length ≥ 3, after canonicalization: strip env assignments and collapse flag blocks). Authoritative command canonicalization strips `FOO=bar` prefixes and folds common flag synonyms. (r1's "token overlap ≥ 1" was too loose; grok + codex fold.)
 
-- **R1 assert-then-fail** — claim at turn T matches the table; a bash result with `outcome.status === 'failure'` arrives at turn ≤ T+3 with subject overlap (path token or canonical command-head). **Linkage is by command target/execution context, not just command head** (codex fold).
+- **R1 assert-then-fail** — claim at turn T matches the table; a bash result with `outcome.status === 'failure'` arrives at turn ≤ T+3 with subject overlap. **Linkage requires a shared subject path or file-operand token** (a path token or a file operand of the canonical command in both the claim and the failure); **bare command-head equality alone is insufficient** (delta-round fold from both external seats: `pnpm test` vs `vitest` false-linkages, and "I fixed the import" vs an unrelated later failure). When only heads match, the pair is `inconclusive`, not an incident. (The r2 phrase "by command target/execution context" is hereby made concrete.)
 - **R1 splits by staleness** (codex fold): if the subject's path(s) had an intervening mutation (edit/write/str-replace tool-call, or a bash redirect touching them) between the claim and the failure, the incident is classified `staled` (checked-in regression — reported separately, informational) rather than `contradicted` (a false-at-assert-time claim — the pollution signal).
-- **R2 claim-then-contradicted-observation** — claim asserts content Y in path X ("contains / does not contain"). Evidence qualifies as **authoritative** only when: (a) a successful `read` of X covering the whole file (or a range that includes the claimed location when the claim is localized), or a successful `grep` whose rendered result text is evaluated — a grep listing Y elsewhere in X satisfies "contains Y in X"; (b) within ≤ 2 turns; (c) **no intervening mutation** of X between claim and evidence (else classify `inconclusive`, not an incident). A grep tool result with a no-match outcome counts as evidence against "contains" claims (the sentinel care mirrors R1; grep is excluded from R1 failure evidence).
+- **R2 claim-then-contradicted-observation** — claim asserts content Y in path X ("contains / does not contain"). Evidence qualifies as **authoritative** only when: (a) for a `read`: successful, full-file coverage (or a range including the claimed location when the claim is localized); (b) for a `grep`: successful return with **complete results** for the claimed literal/predicate scoped to X with compatible flags — a no-match result is evidence only if the search provably covered X exhaustively (all lines of X within the grep docs of this repo: no `head`-truncated output, exit semantics compatible; otherwise `inconclusive`); (c) within ≤ 2 turns; (d) **no intervening mutation** of X between claim and evidence (else `inconclusive`, not an incident). A grep tool result with a no-match outcome counts as evidence against "contains" claims (grep is excluded from R1 failure evidence).
 - **R3 repeated failing command reported green** — canonical command C fails at turns T1 and T3 (T3 > T1 + 1) with an assistant success claim for C's subject between them.
 
 ### Output
@@ -74,7 +84,7 @@ Per session `{sessionId, turns, incidents[], rate}`; incidents carry `rule`, `ki
 ### Dogfood protocol (pre-registered, mutually exclusive outcomes)
 
 1. Run over the maintainer's **30 most recent sessions** (local paths, nothing raw committed).
-2. Audit: label TP/FP on **all** incidents if ≤ 100, else a seeded (commit-hash-seeded) stratified sample of 100 by rule.
+2. Audit: label TP/FP on **all** incidents if ≤ 100, else a seeded **uniform random sample** of 100 incidents (uniform so the pooled Wilson bound in step 3 is valid — codex delta fold: the r2 "stratified sample" broke the confidence calculation unless probabilities were specified).
 3. **Archive criterion (Outcome A)**: overall precision with one-sided 95% **Wilson lower bound ≥ 0.70** AND ≥ 10 TP incidents AND ≥ 0.05 incidents/turn on > 10% of sessions. (r1's bare 0.80 point estimate on 40 items spans ~0.64-0.91 — both seats' statistics fold; also the "or fix FP-dominant rules and archive" escape hatch is deleted: noisy rules are data-changed and re-run, which is Outcome B's path, not archiving.)
 4. Held-out rerun: after any ruleset iteration, the final ruleset runs once against the held-out 10 sessions (split 20/10 up front) — the archived numbers come from the held-out set.
 5. **Outcome B** (failure of any archive leg): the line closes; the committed aggregate reports the negative result; no runtime design may cite Outcome B data. The committed aggregate always reports Wilson CIs, never bare point estimates.
@@ -95,3 +105,5 @@ Per session `{sessionId, turns, incidents[], rate}`; incidents carry `rule`, `ki
 ## Fold ledger
 
 r1 → r2 (critic GO(minors) + grok NO-GO + codex GWC → folded): effective-view apply-replace reconstruction replaces the cited extraction window (grok BLOCKER — the window deliberately never uses replacements as evidence); session path/scanner corrected to `<DSH_HOME>/sessions/<projectKey>/<sessionId>` + forensics scanner; exit-structured `exitCode` deleted — outcome parser over `progress-rebuild/src/state.ts:76-84` tail markers with exit-0-no-marker semantics; one clock (turns); subject/linkage upgraded to path tokens + canonical command-heads with mutation-aware staleness split (`contradicted` vs `staled`) and `inconclusive` class; R2 restricted to authoritative observations with grep-rendered-text semantics; normalized event schema + parsing contract + duplicate/overlap handling; subject extractor and claim patterns moved to data (`rules/pollution-rules.yaml`, `rulesetVersion`); archive criterion rebuilt on one-sided Wilson lower bounds, minimum TP count, seeded sampling, held-out rerun, mutually exclusive outcomes.
+
+r2 → r3 delta (three seats): effective-view replay switched from arithmetic seq intervals to the **canonical shadowed set** (`surfaceOp.sourceEventSeqs`, `surface.ts:419-433,570`; interval only as fallback) — chained replaces now nest correctly; ingestion narrowed to forensics discovery/decompression + a raw v3/v4 event iterator (the scanner's ToolRecords drop assistant text, seqs, surface metadata and truncate bodies — all three seats); explicit marker→status mapping table; turn-less events excluded from turn-clocked rules; R1 linkage hardened (path/file-operand overlap required; bare head equality → `inconclusive`); R2 grep evidence gated on exhaustive-scope complete results; audit sampling made uniform for a valid pooled Wilson bound.

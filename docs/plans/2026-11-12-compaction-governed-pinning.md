@@ -1,7 +1,7 @@
 # Compaction Governed-Message Pinning
 
 - Date: 2026-11-12
-- Status: Design — r2 (three-seat blind review r1 folded; verdict was NO-GO with 4 cross-seat findings on the detection/restore contracts; all folded below)
+- Status: Design — r3 (r1 full review + r2 delta review folded by three seats; pending r3 micro-confirmation)
 - Program: context-engineering input governance (doc 2 of 8)
 - Depends on: nothing. Independent package and mechanism.
 - Literature basis: Governance Decay (arxiv 2606.22528 — pinning restores violation rate 30%→0%); ARCBench (2611.03223 — rules retained ≠ rules honored after compaction); Facts Without Rules (2608.29028).
@@ -33,7 +33,7 @@ Non-goals:
 - Session/event firehose is an allowed observation channel (`hooks-claude-code/src/register-events.ts:264`). Mutation from within a `session/event` observer throws `reenter` — `publicationEntry()` at `core/session/src/index.ts:880-882` in the pinned harness copy (r1 anchor :740-743 was stale).
 - `'user/message'` events carry the `UserMessage` object itself as `data` (`core/session/src/types.ts:315` in the pinned harness copy): read `event.data.source` and `event.data.content` — not `event.data.message.*` (r1 capture shape was a BLOCKER-level error found by codex, confirmed by the other seats).
 - Surface validation: a `user/message` append must carry a surface intent; `{ surfaceOp: 'append' }` is the required form (`core/session/src/index.ts:806`, `core/session/src/surface.ts:316` in the pinned harness copy; r1's restore append omitted it — BLOCKER-level).
-- `MessageSourceMap` entries are `{kind} & ContextFormed` where `ContextFormed.form` is the closed union `instructions|catalog|snapshot|notice|relay|recall` (harness `llm/lib/types/types.d.ts` in the pinned copy). r1's invented `form: 'pinned-restore'` violated this contract (all three seats) — restorations therefore keep the **original source object verbatim**, including its original legal form.
+- `MessageSourceMap` entries are `{kind} & ContextFormed` where `ContextFormed.form` is the closed union `instructions|catalog|snapshot|notice|relay|recall` (harness `llm/lib/types/message.d.ts:75-93`, mirrored at `llm/src/message.ts:86-101` — r2's `types.d.ts` anchor was the wrong file, and the union includes a `form?: never` branch, i.e. form-less sources are legal). r1's invented `form: 'pinned-restore'` violated this contract (all three seats) — restorations therefore keep the **original source object verbatim**, including its original legal (possibly absent) form.
 
 ## Design
 
@@ -45,8 +45,8 @@ One `session/event` listener (`{ global: true }`). For every `'user/message'` ev
 
 ### Detect
 
-- On `compaction/summary` at the firehose: if the event carries `shadowedSeqs` (success-only by construction), compute `restorable = shadowedSeqs ∩ ring.keys()`; if empty, no-op; else schedule restores keyed by `compactionId`.
-- `compaction/end` is used only defensively: if it reports `error`, drop any pending schedule for that `compactionId` (belt: the summary never fires on failure, so this is a redundant consistency guard, not a load-bearing step — stated explicitly after r1).
+- On `compaction/summary` at the firehose: if the event carries `shadowedSeqs`, compute `restorable = shadowedSeqs ∩ ring.keys()`; if empty, no-op; else schedule restores keyed by `compactionId`. The summary is **provisional scheduling evidence, not completion evidence**: the engine appends `compaction/summary` *before* the checkpoint commit (`compaction/compaction-basic/src/region.ts:470-510` in the pinned harness copy), so a failed commit append leaves a logged summary with `shadowedSeqs` and no actual shadowing (delta-round fold, all three seats — r2's "summary is success-only, belt redundant" was wrong).
+- `compaction/end` is therefore **load-bearing**: an end event carrying `error` (emitted on the failed-commit path at `region.ts:237-245`) **cancels** any pending schedule for that `compactionId`. Schedules become restore-eligible only when either (a) a successful end arrives, or (b) the gate's conservative rule applies: schedule exists for ≥ 1 turn with no end at all seen for that id (defensive — end events are normally always emitted). The drain rule in §Restore uses only eligible schedules.
 
 ### Restore
 
@@ -54,16 +54,20 @@ Actual appends never happen inside the firehose callback (reenter). Schedules dr
 
 Restore ordering among themselves: ascending original seq. Each restore is its own append (no batching into one message, so source boundaries survive).
 
-### Restore timing (honest contract, per-source, r1 fold)
+### Restore timing (honest contract, per-source)
 
-| source | commit point | restore lands | exposure |
+The drain listener is `{ prepend: true }`, delegate-first at `agent/pre-step`: it drains after `await next()` returns — meaning **schedules created by inner listeners during the same pre-step drain in that same pre-step, before the loop derives the request** (delta-round fold: grok and codex independently showed `{prepend:true, delegate-first}` restores within the pressure step, falsifying r2's "one pressure step" exposure row).
+
+| source | commit point | restore lands | model-visible exposure |
 |---|---|---|---|
-| manual `/compact` | idle | next pre-step (first step of the next turn) | none visible to the model before restore (turn does not start until pre-step) |
-| harness pressure auto | during open turn at pre-step | next step's pre-step | one step (the step that triggered compaction already entered; its request builds without pins) |
-| cost-gate idle | idle | next pre-step | none visible |
-| in-request overflow/model-switch | inside `buildRequest` retry | next step's pre-step | the retried request itself can lack pins |
+| harness pressure auto | inside `agent/pre-step` (inner to the drain) | **same pre-step**, before request derivation | none |
+| manual `/compact` | idle | next pre-step (first step of the next turn) | none |
+| cost-gate idle | idle | next pre-step | none |
+| in-request overflow/model-switch | inside `buildRequest` retry | next pre-step | the retried request itself can lack pins |
 
-The in-request cases cannot be closed from dsh-cc: session/event callbacks cannot append (reenter), and the retry's message derivation happens inside the same synchronous continuation. Options rejected: queue-microtask racing (nondeterministic), engine override (upstream-only). Accepted exposure: one request can run without restored pins after an in-request compaction; pins return next step. Recorded as an upstream seam proposal (engine-side pin exemptions in span selection) in §Risks. All four paths are covered by tests (§Verification) that assert the documented timing, not an imagined one.
+Same-step pressure restoration hinges on ordinary waterfall ordering (no new seams): the drain runs when the pinning listener's `next()` continuation executes; compaction's own pre-step scheduling is an inner producer. The integration test pins this ordering (`suppress-settled`-style interplay included).
+
+The in-request cases cannot be closed from dsh-cc: session/event callbacks cannot append (reenter), and the retry's message derivation happens inside the same synchronous continuation before any later pre-step exists. Options rejected: queue-microtask racing (nondeterministic), engine override (upstream-only). Accepted exposure: one request can run without restored pins after an in-request compaction; pins return next step. Recorded as an upstream seam proposal (engine-side pin exemptions in span selection) in §Risks.
 
 ### Kind defaults
 
@@ -90,8 +94,8 @@ Package skeleton + README pair; preset row in `agent.shared.cordis.yml` (compact
 
 ## Verification
 
-- Unit: capture ring (verbatim object identity, FIFO eviction, caps); detection (summary-only, error-belt discards schedules); restore (verbatim object reaches `deriveMessages()`, order by seq, `{surfaceOp:'append'}` form validated by the real session validator in the integration rig); capture read shape `event.data.source` exercised against real published events — the r1 shape bug is pinned by a regression test.
-- Integration (real `JsonlSessionPersistence` + harness `BasicCompactionEngine`, temp rig): session with one pinned turn-rules message + noise → auto compaction via pressure; after `compaction/end`, live `deriveMessages()` shows the pinned message **after** the checkpoint, exactly once, verbatim, checkpoint intact; second compaction restores again. Separate cases for manual `/compact` and cost-gate idle compaction, asserting the per-source restore timing table above.
+- Unit: capture ring (verbatim object identity, FIFO eviction, caps); detection (provisional summary schedules; end-error cancellation of schedules — the belt is load-bearing, regression-pinned); restore (verbatim object reaches `deriveMessages()`, order by seq, `{surfaceOp:'append'}` form validated by the real session validator in the integration rig); capture read shape `event.data.source` exercised against real published events — the r1 shape bug is pinned by a regression test.
+- Integration (real `JsonlSessionPersistence` + harness `BasicCompactionEngine`, temp rig): session with one pinned turn-rules message + noise → pressure auto-compaction inside a pre-step; assert the pin is present in `deriveMessages()` **when that same pre-step completes** (same-step restore, matching the timing table — the drain runs on the pinning listener's post-`next()` continuation), exactly once, verbatim, checkpoint intact; second compaction restores again. Separate cases for manual `/compact` and for cost-gate idle compaction, plus **overflow and model-switch retry-path cases** asserting (a) the retried request can lack the pin (accepted one-request gap) and (b) the next pre-step restores it (codex delta fold: r2 claimed coverage without these cases).
 - Acceptance: two-week dogfood with turn-rules + post-edit-verify defaults; grep transcripts for restored pins after compactions; spot-audit post-compaction rule-following vs before.
 
 ## Risks
@@ -103,3 +107,7 @@ Package skeleton + README pair; preset row in `agent.shared.cordis.yml` (compact
 ## R1 fold ledger (three seats: internal critic, grok, codex)
 
 Folded: detection moved to `compaction/summary` (+ end-error belt) — the payload-blocker; capture reads `event.data.source/.content` — the shape-blocker; restore appends verbatim message object with `{ surfaceOp: 'append' }` — the validation-blocker; invented `form:'pinned-restore'` removed (restorations keep original legal form); cost-gate idle path added to anchors and timing; per-source restore-timing honesty table incl. accepted in-request gap; reentry/path anchors corrected; resume-generation limitation surfaced.
+
+## R2 → R3 delta fold ledger (three seats)
+
+Folded: summary re-cast as **provisional** scheduling evidence with the end-error belt promoted to load-bearing (summary precedes commit; failed commit leaves a logged summary — all three seats); pressure-path exposure corrected from "one step" to **same pre-step** (`{prepend, delegate-first}` drains schedules created by inner listeners before request derivation; timing table rewritten); ContextFormed anchor corrected to `llm/lib/types/message.d.ts:75-93` with the `form?: never` optionality noted (grounds verbatim-form legality); verification now asserts the same-step pressure boundary and adds overflow/model-switch retry-path cases (r2 claimed coverage without them).
