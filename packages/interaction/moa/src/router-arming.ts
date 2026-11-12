@@ -4,6 +4,7 @@
  */
 
 import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
+import type { BoundDecisionRunner } from '@dsh-cc/systemone'
 import type { TierLadder } from './tiers.ts'
 import type { MoaSettings } from './settings.ts'
 import { resolveTiers } from './tiers.ts'
@@ -30,6 +31,15 @@ export interface RouterDeps {
   ) => Promise<readonly string[] | undefined>
   /** Injectable fetch for `systemoneDecide` (tests). */
   fetchImpl?: (typeof fetch) | undefined
+  /**
+   * Per-use binding of the S1-02 decision runner for context-routing v2
+   * (S1-09): the host implements it as
+   * `ctx.systemoneDecisions.forAgent(agent)` behind a guard, read once per
+   * admission and NEVER cached across uses. Absence is the design's
+   * "executor unavailable" row (active serves the live selection, shadow
+   * records the reason), never a legacy-classifier call.
+   */
+  contextDecisions?: ((agent: unknown) => BoundDecisionRunner | undefined) | undefined
   /** Side-car JSONL ledger path accessor; absence disables route logging. */
   ledgerPath?: (() => string | undefined) | undefined
   logger?: { warn(message: string): void } | undefined

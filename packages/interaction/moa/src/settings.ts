@@ -17,6 +17,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
 import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
+import {
+  CONTEXT_ROUTING_SCHEMA,
+  DEFAULT_CONTEXT_ROUTING_SETTINGS,
+  resolveContextRoutingSection,
+  type ContextRoutingSettings,
+} from './context-settings.ts'
 
 /** The settings namespace carrying the moa flags. */
 export const SETTINGS_NAMESPACE = 'moa' as SettingsNamespace
@@ -42,6 +48,8 @@ export interface MoaSettings {
   judgeRoute: JudgeRouteSetting | undefined
   classifyBudgetTokens: number
   callBudgetMs: number
+  /** Nested `context-routing` section (S1-09); defaults when absent. */
+  contextRouting: ContextRoutingSettings
 }
 
 /** Ship-dark defaults (§3.7): everything off. */
@@ -52,6 +60,8 @@ export const DEFAULT_MOA_SETTINGS: MoaSettings = {
   judgeRoute: undefined,
   classifyBudgetTokens: 4000,
   callBudgetMs: 8000,
+  // A fresh defaults object, so no caller can mutate the shared constant.
+  contextRouting: { ...DEFAULT_CONTEXT_ROUTING_SETTINGS },
 }
 
 /** Inner object shape (kebab keys). Absence resolves to defaults via schemastery. */
@@ -76,6 +86,10 @@ const SettingsObject = z.object({
   ]),
   'classify-budget-tokens': z.number().min(1).default(4000),
   'call-budget-ms': z.number().min(1).default(8000),
+  // S1-09 context routing (default off). A nested object so the legacy fields
+  // above resolve byte-for-byte unchanged when this section is absent; the
+  // schema itself carries the defaults of the absent section.
+  'context-routing': CONTEXT_ROUTING_SCHEMA,
 })
 
 /**
@@ -131,5 +145,8 @@ function resolveSection(section: Record<string, unknown>): MoaSettings {
     judgeRoute: (resolved['judge-route'] ?? undefined) as JudgeRouteSetting | undefined,
     classifyBudgetTokens: asInt(resolved['classify-budget-tokens'], 4000, Number.MAX_SAFE_INTEGER),
     callBudgetMs: asInt(resolved['call-budget-ms'], 8000, Number.MAX_SAFE_INTEGER),
+    // The RAW nested section (not the schema-normalized one) so a malformed
+    // member degrades per field here instead of failing the namespace read.
+    contextRouting: resolveContextRoutingSection(section['context-routing']),
   }
 }

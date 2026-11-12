@@ -346,3 +346,25 @@ describe('moa wiring (apply) — subagent scope', () => {
     await claimed({ agent: rootAgent, message: userOpening('root prompt'), turn: 1 }, async () => ({}))
   })
 })
+
+describe('buildDeps — S1-09 decision runner seam', () => {
+  it('binds the optional systemoneDecisions service PER USE and degrades on absence or a throw', () => {
+    const rig = makeLateCtx()
+    const deps = buildDeps(rig.ctx as never, () => DEFAULT_MOA_SETTINGS)
+    const agent = freshAgent()
+    // Absent service (the default deployment): no executor, no throw.
+    expect(deps.contextDecisions?.(agent)).toBeUndefined()
+    // Present: `forAgent` is called with the live agent, and reading is per
+    // use — a replaced service is observed on the next admission.
+    const bound: unknown[] = []
+    const first = { forAgent: (a: unknown) => { bound.push(a); return 'runner-a' } }
+    rig.services.set('systemoneDecisions', first)
+    expect(deps.contextDecisions?.(agent)).toBe('runner-a')
+    expect(bound).toEqual([agent])
+    rig.services.set('systemoneDecisions', { forAgent: () => 'runner-b' })
+    expect(deps.contextDecisions?.(agent)).toBe('runner-b')
+    // A throwing provider reads as absent (never rejects into the admission).
+    rig.services.set('systemoneDecisions', { forAgent: () => { throw new Error('cannot bind') } })
+    expect(deps.contextDecisions?.(agent)).toBeUndefined()
+  })
+})

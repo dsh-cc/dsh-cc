@@ -15,6 +15,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { ModelRoutes, ResolvedRoute } from '@dsh-cc/model-aliases'
+import type { BoundDecisionRunner } from '@dsh-cc/systemone'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { dshHomeFn } from '@dsh-cc/sidecar-io'
 import { readUserSection } from '@dsh-cc/settings/ns'
@@ -207,6 +208,14 @@ export function apply(ctx: Context): void {
   }
 
   const router = createRequestRouter(core, { validation, ensureArmed: tryArm, deps })
+  // S1-09 lifecycle: instance dispose cancels every in-flight context-routing
+  // classification, so a torn-down tree can never apply a stale tier. Cordis
+  // `ctx.on` is typed strictly to `keyof Events`, hence the fiber effect.
+  try {
+    ctx.effect(() => () => router.dispose(), 'moa: cancel context-routing decisions')
+  } catch {
+    // A host without an effect-capable ctx keeps the controller lifetime.
+  }
   // The entry-point admission seam (D3.2): TUI submits / queued-chip flushes /
   // slash-command expansions await `routeBeforeAdmission(agent, opening)`
   // BEFORE their `agent.followup(...)`. Registered module-wide so plain
@@ -361,6 +370,20 @@ export function buildDeps(ctx: Context, readSettings: () => MoaSettings): Router
     ledgerPath: () => {
       const home = dshHomeFn(ctx)
       return home === undefined ? undefined : home('moa', 'routing.jsonl')
+    },
+    // S1-09 context routing: the S1-02 decision runner, bound PER USE (memory
+    // recall precedent) — the service is absent during the preset sweep, may
+    // reload, and `forAgent` mints the quota/lock scope (so it can throw).
+    // Never cached across admissions; every fault reads as "no executor".
+    contextDecisions: (agent: unknown) => {
+      try {
+        const service = ctx.get('systemoneDecisions' as never) as
+          | { forAgent(bound: unknown): BoundDecisionRunner }
+          | undefined
+        return service?.forAgent(agent)
+      } catch {
+        return undefined
+      }
     },
     logger: ctx.logger,
   }

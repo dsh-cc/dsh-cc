@@ -682,9 +682,9 @@ capabilities:
         pre-admission routing (the phantom-drop rule is retired), and a
         mid-session `/model` disarms moa (explicit user precedence) until
         the selection returns to the boot pair.
-        〔src:ws:packages/interaction/moa/README.md#L23-L32〕
-        〔src:ws:packages/interaction/moa/README.md#L39-L46〕
-        〔src:ws:packages/interaction/moa/README.md#L47-L52〕
+        〔src:ws:packages/interaction/moa/README.md#L45-L54〕
+        〔src:ws:packages/interaction/moa/README.md#L61-L67〕
+        〔src:ws:packages/interaction/moa/README.md#L69-L74〕
 
   engine.notebook-edit:
     title: NotebookEdit

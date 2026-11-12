@@ -14,10 +14,12 @@
  */
 
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { BoundDecisionRunner } from '@dsh-cc/systemone'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRoute } from '@dsh-cc/model-aliases'
 import { ArmingMachine, DEFAULT_MOA_SETTINGS, EscalationBookkeeping, type MoaCore, type MoaSettings } from '../src/index.ts'
+import { DEFAULT_CONTEXT_ROUTING_SETTINGS } from '../src/context-settings.ts'
 import { resetRuntimeCore, setRuntimeCore } from '../src/runtime-state.ts'
 import { createRequestRouter, textOf, type ArmingValidation, type RouterDeps } from '../src/router.ts'
 
@@ -120,13 +122,22 @@ export interface RigOptions {
   bootPair?: { provider: string; model: string }
   /** Creation-options effort. */
   effort?: string
+  /** S1-09 context routing: the per-use decision-runner binding. */
+  contextDecisions?: ((agent: unknown) => BoundDecisionRunner | undefined) | undefined
 }
 
 export function makeRig(options: RigOptions = {}): Rig {
   // The capture map, claimed-turn, sticky-tier, pending-row, admission entry,
   // and tripwire slots are process-global runtime state — start clean.
   resetRuntimeCore()
-  const settings: MoaSettings = { ...DEFAULT_MOA_SETTINGS, enabled: options.enabled ?? true }
+  // The nested `context-routing` section is re-cloned per rig: the shallow
+  // spread above would otherwise share ONE defaults object across the whole
+  // spec process, leaking a mode/threshold change into unrelated rigs.
+  const settings: MoaSettings = {
+    ...DEFAULT_MOA_SETTINGS,
+    enabled: options.enabled ?? true,
+    contextRouting: { ...DEFAULT_CONTEXT_ROUTING_SETTINGS },
+  }
   const core: MoaCore = {
     arming: new ArmingMachine(() => settings.enabled),
     bookkeeping: new EscalationBookkeeping(),
@@ -168,6 +179,7 @@ export function makeRig(options: RigOptions = {}): Rig {
     fetchImpl,
     ledgerPath: () => (ledger === '' ? undefined : ledger),
     logger: { warn: (message) => warnings.push(message) },
+    ...(options.contextDecisions === undefined ? {} : { contextDecisions: options.contextDecisions }),
   }
   // Late-bound seam: setResolveEfforts swaps the resolver after construction.
   Object.defineProperty(deps, 'resolveEfforts', {

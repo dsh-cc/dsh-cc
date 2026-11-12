@@ -32,13 +32,16 @@
  * probabilities, and the `input_tokens >= window` truncation sentinel are
  * all failure — P3b contract, never try/catch semantics alone).
  *
+ * S1-09 context-routing v2: the admission branch below hands every mode but
+ * `off` to `context-routing.ts` (its own capture, runner call, post-await
+ * re-check and row fields); with `off` this file's legacy path is untouched.
+ *
  * @module
  */
 
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, ReasoningEffortId, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { appendJsonl, readJsonl } from '@dsh-cc/sidecar-io'
-import { capMiddleToTokenBudget, systemoneDecide } from '@dsh-cc/systemone'
 import { isSubagentAgent } from './agent-scope.ts'
 import { moaNoticeSource } from './provenance.ts'
 import {
@@ -50,13 +53,11 @@ import {
 } from './runtime-state.ts'
 import { restoreEscalationFloor, type OpeningSource } from './escalation-restore.ts'
 import { isMoaEscalationMessage } from './state.ts'
-import { collapseAppliedTier, ladderSnapshot, TIER_ALIASES, tierAt } from './tiers.ts'
+import { ladderSnapshot, TIER_ALIASES, tierAt } from './tiers.ts'
 import type { MoaCore } from './index.ts'
-import { resolveJudgeRoute } from './judge-route.ts'
+import { createContextRouting, type ContextRouting, type ContextRoutingHost, type RouteRowFields } from './context-routing.ts'
+import { createLegacyClassifier } from './router-classify.ts'
 import type { ArmingValidation, EnsureArmed, RouterDeps } from './router-arming.ts'
-
-/** Truncation marker handed to `capMiddleToTokenBudget` (head 2/3 + tail 1/3). */
-const CROP_MARKER = '[…truncated…]'
 
 /** System One connection facts for the judge route. */
 // Local import indirection keeps the tier import lazy for the validation path.
@@ -69,14 +70,7 @@ interface PendingAdmission {
   /** The classified tier; undefined on a fail-open (row is still logged). */
   tier: number | undefined
   /** The turnId-less sidecar row content, written with the real turn at bind. */
-  row: {
-    tier?: string
-    argmaxTier?: string
-    probabilities?: Record<string, number>
-    latencyMs: number
-    truncated: boolean
-    failure?: string
-  }
+  row: RouteRowFields
 }
 
 /** Raw sidecar row shape read back by the resume rehydration (D3.2). */
@@ -115,6 +109,11 @@ export interface RequestRouter {
   tierSelection(tier: number, carriedEffort: string | undefined, signal: AbortSignal): Promise<ModelSelection | undefined>
   /** Pre-step delivery for queued status rows (mount AFTER the observe listener). */
   preStepListener(payload: unknown, next: () => Promise<unknown>): Promise<unknown>
+  /**
+   * Instance dispose (S1-09 lifecycle): cancel every in-flight context-routing
+   * classification, so a disposed instance can never apply a stale tier.
+   */
+  dispose(): void
 }
 
 export function createRequestRouter(
@@ -123,7 +122,6 @@ export function createRequestRouter(
 ): RequestRouter {
   const { arming, bookkeeping } = core
   const deps = opts.deps
-  let backendWarned = false
   let routesWarned = false
   /** (provider, model, effort) triples already warned about (§3.2 warn-once). */
   /** The one classification parked between admission and claim-bind. */
@@ -143,112 +141,31 @@ export function createRequestRouter(
     return pair
   }
 
+  /** The effective ladder snapshot (arming snapshot, else a live re-resolution). */
+  const ladder = (): ReturnType<typeof ladderSnapshot> => ladderSnapshot(opts.validation.ladder, deps.routes?.())
+
   /** One side-car route record (§7 R1, mirrored as a JSONL side-car row). */
-  const logRoute = async (row: {
-    turnId: number
-    originSeq?: number
-    tier?: string; argmaxTier?: string
-    probabilities?: Record<string, number>
-    latencyMs: number
-    truncated: boolean
-    /** System One failure tag on the fail-open path. */
-    failure?: string
-  }): Promise<void> => {
+  const logRoute = async (row: RouteRowFields & { turnId: number; originSeq?: number }): Promise<void> => {
     const path = deps.ledgerPath?.()
     if (path === undefined) return
     await appendJsonl(path, { type: 'route', ts: new Date().toISOString(), ...row })
   }
 
   /**
-   * One System One classify for a turn's opening. Returns the (collapsed)
-   * applied tier and the turnId-less sidecar row; the row is written when
-   * the admission binds to its real turn at claim.
+   * One legacy System One classify for a turn's opening (extracted to
+   * `router-classify.ts`, size gate): the (collapsed) applied tier plus the
+   * turnId-less sidecar row, written when the admission binds to its real
+   * turn at claim.
    */
-  const classifyOnce = async (
-    signal: AbortSignal,
-    opening: UserMessage,
-  ): Promise<{ tier: number | undefined; row: PendingAdmission['row'] }> => {
-    const settings = deps.readSettings()
-    const routes = deps.routes?.()
-    const judge = resolveJudgeRoute(settings.judgeRoute, {
-      modelRoutes: routes,
-      budgetTokens: settings.classifyBudgetTokens,
-    })
-    const state = capMiddleToTokenBudget(textOf(opening), settings.classifyBudgetTokens, CROP_MARKER)
-    const now = deps.now ?? Date.now
-    const startedAt = now()
-    const classify = async (): Promise<{ tier: number | undefined; row: PendingAdmission['row'] }> => {
-      if (!judge.ok) return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: judge.reason } }
-      // Resolution guarantees a model on the ok branch; if it somehow does
-      // not, fail open rather than substitute a model string.
-      if (judge.route.model === undefined) {
-        return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: 'judge route has no model' } }
-      }
-      const backend = deps.resolveBackend?.(judge.route)
-      if (backend === undefined) {
-        if (!backendWarned) {
-          backendWarned = true
-          warn(`moa: no System One backend baseURL for judge route ${judge.route.provider}/${judge.route.model}; failing open`)
-        }
-        return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: 'no backend baseURL' } }
-      }
-      const result = await systemoneDecide({
-        baseURL: backend.baseURL,
-        ...(backend.apiKey === undefined ? {} : { apiKey: backend.apiKey }),
-        // Wire model == route.model, exactly as the alias/route configured it —
-        // never `${provider}/${model}` (provider-prefixing produced a 400 "not a
-        // configured systemone model", live-traced 2026-10-10) and never a
-        // hardcoded fallback (checked non-undefined above).
-        model: judge.route.model,
-        state,
-        questions: { route: ROUTING_QUESTION },
-        timeoutMs: settings.callBudgetMs,
-        signal,
-        ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
-      })
-      const latencyMs = now() - startedAt
-      if (!result.ok) {
-        return { tier: undefined, row: { latencyMs, truncated: false, failure: result.failure } }
-      }
-      const probabilities = result.answers.route?.probabilities
-      let tier: number | undefined
-      if (probabilities !== undefined) {
-        // Argmax over the four tier labels only; every label must carry a
-        // number (empty/missing probabilities are failure, P3b).
-        let bestProbability = -Infinity
-        tier = 0
-        for (const [index, label] of TIER_ALIASES.entries()) {
-          const p = probabilities[label]
-          if (typeof p !== 'number') {
-            tier = undefined
-            break
-          }
-          if (p > bestProbability) {
-            bestProbability = p
-            tier = index
-          }
-        }
-      }
-      // Truncation sentinel (§3.2): the gateway silently truncates oversized
-      // state; input_tokens pinning at the window means the verdict is garbage.
-      const truncated = result.usage.input_tokens >= judge.window
-      if (truncated) tier = undefined
-      // §3.3 applied-index collapse: a same-model argmax flip is start-index
-      // noise — apply/ledger the FIRST index of the contiguous run.
-      const applied = tier === undefined ? undefined : collapseAppliedTier(tier, ladderSnapshot(opts.validation.ladder, routes))
-      const labels = applied === undefined || tier === undefined ? {} : { tier: tierAt(applied) ?? String(applied), argmaxTier: tierAt(tier) ?? String(tier) }
-      return {
-        tier: applied,
-        row: {
-          ...labels,
-          ...(probabilities === undefined ? {} : { probabilities }),
-          latencyMs,
-          truncated,
-        },
-      }
-    }
-    return classify()
-  }
+  const classifyOnce = createLegacyClassifier({
+    readSettings: () => deps.readSettings(),
+    routes: () => deps.routes?.(),
+    ladder,
+    resolveBackend: deps.resolveBackend,
+    fetchImpl: deps.fetchImpl,
+    now: () => (deps.now ?? Date.now)(),
+    warn,
+  })
 
   /**
    * The effort-validated tier `ModelSelection` (withTier's effort half —
@@ -348,6 +265,51 @@ export function createRequestRouter(
     }
   }
 
+  /**
+   * The S1-09 v2 host seam: every member defers into this router's existing
+   * surfaces, so `context-routing.ts` owns the whole v2 flow without the
+   * router growing a second routing decision.
+   */
+  const contextHost: ContextRoutingHost = {
+    readSettings: () => deps.readSettings(),
+    ladder,
+    isArmed: () => opts.validation.ok && arming.isArmed(),
+    decisions: (agent) => deps.contextDecisions?.(agent),
+    classifyLegacy: (signal, opening) => classifyOnce(signal, opening),
+    applyTier: async (agent, tier, live, signal) => {
+      const selection = await tierSelectionFor(tier, live?.reasoningEffort, signal)
+      if (selection === undefined) return false
+      agent.model.select(selection)
+      arming.noteMoaSelection(selection)
+      return true
+    },
+    serveLive: (agent, live) => serveUserBase(agent, live),
+    park: (entry) => {
+      pendingAdmission = entry
+    },
+    now: () => (deps.now ?? Date.now)(),
+  }
+
+  /** The v2 integration instance (one in-flight controller per admission). */
+  const contextRouting: ContextRouting = createContextRouting(contextHost)
+
+  /**
+   * Apply one decided tier exactly like the D3.2 path: the effort-validated
+   * selection is selected durably and recorded as moa's own write; a miss (or
+   * an unresolvable tier route) serves the live selection instead.
+   */
+  const applyDecision = async (
+    agent: Agent,
+    opening: UserMessage,
+    decision: { tier: number | undefined; row: RouteRowFields },
+    live: ModelSelection | undefined,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    const applied = decision.tier !== undefined && (await contextHost.applyTier(agent, decision.tier, live, signal))
+    if (!applied) serveUserBase(agent, live)
+    pendingAdmission = { opening, tier: applied ? decision.tier : undefined, row: decision.row }
+  }
+
   /** The admission body; routeBeforeAdmission wraps it in the fail-open guard. */
   const routeAdmission = async (agentLike: unknown, opening: UserMessage): Promise<void> => {
     if (agentLike === undefined || agentLike === null || typeof agentLike !== 'object') return
@@ -371,24 +333,17 @@ export function createRequestRouter(
     if (!deps.readSettings().enabled) return
     if (!opts.validation.ok) opts.ensureArmed?.()
     if (!opts.validation.ok || !arming.isArmed()) return
+    // S1-09 context-routing v2: every mode but `off` hands the admission to
+    // `context-routing.ts` (own controller/generation, own row fields); the
+    // `off` path below stays byte-for-byte the legacy one. A settings reader
+    // that predates the section reads as `off` (never a throw here).
+    const contextMode = deps.readSettings().contextRouting?.mode
+    if (contextMode !== undefined && contextMode !== 'off') {
+      await contextRouting.route(agent, opening, live)
+      return
+    }
     const signal = new AbortController().signal
-    const { tier, row } = await classifyOnce(signal, opening)
-    if (tier === undefined) {
-      serveUserBase(agent, live)
-      pendingAdmission = { opening, tier: undefined, row }
-      return
-    }
-    // withTier's effort re-validation, moved to admission (D3.2): the
-    // carried effort is the pre-route live selection's.
-    const selection = await tierSelectionFor(tier, live?.reasoningEffort, signal)
-    if (selection === undefined) {
-      serveUserBase(agent, live)
-      pendingAdmission = { opening, tier: undefined, row }
-      return
-    }
-    agent.model.select(selection)
-    arming.noteMoaSelection(selection)
-    pendingAdmission = { opening, tier, row }
+    await applyDecision(agent, opening, await classifyOnce(signal, opening), live, signal)
   }
 
   return {
@@ -475,10 +430,12 @@ export function createRequestRouter(
         ],
       }
     },
+
+    dispose: () => contextRouting.dispose(),
   }
 }
 
-import { createEffortSelector, ROUTING_QUESTION, textOf, tierRouteVariables } from './router-tiers.ts'
+import { createEffortSelector, textOf, tierRouteVariables } from './router-tiers.ts'
 export { validateArming } from './router-arming.ts'
 export type { ArmingValidation, EnsureArmed, MoaRouteBackend, RouterDeps } from './router-arming.ts'
 
