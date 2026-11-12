@@ -2786,6 +2786,34 @@ capabilities:
         recall and memoryAge aging are deferred until the harness FsInfo seam
         grows an mtime field.
 
+  memory.section-budget:
+    title: Memory topic-index byte cap (cc-memory-section)
+    category: memory
+    plane: preset
+    upstream:
+      summary: >-
+        CC has no counterpart: the combined memory topic index renders
+        uncapped. dsh-cc caps the index block only (header, per-layer
+        fragments and the search guidance stay byte-identical), truncating
+        whole entries from the bottom of the alphabetical list with an
+        explicit N-more note; a floor form keeps the retrieval guidance when
+        even one entry does not fit. Default 8192 bytes, provisional until
+        input-ledger distributions land.
+    dimensions:
+      recognized: true
+      mounted: false
+      behavioral: divergent
+      ux: partial
+    deviation:
+      kind: divergent
+      summary: >-
+        CC renders the combined topic index uncapped; dsh-cc budgets the
+        index block only, with a documented floor form and an explicit
+        N-more note. truncate: false restores the uncapped render.
+    evidence:
+      - { type: source, path: packages/memory/memory/src/index-budget.ts }
+      - { type: test, path: packages/memory/memory/tests/section-budget.spec.ts }
+
   # ── skills ──────────────────────────────────────────────────────────────
   skills.manage-skill:
     title: ManageSkill tool (learned-skill CRUD)
@@ -2912,6 +2940,34 @@ capabilities:
       kind: none
 
   # ── subagents ───────────────────────────────────────────────────────────
+  subagents.catalog-budget:
+    title: Subagent catalog byte cap (cc-subagent-catalog)
+    category: subagents
+    plane: preset
+    upstream:
+      summary: >-
+        CC has no counterpart: the agent roster renders uncapped. dsh-cc
+        budgets the catalog render in UTF-8 bytes — every agent name is
+        preserved down to a names-only collapse, each whenToUse is sliced on
+        char boundaries (min-entry-bytes floor), and names are dropped only
+        in the documented oversized-roster overflow form with the N-more
+        note. Default 8192 bytes, provisional.
+    dimensions:
+      recognized: true
+      mounted: false
+      behavioral: divergent
+      ux: partial
+    deviation:
+      kind: divergent
+      summary: >-
+        CC renders the agent roster uncapped; dsh-cc budgets the catalog in
+        UTF-8 bytes, preserving every agent name down to the documented
+        names-only overflow form. truncate: false restores the uncapped
+        render.
+    evidence:
+      - { type: source, path: packages/subagent/task/src/catalog-budget.ts }
+      - { type: test, path: packages/subagent/task/tests/catalog-budget.spec.ts }
+
   subagents.ephemeral-agents:
     title: Ephemeral one-shot subagents (read-only dispatch lane)
     category: subagents

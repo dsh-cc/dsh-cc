@@ -122,3 +122,13 @@ harness 的 `agent-instructions` 插件会在**每个**会话（包括 Task chil
 - 正在运行的前台 Task 的在途转后台（TUI Ctrl+B）——follow-up，而非本包存在性上的限制。
 - 把 CC frontmatter 的 `permissionMode` / `memory` / `effort` 投影到 child（loader 会解析，v1 不消费）。`isolation: worktree` 已被消费——见上文隔离工作树一节。
 - cc-shell 里的 `registerBaseAgents`（base agent 发现迁至此处；见 cc-shell README）。
+
+
+## Catalog 字节帽（`cc-subagent-catalog`）
+
+名册渲染受 `cc-subagent-catalog.max-bytes` 约束（默认 **8192**，范围
+1024..65536；临时默认）。第一遍保留全部 agent 名字，每个 `whenToUse` 按 UTF-8
+安全字节切片截断（只在字符边界切；`min-entry-bytes` 默认 40 是每条下限）。第二遍
+保留前 K 条、其余折叠为仅列名行。溢出地板：连仅列名渲染都超预算时，才在文档化的
+提示行 `… (N more agents omitted by cc-subagent-catalog.max-bytes; the catalog's
+usage line stays)` 陪同下丢弃名字。`truncate: false` 渲染不设帽的名册。

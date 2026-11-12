@@ -29,6 +29,9 @@ import { discoverBundledAgents, type AgentDefinition } from '@dsh-cc/claude-code
 import { cwdOf } from '@dsh-cc/memory'
 import type { AgentRegistry } from './registry.ts'
 import { PluginAgentIndex, isPluginAgentProvider } from './plugin-agents.ts'
+import { registerCatalogSettings, resolveCatalogSettings } from './catalog-settings.ts'
+import type { CatalogSettings } from './catalog-settings.ts'
+import { renderCatalogBudgeted } from './catalog-budget.ts'
 
 /** Default order slot for the catalog section (tool guidance owns 100–199). */
 export const CATALOG_SECTION_ORDER = 110
@@ -96,6 +99,14 @@ export class AgentCatalogSection {
    * provider) can be brand-checked by membership here.
    */
   private readonly brandedIds = new Set<string>()
+  /**
+   * The `cc-subagent-catalog` reader, consulted on EVERY render. {@linkcode render}
+   * is the single production render path — the section text callback, the
+   * readiness-completion reconciliation in {@linkcode start}, and every
+   * `system-prompt/change` re-render all call it — so a settings write applies
+   * to the very next assembly without a restart.
+   */
+  private readonly readSettings: () => CatalogSettings
 
   /**
    * Create a catalog cache holder bound to a registry.
@@ -104,12 +115,18 @@ export class AgentCatalogSection {
    * @param registry - the per-workspace definition cache to load from.
    * @param pluginIndex - the live plugin agent view (defaults to a fresh
    *   index over this context).
+   * @param readSettings - the `cc-subagent-catalog` settings reader override
+   *   (tests); the default registers the namespace and serves the design
+   *   defaults until it lands.
    */
   constructor(
     private readonly ctx: Context,
     private readonly registry: AgentRegistry,
     private readonly pluginIndex: PluginAgentIndex = new PluginAgentIndex(ctx),
-  ) {}
+    readSettings: (() => CatalogSettings) | undefined = undefined,
+  ) {
+    this.readSettings = readSettings ?? registerCatalogSettings(ctx)
+  }
 
   /** Register the catalog section plus its assemble-waterfall reconciliation.
    *
@@ -231,7 +248,7 @@ export class AgentCatalogSection {
         whenToUse: entry.definition.whenToUse,
       } as AgentDefinition)),
     ].sort((a, b) => a.agentType.localeCompare(b.agentType))
-    return renderCatalog(merged)
+    return renderCatalog(merged, this.readSettings())
   }
 
   /**
@@ -279,17 +296,20 @@ export function mountAgentCatalog(
 /**
  * Compose the section text from the sorted definitions. Returns '' when empty
  * so the section contributes nothing to the prompt.
+ *
+ * Pure and total: the budget is a function of `(defs, settings)` only. With
+ * `truncate` on (the default) the render is byte-capped per
+ * {@linkcode renderCatalogBudgeted}; under budget the output is byte-identical
+ * to the pre-budget render.
  * @param defs - the sorted definitions to list.
+ * @param settings - the `cc-subagent-catalog` budget override; omitted = the
+ *   design defaults (truncate on, 8192 bytes, 40-byte entry floor).
  * @returns the rendered catalog, or '' when no definitions are available.
  */
-export function renderCatalog(defs: readonly AgentDefinition[]): string {
+export function renderCatalog(
+  defs: readonly AgentDefinition[],
+  settings?: Partial<CatalogSettings>,
+): string {
   if (defs.length === 0) return ''
-  const lines = [
-    '## Available subagents',
-    '',
-    ...defs.map(def => `- ${def.agentType} — ${def.whenToUse}`),
-    '',
-    'To delegate to one, pass its name as the `subagent_type` argument of the Task tool.',
-  ]
-  return lines.join('\n')
+  return renderCatalogBudgeted(defs, resolveCatalogSettings(settings))
 }

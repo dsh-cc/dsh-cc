@@ -52,6 +52,19 @@ export {
 export type { TitleSidecarOptions } from './title-sidecar.ts'
 export { MemorySection, renderMemorySection, renderTeamMemorySection, renderLayers, saveGuidance, MEMORY_SECTION_NAME, MEMORY_SECTION_ORDER } from './section.ts'
 export type { MemoryLayer } from './section.ts'
+export {
+  DEFAULT_MEMORY_SECTION_SETTINGS,
+  DEFAULT_MEMORY_SECTION_SETTINGS_SECTION,
+  MAX_SECTION_MAX_BYTES,
+  MIN_SECTION_MAX_BYTES,
+  SECTION_SETTINGS_NAMESPACE,
+  SettingsSchema as SectionSettingsSchema,
+  memorySectionSettings,
+  registerMemorySectionSettings,
+  resolveMemorySectionSettings,
+} from './section-settings.ts'
+export type { MemorySectionSettings, MemorySectionSettingsSection } from './section-settings.ts'
+export { MEMORY_INDEX_HEADING, capMemoryIndex, memoryIndexNote, utf8Bytes } from './index-budget.ts'
 export { MemoryRecall, SubagentMemorySelector, MAX_RECALL_MEMORIES, RECALL_FILES_SCHEMA } from './recall.ts'
 export type { MemorySelector, RecallCandidate } from './recall.ts'
 export { INJECTED_SOURCE_DENYLIST, resolveRecallTurn } from './recall-query.ts'

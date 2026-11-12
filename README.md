@@ -224,9 +224,9 @@ This project uses dsh-cc for development. Its model routes are user configuratio
 | Hook events | 9 | 8 | 4 | 0 |
 | Command surface | 22 | 10 | 1 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |
-| Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
+| Memory and CLAUDE.md | 0 | 2 | 1 | 0 |
 | Skills | 2 | 2 | 0 | 0 |
-| Subagents | 0 | 4 | 0 | 0 |
+| Subagents | 0 | 5 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 6 | 0 | 0 |
 | Settings | 2 | 1 | 1 | 0 |

@@ -197,3 +197,14 @@ selector）。**没有任何 profile 默认启用该特性**：`cc` preset 会�
 - 团队记忆（`teamEnabled`）的可逆性与安全性：启用即改变持久化格式，且中间组件
   TOCTOU 窗口（仅末段做 `lstat` 校验；resolve/包含校验与读取并非原子）意味着
   不得在**多租户或不可信写者**场景启用。
+
+
+## 主题索引字节帽（`cc-memory-section`）
+
+合并主题索引块受 `cc-memory-section.max-bytes` 约束（默认 **8192**，范围
+1024..65536；**临时默认**，待输入账本分布数据落地后再调）。只帽索引块——头部、
+逐层 fragment 与"Searching past context"指引与未设帽会话逐字节一致。截断按字母序
+从列表底部整条移除条目，并追加 `… (N more memory topics; grep the memory
+directory for older entries)`。地板规则：连一条条目加提示行都放不下时，节保留
+头部 + 检索指引 + 提示行、不列条目——预算是地板之上的帽，绝不低于地板。
+`truncate: false` 渲染不设帽的索引（本节永不因预算被移除）。

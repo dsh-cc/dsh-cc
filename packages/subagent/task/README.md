@@ -281,3 +281,15 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
   loader parses them, v1 does not consume them). `isolation: worktree` IS consumed —
   see the isolated-worktree section above.
 - `registerBaseAgents` in cc-shell (base-agent discovery moved here; see the cc-shell README).
+
+
+## Catalog byte cap (`cc-subagent-catalog`)
+
+The roster render is capped by `cc-subagent-catalog.max-bytes` (default
+**8192**, bounds 1024..65536; provisional). Pass 1 keeps every agent name and
+truncates each `whenToUse` to a UTF-8-safe byte slice (char boundaries only;
+`min-entry-bytes`, default 40, is the per-entry floor). Pass 2 keeps the first
+K entries and collapses the rest into a names-only line. Overflow floor: if
+even a names-only render exceeds the budget, names are dropped only with the
+documented line `… (N more agents omitted by cc-subagent-catalog.max-bytes; the
+catalog's usage line stays)`. `truncate: false` renders the roster uncapped.

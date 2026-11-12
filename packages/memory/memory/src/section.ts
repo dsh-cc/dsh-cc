@@ -22,6 +22,12 @@ import { scanMemoryDirectory } from './scan.ts'
 import type { MemoryDirectoryState } from './scan.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 import { resolveTeamMemoryRoot } from './team.ts'
+import { capMemoryIndex } from './index-budget.ts'
+import {
+  registerMemorySectionSettings,
+  resolveMemorySectionSettings,
+} from './section-settings.ts'
+import type { MemorySectionSettings } from './section-settings.ts'
 
 /** Default order slot for the memory section (before tool guidance). */
 export const MEMORY_SECTION_ORDER = 90
@@ -85,6 +91,13 @@ export class MemorySection {
   private readonly fragments = new Map<string, string>()
   private readonly refreshers = new Map<string, Promise<void>>()
   private readonly teamEnabled: boolean
+  /**
+   * The `cc-memory-section` reader, consulted on EVERY render: the section
+   * text callback, the one-shot first-assembly readiness refresh, and every
+   * `system-prompt/change` re-render all call {@linkcode render}, so a settings
+   * write applies to the very next assembly (no restart, no re-registration).
+   */
+  private readonly readSettings: () => MemorySectionSettings
 
   /**
    * Create a cache holder bounded to a memory home.
@@ -93,14 +106,17 @@ export class MemorySection {
    * @param home - the memory home: the global layer's directory, and the root
    *   under which each workspace's private directory lives (`projects/<slug>`).
    * @param options - when `teamEnabled` is set, each workspace also surfaces
-   *   its shared team directory (`<workspaceDir>/team`).
+   *   its shared team directory (`<workspaceDir>/team`). `readSettings`
+   *   overrides the `cc-memory-section` reader (tests); the default registers
+   *   the namespace and serves the design defaults until it lands.
    */
   constructor(
     private readonly ctx: Context,
     private readonly home: string,
-    options: { teamEnabled?: boolean } = {},
+    options: { teamEnabled?: boolean; readSettings?: () => MemorySectionSettings } = {},
   ) {
     this.teamEnabled = options.teamEnabled ?? false
+    this.readSettings = options.readSettings ?? registerMemorySectionSettings(ctx)
   }
 
   /** Register the `memory` section, its assemble-waterfall reconciliation,
@@ -180,7 +196,11 @@ export class MemorySection {
     return layers
   }
 
-  /** Compose the section text for the agent behind an assemble scope. */
+  /** Compose the section text for the agent behind an assemble scope.
+   *
+   * Settings are read per call: this is the ONE render function behind the
+   * section callback, the readiness-refresh reconciliation in {@linkcode start},
+   * and every `system-prompt/change` re-render. */
   private render(scope: unknown): string {
     const agent = agentFromScope(scope)
     // Delegated children start fresh (CC Task isolation). The parent prompt
@@ -194,7 +214,7 @@ export class MemorySection {
       const unknown = this.layersFor(agent).some(layer => layer.state === undefined)
       if (unknown) void this.refresh(agent)
     }
-    return renderLayers(this.layersFor(agent))
+    return renderLayers(this.layersFor(agent), this.readSettings())
   }
 
   /**
@@ -279,11 +299,12 @@ export function renderMemorySection(
   workspaceDir: string,
   globalState?: MemoryDirectoryState,
   workspaceState?: MemoryDirectoryState,
+  settings?: Partial<MemorySectionSettings>,
 ): string {
   return renderLayers([
     { scope: 'workspace', label: 'this workspace', dir: workspaceDir, state: workspaceState },
     { scope: 'global', label: 'global', dir: globalDir, state: globalState },
-  ])
+  ], settings)
 }
 
 /**
@@ -303,12 +324,13 @@ export function renderTeamMemorySection(
   globalState?: MemoryDirectoryState,
   workspaceState?: MemoryDirectoryState,
   teamState?: MemoryDirectoryState,
+  settings?: Partial<MemorySectionSettings>,
 ): string {
   return renderLayers([
     { scope: 'workspace', label: 'this workspace', dir: workspaceDir, state: workspaceState },
     { scope: 'team', label: 'team', dir: teamDir, state: teamState },
     { scope: 'global', label: 'global', dir: globalDir, state: globalState },
-  ])
+  ], settings)
 }
 
 /** Render one layer's entrypoint block (heading + truncated body). */
@@ -320,8 +342,20 @@ function renderLayerFragment(layer: MemoryLayer): string {
   return `## ${ENTRYPOINT_NAME} (${layer.label})\n\n${body}`
 }
 
-/** Compose the full section text from the observed layers. */
-export function renderLayers(layers: readonly MemoryLayer[]): string {
+/** Compose the full section text from the observed layers.
+ *
+ * `settings` budgets ONLY the combined topic index block; the section header,
+ * the per-layer fragments (already capped by `truncateEntrypointContent`) and
+ * the search-guidance block render exactly as before.
+ * @param layers - the layers to compose, in workspace/team/global order.
+ * @param settings - the `cc-memory-section` budget override; omitted = the
+ *   design defaults (truncate on, 8192 UTF-8 bytes).
+ * @returns the rendered section.
+ */
+export function renderLayers(
+  layers: readonly MemoryLayer[],
+  settings?: Partial<MemorySectionSettings>,
+): string {
   const workspace = layers.find(layer => layer.scope === 'workspace')
   const global = layers.find(layer => layer.scope === 'global')
   const team = layers.find(layer => layer.scope === 'team')
@@ -347,15 +381,23 @@ export function renderLayers(layers: readonly MemoryLayer[]): string {
   )
   const ordered = [workspace, team, global].filter((layer): layer is MemoryLayer => layer !== undefined)
   lines.push(ordered.map(layer => renderLayerFragment(layer)).join('\n\n'))
-  const index = renderCombinedIndex(ordered)
+  const index = renderCombinedIndex(ordered, resolveMemorySectionSettings(settings))
   if (index.length > 0) lines.push('', ...index)
   const search = renderSearch(ordered)
   if (search.length > 0) lines.push('', ...search)
   return lines.join('\n')
 }
 
-/** A combined topic index with each layer's scope tagged, sorted by filename. */
-function renderCombinedIndex(layers: readonly MemoryLayer[]): string[] {
+/** A combined topic index with each layer's scope tagged, sorted by filename.
+ *
+ * The block (heading + entries) is the ONE budgeted surface: when it exceeds
+ * `settings.maxBytes` the tail entries are dropped whole and a note counts
+ * them; when even one entry plus the note does not fit, the floor form keeps
+ * the heading and the note only. */
+function renderCombinedIndex(
+  layers: readonly MemoryLayer[],
+  settings: MemorySectionSettings,
+): string[] {
   const combined = layers.flatMap(layer =>
     (layer.state?.topics ?? []).map(topic => ({ ...topic, scope: layer.scope })),
   )
@@ -365,7 +407,7 @@ function renderCombinedIndex(layers: readonly MemoryLayer[]): string[] {
     const type = topic.frontmatter.type === undefined ? '' : ` [${topic.frontmatter.type}]`
     return `- [${escapeLinkText(topic.frontmatter.name)}](${topic.filename}) — ${topic.frontmatter.description} (${topic.scope})${type}`
   })
-  return ['## Memory index', '', ...lines]
+  return capMemoryIndex(lines, settings)
 }
 
 function renderSearch(layers: readonly MemoryLayer[]): string[] {

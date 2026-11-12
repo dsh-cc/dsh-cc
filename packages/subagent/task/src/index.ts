@@ -73,6 +73,20 @@ export type {
   EpochTerminal,
 } from './epoch-collector.ts'
 export { mountAgentCatalog } from './catalog.ts'
+export {
+  CATALOG_SETTINGS_NAMESPACE,
+  DEFAULT_CATALOG_SETTINGS,
+  DEFAULT_CATALOG_SETTINGS_SECTION,
+  MAX_CATALOG_ENTRY_BYTES,
+  MAX_CATALOG_MAX_BYTES,
+  MIN_CATALOG_ENTRY_BYTES,
+  MIN_CATALOG_MAX_BYTES,
+  SettingsSchema as CatalogSettingsSchema,
+  catalogSettings,
+  registerCatalogSettings,
+  resolveCatalogSettings,
+} from './catalog-settings.ts'
+export type { CatalogSettings, CatalogSettingsSection } from './catalog-settings.ts'
 export { createOneShotLedger, DEFAULT_ACTIVE_TTL_MS, DEFAULT_ENDED_TTL_MS, INTERNAL_LABELS } from './one-shot-ledger.ts'
 export type { OneShotLedgerRow } from './one-shot-ledger.ts'
 export { mountSubagentChildNotice, foldChildNotice, CHILD_NOTICE_SOURCE_KIND } from './one-shot-notice.ts'

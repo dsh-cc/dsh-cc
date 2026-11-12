@@ -252,3 +252,17 @@ service is mounted.
   the final segment is `lstat`-checked; resolve/containment and the read are
   not atomic) means it must not be enabled in multi-tenant or untrusted-writer
   deployments.
+
+
+## Topic-index byte cap (`cc-memory-section`)
+
+The combined topic index block is capped by `cc-memory-section.max-bytes`
+(default **8192**, bounds 1024..65536; **provisional** until input-ledger
+distribution data lands). Only the index block is capped — header, per-layer
+fragments and the "Searching past context" guidance render byte-identical to an
+uncapped session. Truncation removes whole entries from the bottom of the
+alphabetical list and appends `… (N more memory topics; grep the memory
+directory for older entries)`. Floor rule: if one entry plus the note does not
+fit, the section keeps header + search guidance + note with no entries — the
+budget is a cap above the floor, never below it. `truncate: false` renders the
+index uncapped (the section is never removed).
