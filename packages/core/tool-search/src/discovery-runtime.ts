@@ -184,9 +184,12 @@ interface TransactionSnapshot<S> {
  * handling").
  */
 class DiscoveryFallbackSignal extends Error {
-  constructor(readonly reason: Exclude<DiscoveryFallbackReason, 'off' | 'exact' | 'shadow' | 'invalid'>) {
+  /** Explicit assignment, not a parameter property: keeps the module loadable by Node's strip-only TypeScript mode (the eval script imports it directly). */
+  readonly reason: Exclude<DiscoveryFallbackReason, 'off' | 'exact' | 'shadow' | 'invalid'>
+  constructor(reason: Exclude<DiscoveryFallbackReason, 'off' | 'exact' | 'shadow' | 'invalid'>) {
     super(`tool-discovery: ${reason}`)
     this.name = 'DiscoveryFallbackSignal'
+    this.reason = reason
   }
 }
 

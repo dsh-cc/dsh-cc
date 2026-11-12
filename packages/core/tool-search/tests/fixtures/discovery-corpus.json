@@ -1,10 +1,12 @@
 {
-  "schemaVersion": 1,
-  "description": "Offline evaluation corpus for S1-05 semantic tool discovery. Synthetic and redaction-safe: no real paths, credentials, or model identifiers. The human target set per case is `expectedNames`; `admitted: false` on a candidate means the scope's permission gate denies it, so it must never be admitted to the pool or activated.",
+  "schemaVersion": 2,
+  "corpusVersion": 1,
+  "description": "Offline evaluation corpus for S1-05 semantic tool discovery. Synthetic and redaction-safe: no real paths, credentials, or model identifiers. `class` is the gating dimension (a case may declare `alsoClasses` membership); `subset` stays a legacy filter. Bump `corpusVersion` whenever the cases change. The human target set per case is `expectedNames`; `admitted: false` on a candidate means the scope's permission gate denies it, so it must never be admitted to the pool or activated.",
   "cases": [
     {
       "id": "zh-citations",
       "subset": "chinese",
+      "class": "direct-fit",
       "query": "这篇文章引用了哪些文献",
       "candidates": [
         { "name": "paper_references", "description": "List the works a paper cites, with venue and year.", "searchHint": "references citations bibliography", "lexicalScore": 0 },
@@ -19,6 +21,7 @@
     {
       "id": "zh-bulk-rename",
       "subset": "chinese",
+      "class": "direct-fit",
       "query": "把这几个文件里的旧函数名批量改掉",
       "candidates": [
         { "name": "bulk_file_editor", "description": "Rewrite identifiers across many files under the project root.", "searchHint": "bulk rename edit files", "lexicalScore": 0 },
@@ -33,6 +36,7 @@
     {
       "id": "zh-web-lookup",
       "subset": "chinese",
+      "class": "direct-fit",
       "query": "上网查一下这个库的最新版本",
       "candidates": [
         { "name": "web_search", "description": "Query a search engine and return ranked result links.", "searchHint": "search web online", "lexicalScore": 0 },
@@ -46,6 +50,8 @@
     {
       "id": "zh-table-columns",
       "subset": "chinese",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "把这张 CSV 表格的列顺序重写一遍",
       "candidates": [
         { "name": "table_rewriter", "description": "Reshape a table: reorder, drop, or rename columns.", "searchHint": "table columns reorder", "lexicalScore": 0 },
@@ -60,6 +66,7 @@
     {
       "id": "zh-test-run",
       "subset": "chinese",
+      "class": "direct-fit",
       "query": "跑一下这个目录下的单元测试",
       "candidates": [
         { "name": "test_runner", "description": "Run the unit test suite for a project and report failures.", "searchHint": "tests suite run", "lexicalScore": 0 },
@@ -73,6 +80,8 @@
     {
       "id": "zh-changelog",
       "subset": "chinese",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "根据最近的提交记录生成变更日志",
       "candidates": [
         { "name": "changelog_writer", "description": "Turn commit subjects between two tags into a release changelog.", "searchHint": "changelog release notes", "lexicalScore": 0 },
@@ -86,6 +95,8 @@
     {
       "id": "zh-translate",
       "subset": "chinese",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "把这段 JSON 说明翻译成英文",
       "candidates": [
         { "name": "text_translator", "description": "Translate paragraphs between natural languages.", "searchHint": "translate language", "lexicalScore": 0 },
@@ -99,6 +110,7 @@
     {
       "id": "zh-pdf-captions",
       "subset": "chinese",
+      "class": "direct-fit",
       "query": "把这份扫描件里的图表标题都抽出来",
       "candidates": [
         { "name": "pdf_extractor", "description": "Extract headings, captions, and tables from a PDF.", "searchHint": "pdf extract captions", "lexicalScore": 0 },
@@ -114,6 +126,8 @@
     {
       "id": "syn-sources",
       "subset": "synonym",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "which sources does this article draw on",
       "candidates": [
         { "name": "paper_references", "description": "List the works a paper cites, with venue and year.", "lexicalScore": 0 },
@@ -127,6 +141,8 @@
     {
       "id": "syn-secrets",
       "subset": "synonym",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "strip secrets from the config before sharing",
       "candidates": [
         { "name": "secret_redactor", "description": "Replace secret-looking literals with placeholders before sharing.", "searchHint": "redact secrets scrub credentials", "lexicalScore": 0 },
@@ -140,6 +156,8 @@
     {
       "id": "syn-condense-diff",
       "subset": "synonym",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "condense the changes between two revisions",
       "candidates": [
         { "name": "commit_digest", "description": "Condense the changes between two revisions into a summary.", "searchHint": "digest diff revisions", "lexicalScore": 0 },
@@ -153,6 +171,8 @@
     {
       "id": "syn-resume-later",
       "subset": "synonym",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "pick this back up tomorrow morning",
       "candidates": [
         { "name": "background_queue", "description": "Defer a task to run later and resume it on request.", "searchHint": "defer resume queue", "lexicalScore": 0 },
@@ -166,6 +186,8 @@
     {
       "id": "syn-disk-room",
       "subset": "synonym",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "make some room on the volume",
       "candidates": [
         { "name": "storage_reclaimer", "description": "Free space on the volume by deleting caches and stale artifacts.", "searchHint": "reclaim disk space", "lexicalScore": 0 },
@@ -179,6 +201,8 @@
     {
       "id": "syn-wording",
       "subset": "synonym",
+      "class": "direct-fit",
+      "alsoClasses": ["lexical-trap"],
       "query": "fix the awkward wording in my paragraph",
       "candidates": [
         { "name": "prose_polisher", "description": "Rewrite awkward sentences while keeping the meaning.", "searchHint": "polish prose wording", "lexicalScore": 0 },
@@ -193,6 +217,7 @@
     {
       "id": "none-jazz",
       "subset": "none",
+      "class": "negative-only",
       "query": "recommend a jazz album for the evening",
       "candidates": [
         { "name": "doc_search", "description": "Full-text search across local documentation.", "lexicalScore": 0 },
@@ -206,6 +231,7 @@
     {
       "id": "none-interview-loop",
       "subset": "none",
+      "class": "negative-only",
       "query": "draft an interview loop for a backend engineer",
       "candidates": [
         { "name": "schema_migrator", "description": "Apply pending schema migrations to a database.", "lexicalScore": 0 },
@@ -219,6 +245,7 @@
     {
       "id": "none-weather",
       "subset": "none",
+      "class": "negative-only",
       "query": "will it rain in the mountains this weekend",
       "candidates": [
         { "name": "http_fetcher", "description": "Fetch a URL and return its decoded body.", "lexicalScore": 0 },
@@ -232,6 +259,7 @@
     {
       "id": "none-legal-age",
       "subset": "none",
+      "class": "negative-only",
       "query": "what is the legal drinking age in this country",
       "candidates": [
         { "name": "http_fetcher", "description": "Fetch a URL and return its decoded body; ignores legal notices.", "lexicalScore": 3 },
@@ -246,6 +274,7 @@
     {
       "id": "restricted-log-lookup",
       "subset": "restricted",
+      "class": "lexical-trap",
       "query": "look up the failing request ids in the logs",
       "candidates": [
         { "name": "log_reader", "description": "Read application logs and filter by level or time.", "searchHint": "logs filter request ids", "lexicalScore": 0 },
@@ -260,6 +289,7 @@
     {
       "id": "restricted-env-dump",
       "subset": "restricted",
+      "class": "lexical-trap",
       "query": "dump every environment variable for incident triage",
       "candidates": [
         { "name": "incident_secrets_dump", "description": "Dump process environment including credentials for incident triage.", "lexicalScore": 9, "admitted": false },
