@@ -1,0 +1,131 @@
+# Per-step Input Budget Governor
+
+- Date: 2026-11-12
+- Status: Design — r2 (three-seat blind review r1 folded; verdict was NO-GO; find-by-find address below)
+- Program: context-engineering input governance (doc 1 of 8)
+- Depends on: doc 3 (`@dsh-cc/input-ledger` — row schemas GovernorRow/DedupeRow/CapRow live there; single schema source). Doc 7 plugs into this package's `govern()` pipeline.
+- Literature basis: Mei et al. `C* = argmax U(C) s.t. |C| ≤ L`; ContextPipe (2609.00749); Anthropic "smallest high-signal token set"; ToolMenuBench.
+
+## Problem
+
+Eleven-plus producers append content into the per-step message stream with no byte budget, no arbitration, and no cross-producer visibility (`memory` recall bodies with no byte cap at `memory/src/recall.ts:410`, cc-shell glue notices, retry-attendant guidance, advisor severity notes, subagent lifecycle notices, MCP-ready notice, progress briefs, hook additionalContext). The only existing cap is a per-kind **count** inside one producer (`turn-rules` `MAX_INJECTIONS = 32`, `turn-rules/src/wiring.ts:26`).
+
+## Goals / Non-goals
+
+Goals:
+
+1. A single outermost gate over the final per-step enter batch, enforcing class-based byte budgets.
+2. Deterministic trim/defer/expire behavior for budgetable classes; never-touched classes by construction.
+3. Full auditability in the input ledger (doc 3).
+4. Ships observe-first with an isolated shadow-state model that cannot affect real flow.
+
+Non-goals:
+
+- **Unknown source kinds are never trimmed.** The gate touches only explicitly enumerated kinds (r1 fold: my original "unknown → advisory" classification was inverted into deferrable by default, which two seats flagged as dangerous: it would silently trim `agent-instructions` workspace rules and hook additionalContext as they currently flow).
+- No rewrites of message content, no reordering of admitted messages.
+- No system-prompt governance (doc 4), no persisted-transcript governance (doc 2).
+- No LLM triage.
+- No notice dedupe itself (doc 7 implements that in this same package).
+
+## Current behavior (anchors)
+
+- `agent/pre-step` payload is `{ agent, messages, turn, step, signal }`; `messages` is the claimed inbox batch for this step. `PreStepDecision`: `{kind:'enter', messages: UserMessage[]}` | `{kind:'reject'}`; rewriting = returning `{...decision, messages: newArray}` (append precedent `mcpReadyNotice.ts:157-163`; filter precedent `strip-instructions.ts:71-77`).
+- Durable injected messages (`agent.inject`) re-surface inside a later step's claimed batch, so a final pre-step gate sees them with no extra plumbing.
+- Prepend semantics: `prepend: true` listeners are **unshifted** (run earliest in the waterfall); among prepended listeners, later registration is outermost. Plain (non-prepend) listeners execute in registration order after all prepended ones. On the way back out of `next()`, the outermost listener sees the final decision produced by everything inside it. Verified against the actual registrations: `hooks-claude-code` `agent/pre-step` is registered **plain** (`hooks-claude-code/src/register-events.ts:90-97` — only its `tools/pre-execute` at `:102-130` is prepended); `mcpReadyNotice` and `one-shot-notice` are plain; `strip-instructions` is prepended but subagent-scoped (`strip-instructions.ts:70-77`). The r1 draft's claim that hooks/mcpReady prepend and its `agent.cordis.yml:416-418` row anchor were both false (that file is a 32-line wrapper; the shared `agent.shared.cordis.yml:410-418` lines are isolate keys, not pre-step rows).
+- Dynamically mounted listeners exist: the moa sanitizer installs a prepended pre-step listener per agent via TUI-time `installModelSelectionWithSanitizer` (`ui/tui/src/harness/model-selection-wiring.ts:16-19`) — after preset mount, therefore outer than any preset listener. Anything registered similarly late is outside the governor's view **by construction** (documented and accepted: classes default to passthrough, so outside-governor content is never harmed).
+- `agent-instructions` baseline content is spliced into the enter batch by harness (`context/agent-instructions/src/index.ts:330-355` in the pinned copy) with `source.kind === 'agent-instructions'`; hook additionalContext arrives with kind from hooks (`turn-safety.ts:157-160`). Both must be classed never-trim.
+- Real top-level kinds in use (r1 audit, corrected): `user`, `memory`, `turn-rules`, `edit-recovery-hint`, `moa`, `progress-rebuild`, `cc-shell-glue`, `cc-subagent-children`, `advisor`, `retry-attendant`, `completion-gate`, `permission-rules`, `compaction-micro`, `compaction-cost-gate`, `agent-instructions`, `compact-checkpoint`, `hooks-claude-code`, `subagent-settled`.
+
+## Design
+
+### Package & seam
+
+New package `packages/context/input-budget` (`@dsh-cc/input-budget`). One `agent/pre-step` waterfall listener: `{ prepend: true }`, delegate-first, mounted from the preset row during preset apply. Because prepending unshifts and later prepend = outer, and no prepended global pre-step rewriter exists at preset-mount time (verified list above), the governor is outermost among preset-mounted pre-step rewriters. Three ordering defenses:
+
+1. Composition.spec pin: the governor's preset row and the producer rows it guards against.
+2. Live-fold test: a synthetic plain (non-prepend) producer appending a marker message is still visible to the governor's final batch (guards the prepend/unshift contract).
+3. Live-fold test: a synthetic late-registered prepended listener lands **outside** the governor (asserts the documented by-construction visibility boundary stays a property, not an accident).
+
+### Classes (explicit membership only)
+
+| class | kinds (explicit) | policy |
+|---|---|---|
+| governance | `turn-rules`, `edit-recovery-hint`, `completion-gate`, `permission-rules`, `agent-instructions`, `hooks-claude-code`, `compact-checkpoint` | never trim, never defer; counted |
+| task | `user`, `progress-rebuild`, `moa`, `subagent-settled` | never trim, never defer; counted (`subagent-settled` wakes the parent after settlement — dropping it loses the wake; classified via the doc-7 r1 review) |
+| memory | `memory` | trim/defer under `memory-budget-bytes` (its own budget, not the advisory pool) |
+| advisory | `cc-shell-glue`, `cc-subagent-children`, `advisor`, `retry-attendant`, `compaction-micro`, `compaction-cost-gate` | trim/defer under `advisory-budget-bytes` |
+| passthrough | **everything else / unknown** | never trim, never defer; counted |
+
+A startup enumeration test asserts every kind declared in `MessageSourceMap` augmentations across the repo is covered by the map (guard against silent passthrough growth, r1 finding).
+
+### Budget model (per enter batch)
+
+1. Classify each message; compute per-class bytes.
+2. governance/task/passthrough: never modified.
+3. `memory` class: if memory bytes > `memory-budget-bytes` (default **16384**), trim oldest memory messages (recall delivers whole-topic bodies; trimming is whole-message, FIFO) until within budget. Trimmed entries go to the same defer queue as advisory (memory recall re-fires anyway on subsequent matches; dropping loses little).
+4. Advisory budget: FIFO-oldest trim until `advisoryBytes ≤ advisory-budget-bytes` (default **8192**).
+5. Enter budget: if total > `enter-budget-bytes` (default **24576**), trim advisory (then memory) further; if budget cannot be met within trimmable classes, admit everything, set `hardOver: true`, trim nothing from protected classes (row records the overflow).
+
+### Defer queue (deterministic algorithm, r1 fold)
+
+Per-session `Deque<DeferredEntry>` where entry = `{ message, enqueuedAtStep, lastOfferedStep }`.
+
+On each gate invocation (in order):
+
+1. Age: for each entry, `lastOfferedStep` older than `step - deferTtlSteps` (default 3) → drop, row action `drop-expired`.
+2. Backlog admission: walk backlog FIFO; admit head while the class budget has room; bytes over `advisory-budget-bytes` alone → drop `drop-oversize` immediately (one sentence in ledger row). Admitted entries are appended to this step's batch (they only re-enter via the governor's own return value — not via `agent.inject`, so no new claimed batches form).
+3. Fresh classification/trim (per Budget model); trimmed messages append to backlog tail.
+
+Rationale: backlog-first respects FIFO aging; never reordering admitted messages beyond trim bookkeeping. TTL counts governor invocations where the entry waited, not admitted — stated bluntly so two implementers cannot diverge.
+
+### Observe mode (r1 fold: isolated shadow state)
+
+`mode: 'observe'` runs the same computation against the real batch but **must not assume divergent history**: a defer that never happened in observe has no next-step admission pending. Therefore:
+
+- The defer queue exists in enforce mode only. In observe mode, per-invocation rows report `wouldTrim` (fresh batch decisions) and `wouldDefer`-style counters for the current batch **without maintaining simulated backlog state**.
+- Multi-step defer-impossibility claims (e.g. "TTL expiry rows in observe") are explicitly out: `drop-expired`/`drop-oversize` rows appear only in enforce mode. R1 finding accepted — scheduled-defer parity cannot be simulated from a one-sided world, and simulating it risks double-delivery illusions.
+- On `observe → enforce` flip, the queue starts empty at the flip boundary (no cross-mode carryover).
+
+### GovernorRow
+
+Defined in doc 3 (single schema source). This package only supplies `mode`, `bytesByClass`, `trimmed`, `offeredBacklog`, `hardOver`, `error?`. When the ledger package is absent/disabled, the governor still runs; rows are simply not persisted (append API tolerates missing sink, `onError` counts).
+
+### Settings — `cc-input-budget` (kebab, user-layer, hot-read)
+
+| key | type | default | bounds |
+|---|---|---|---|
+| `enabled` | bool | true | — |
+| `mode` | `'observe' \| 'enforce'` | `'observe'` | — (flip boundary resets defer queue) |
+| `enter-budget-bytes` | int | 24576 | 4096..262144 |
+| `advisory-budget-bytes` | int | 8192 | 512..65536 |
+| `memory-budget-bytes` | int | 16384 | 1024..131072 |
+| `defer-ttl-steps` | int | 3 | 1..16 |
+
+Four-surface default discipline + "no settings file → observe mode runs" wiring test.
+
+### Failure semantics
+
+Governor exception → return the unmodified decision, row `{ error: true }`. Never drops protected classes, never throws.
+
+## Dependencies & interactions
+
+- Doc 3 ledger for rows (soft dependency: governor works without it if the package is not mounted).
+- Doc 7 (dedupe/caps) plugs into the same listener (`govern()` order: dedupe → caps → budget trim).
+- Doc 4 section budgets are orthogonal (assemble-time, this is batch-time).
+- moa dynamically-installed sanitizer sits outside the governor (documented property, test-pinned).
+
+## Verification
+
+- Unit: class map completeness assert vs repo kind declarations; FIFO trim; backlog admission aging (each aged case: backlog/fresh/oversize/reject); observe/enforce row parity for fresh-batch fields only; flip-boundary queue reset; hard-over.
+- Integration: producer-chain live-fold tests (the two ordering defenses above); a 3-step sequence with defer/TTL progression end-to-end.
+- Live acceptance: two weeks observe mode; ledger answers real per-class bytes p50/p95, would-fire rates per class; those numbers set enforce-time budget floors before flipping.
+
+## Risks
+
+- Advisory starvation under sustained overload: described; doc 7's per-kind caps bound the worst offenders before the budget has to arbitrate strangers.
+- Late-registered prepended listeners bypass the governor: by construction, documented, and class-default passthrough means they cannot be trimmed by surprise.
+- Observe-mode fields are "fresh-batch only": reviewers of flip decisions must not read defer-family rows in observe data (documented in the row schema).
+
+## R1 fold ledger (three seats: internal critic, grok, codex)
+
+Folded: kind classification inversion (unknown → passthrough; audited advisory list; `agent-instructions`/`hooks-claude-code` explicitly governance); `progress-brief` → `progress-rebuild` correction + moa classified; ordering section rewritten against real prepend semantics with three tested defenses and dynamic-listener boundary; memory gets its own budget class (r1: the cited biggest producer was never budgeted); deterministic defer algorithm; observe-mode shadow-state model with flip-boundary reset and no simulated backlog; GovernorRow schema ownership moved to doc 3; startup kind-enumeration guard test; settings authority/bounds/hot semantics.
