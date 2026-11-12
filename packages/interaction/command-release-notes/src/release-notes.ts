@@ -17,6 +17,11 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.10.0-rc.1
+
+- fix(release): write the /release-notes section in the version-bump commit (#395)
+- fix(memory): keep the Chinese no-relevant queries off the corpus vocabulary (#396)
+
 ## 0.9.5-rc.1 — defaults, SystemOne decisions and fixes
 
 - **Defaults** — the completion gate, turn rules (judged and repeat
