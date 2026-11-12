@@ -17,7 +17,19 @@ import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { AgentProvider } from '@dsh-cc/plugin-loader'
 import { AgentRegistry } from '../src/registry.ts'
 import { PluginAgentIndex } from '../src/plugin-agents.ts'
-import { mountAgentCatalog, CATALOG_SECTION_NAME } from '../src/catalog.ts'
+import {
+  AgentCatalogSection,
+  mountAgentCatalog,
+  renderCatalog,
+  CATALOG_SECTION_NAME,
+} from '../src/catalog.ts'
+import {
+  DEFAULT_SUBAGENT_CATALOG_SETTINGS,
+  SUBAGENT_CATALOG_NAMESPACE,
+  registerSubagentCatalogSettings,
+  resolveSubagentCatalogSettings,
+} from '../src/catalog-settings.ts'
+import type { SubagentCatalogSettings } from '../src/catalog-settings.ts'
 import type { SubagentsLike } from '../src/background-start.ts'
 
 const tmpRoots: string[] = []
@@ -427,6 +439,268 @@ describe('AgentCatalog assemble waterfall', () => {
     // Must settle promptly (a listener that awaited would hang this test).
     expect(await textOf(undefined)).toBe('')
     expect(await textOf({})).toBe('')
+    await ctx.fiber.dispose()
+  })
+})
+
+/**
+ * The `cc-subagent-catalog` byte budget (design
+ * docs/plans/2026-11-12-selective-system-prompt-sections.md §B): every size
+ * is a UTF-8 byte count, every slice cuts on char boundaries, names survive
+ * down to the names-only collapse, and the oversized-names floor is the ONLY
+ * form that drops names — always with the documented overflow line.
+ */
+describe('renderCatalog byte budget', () => {
+  /** A roster line with a byte-measurable whenToUse. */
+  const defOf = (agentType: string, whenToUse: string): AgentDefinition =>
+    ({ agentType, whenToUse }) as AgentDefinition
+
+  /** `count` agents with `textLength`-byte ASCII whenToUse each. */
+  const roster = (count: number, textLength: number): AgentDefinition[] =>
+    Array.from({ length: count }, (_, i) =>
+      defOf(`agent-${String(i).padStart(2, '0')}`, 'x'.repeat(textLength)))
+
+  const bytesOf = (text: string): number => Buffer.byteLength(text, 'utf8')
+  const HEADER = '## Available subagents'
+  const TRAILER = 'To delegate to one, pass its name as the `subagent_type` argument of the Task tool.'
+  const legacy = (defs: readonly AgentDefinition[]): string =>
+    [HEADER, '', ...defs.map(def => `- ${def.agentType} — ${def.whenToUse}`), '', TRAILER].join('\n')
+  const NAMES_ONLY_NOTE = /… \(\d+ more agents listed by name only\)/
+  const FLOOR_NOTE = /… \(\d+ more agents omitted by cc-subagent-catalog\.max-bytes; the catalog's usage line stays\)/
+  const settings = (over: Partial<SubagentCatalogSettings> = {}): SubagentCatalogSettings =>
+    ({ ...DEFAULT_SUBAGENT_CATALOG_SETTINGS, ...over })
+
+  /** Text portion of the first roster line (after the `— ` separator). */
+  const textOfFirstLine = (rendered: string): string => {
+    const line = rendered.split('\n').find(entry => entry.startsWith('- ')) ?? ''
+    return line.slice(line.indexOf('—') + 2)
+  }
+
+  it('renders byte-identical text when the roster fits the cap', () => {
+    const defs = roster(5, 30)
+    expect(renderCatalog(defs, settings())).toBe(legacy(defs))
+  })
+
+  it('keeps every agentType name while truncating entry text (pass 1)', () => {
+    const defs = roster(10, 400)
+    const rendered = renderCatalog(defs, settings({ maxBytes: 1024, minEntryBytes: 20 }))
+    expect(bytesOf(rendered)).toBeLessThanOrEqual(1024)
+    for (const def of defs) expect(rendered).toContain(def.agentType)
+    // Pass 1 truncates text only: no names-only line, no names dropped.
+    expect(rendered).not.toMatch(NAMES_ONLY_NOTE)
+    expect(rendered).not.toMatch(FLOOR_NOTE)
+    expect(rendered).toContain(HEADER)
+    expect(rendered).toContain(TRAILER)
+  })
+
+  it('honours the min-entry-bytes floor for the per-entry slice', () => {
+    const defs = roster(10, 400)
+    const small = renderCatalog(defs, settings({ maxBytes: 1024, minEntryBytes: 20 }))
+    const large = renderCatalog(defs, settings({ maxBytes: 1024, minEntryBytes: 400 }))
+    // min-entry-bytes: 400 binds, so a kept entry's text is exactly 400 bytes.
+    expect(bytesOf(textOfFirstLine(large))).toBe(400)
+    expect(bytesOf(textOfFirstLine(small))).toBeLessThan(400)
+    // A larger floor leaves room for fewer full entries: the tail collapses.
+    expect(small).not.toMatch(NAMES_ONLY_NOTE)
+    expect(large).toMatch(NAMES_ONLY_NOTE)
+    for (const rendered of [small, large]) expect(bytesOf(rendered)).toBeLessThanOrEqual(1024)
+  })
+
+  it('slices a CJK whenToUse on char boundaries without overflowing the cap', () => {
+    const cjkText = '日本語の説明'.repeat(60)
+    const rendered = renderCatalog([defOf('cjk-agent', cjkText)], settings({ maxBytes: 1024, minEntryBytes: 20 }))
+    expect(bytesOf(rendered)).toBeLessThanOrEqual(1024)
+    // A char-boundary cut can never produce U+FFFD or split a 3-byte sequence.
+    expect(rendered).not.toContain('\uFFFD')
+    const sliced = textOfFirstLine(rendered)
+    expect(bytesOf(sliced) % 3).toBe(0)
+    // The slice is a true prefix of the original text, not a re-encoding.
+    expect(cjkText.startsWith(sliced)).toBe(true)
+  })
+
+  it('collapses the tail into one names-only line when the cap still bites (pass 2)', () => {
+    const defs = roster(60, 100)
+    const rendered = renderCatalog(defs, settings({ maxBytes: 1024, minEntryBytes: 40 }))
+    expect(bytesOf(rendered)).toBeLessThanOrEqual(1024)
+    // Name preservation: the collapse lists EVERY remaining agentType.
+    for (const def of defs) expect(rendered).toContain(def.agentType)
+    expect(rendered).toMatch(NAMES_ONLY_NOTE)
+    expect(rendered).not.toMatch(FLOOR_NOTE)
+    expect(rendered).toContain(TRAILER)
+  })
+
+  it('drops names only through the documented oversized-names floor line', () => {
+    const names = Array.from({ length: 8 }, (_, i) => `${'n'.repeat(400)}-${i}`)
+    const defs = names.map(name => defOf(name, 'text'))
+    const rendered = renderCatalog(defs, settings({ maxBytes: 1024, minEntryBytes: 40 }))
+    expect(bytesOf(rendered)).toBeLessThanOrEqual(1024)
+    const kept = names.filter(name => rendered.includes(name)).length
+    expect(kept).toBeLessThan(names.length)
+    // The dropped count is spelled out, never silent.
+    const note = FLOOR_NOTE.exec(rendered)
+    expect(note).not.toBeNull()
+    expect(note?.[0]).toContain(`${names.length - kept} more agents omitted`)
+    expect(rendered).toContain(TRAILER)
+  })
+
+  it('renders the roster uncapped when truncate is false', () => {
+    const defs = roster(60, 100)
+    const rendered = renderCatalog(defs, settings({ truncate: false, maxBytes: 1024, minEntryBytes: 40 }))
+    expect(rendered).toBe(legacy(defs))
+    expect(bytesOf(rendered)).toBeGreaterThan(1024)
+  })
+
+  it('treats the one-argument form as the design defaults', () => {
+    const defs = roster(60, 100)
+    expect(renderCatalog(defs)).toBe(renderCatalog(defs, DEFAULT_SUBAGENT_CATALOG_SETTINGS))
+  })
+
+  it('never exceeds max-bytes over random rosters (non-floor and floor alike)', () => {
+    let seed = 7
+    const next = (): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      return seed / 0x7fffffff
+    }
+    const pools = ['abcdefghij', '日本語の説明文章', '🙂🙃🚀', 'ascii + 漢字 + 🙂']
+    const limits = [1024, 1500, 4096, 8192, 20000]
+    const floors = [20, 40, 200, 400]
+    /** Pick one element with the seeded PRNG (index access is bounds-safe here). */
+    const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)] as T
+    for (let round = 0; round < 120; round++) {
+      const count = 1 + Math.floor(next() * 40)
+      const defs = Array.from({ length: count }, (_, i) => {
+        const pool = pick(pools)
+        let name = ''
+        const nameBytes = 1 + Math.floor(next() * (next() < 0.1 ? 120 : 18))
+        while (bytesOf(name) < nameBytes) name += pick([...pool])
+        let text = ''
+        const textBytes = Math.floor(next() * 500)
+        while (bytesOf(text) < textBytes) text += pick([...pool])
+        return defOf(`${name}-${i}`, text)
+      }).sort((a, b) => a.agentType.localeCompare(b.agentType))
+      const maxBytes = pick(limits)
+      const rendered = renderCatalog(defs, {
+        truncate: true,
+        maxBytes,
+        minEntryBytes: pick(floors),
+      })
+      expect(bytesOf(rendered)).toBeLessThanOrEqual(maxBytes)
+      expect(rendered).toContain(HEADER)
+      expect(rendered).toContain(TRAILER)
+      // A names-only collapse still carries every name; only the floor drops.
+      if (rendered.match(NAMES_ONLY_NOTE)) {
+        for (const def of defs) expect(rendered).toContain(def.agentType)
+      }
+      const floor = FLOOR_NOTE.exec(rendered)
+      const dropped = defs.filter(def => !rendered.includes(def.agentType)).length
+      if (dropped > 0) {
+        expect(floor).not.toBeNull()
+        expect(floor?.[0]).toContain(`${dropped} more agents omitted`)
+      }
+    }
+  })
+})
+
+/**
+ * The `cc-subagent-catalog` settings namespace: the live reader (per-use
+ * re-read, defaults without a provider) and the per-render threading through
+ * the shared `render()` so the ordinary path, the readiness re-render and the
+ * `system-prompt/change` re-render all honour a mid-session settings write.
+ */
+describe('cc-subagent-catalog settings', () => {
+  /**
+   * Minimal provider double mirroring the real provider's resolution contract
+   * closely enough for the reader: `register` resolves the section through the
+   * schema and `get` returns the latest resolved value.
+   */
+  function fakeProvider(): {
+    provider: {
+      register: (ns: string, schema: (input: unknown) => unknown) => { get: () => unknown }
+      get: (ns: string) => unknown
+    }
+    update: (section: Record<string, unknown>) => void
+  } {
+    let schema: ((input: unknown) => unknown) | undefined
+    let resolved: unknown
+    const resolve = (section: Record<string, unknown>): unknown => {
+      if (schema === undefined) throw new Error('no registration')
+      return schema(section)
+    }
+    return {
+      provider: {
+        register(ns, incoming) {
+          if (schema !== undefined) throw new Error(`settings namespace "${ns}" is already registered`)
+          schema = incoming
+          resolved = resolve({})
+          return { get: () => resolved }
+        },
+        get() {
+          return resolved
+        },
+      },
+      update(section) {
+        resolved = resolve(section)
+      },
+    }
+  }
+
+  it('reads the design defaults without a settings provider', () => {
+    const ctx = { get: () => undefined, inject: () => { throw new Error('no provider to inject') } }
+    const read = registerSubagentCatalogSettings(ctx as never)
+    expect(read()).toEqual(DEFAULT_SUBAGENT_CATALOG_SETTINGS)
+    expect(DEFAULT_SUBAGENT_CATALOG_SETTINGS).toEqual({ truncate: true, maxBytes: 8192, minEntryBytes: 40 })
+  })
+
+  it('names the namespace exactly `cc-subagent-catalog`', () => {
+    expect(SUBAGENT_CATALOG_NAMESPACE).toBe('cc-subagent-catalog')
+  })
+
+  it('maps the kebab-case section onto the camelCase settings', () => {
+    expect(resolveSubagentCatalogSettings({
+      truncate: false,
+      'max-bytes': 2048,
+      'min-entry-bytes': 200,
+    })).toEqual({ truncate: false, maxBytes: 2048, minEntryBytes: 200 })
+  })
+
+  it('resolves an absent section and an absent key to the defaults', () => {
+    expect(resolveSubagentCatalogSettings(undefined)).toEqual(DEFAULT_SUBAGENT_CATALOG_SETTINGS)
+    expect(resolveSubagentCatalogSettings({})).toEqual(DEFAULT_SUBAGENT_CATALOG_SETTINGS)
+  })
+
+  it('keeps the live reader hot: a settings write lands on the next read', () => {
+    const { provider, update } = fakeProvider()
+    const read = registerSubagentCatalogSettings({ get: (name: string) => name === 'settings' ? provider : undefined } as never)
+    expect(read()).toEqual(DEFAULT_SUBAGENT_CATALOG_SETTINGS)
+    update({ 'max-bytes': 1024, 'min-entry-bytes': 400 })
+    expect(read()).toEqual({ truncate: true, maxBytes: 1024, minEntryBytes: 400 })
+  })
+
+  it('re-reads the budget on every render (hot getter through the shared render path)', async () => {
+    const ws = freshDir('ws')
+    for (let i = 0; i < 12; i++) writeAgent(ws, `agent-${String(i).padStart(2, '0')}`, 'd'.repeat(300))
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const registry = new AgentRegistry()
+    let live: SubagentCatalogSettings = { truncate: true, maxBytes: 1024, minEntryBytes: 40 }
+    new AgentCatalogSection(ctx, registry, undefined, () => live).start()
+    const textOf = async (): Promise<string> => {
+      const assembly = await ctx.systemPrompt.assemble({ scope: agentAt(ws) })
+      return assembly.sections.find(section => section.name === CATALOG_SECTION_NAME)?.text ?? ''
+    }
+    await vi.waitFor(async () => {
+      expect(await textOf()).toContain('agent-00')
+    }, { timeout: 2000 })
+
+    const capped = await textOf()
+    expect(Buffer.byteLength(capped, 'utf8')).toBeLessThanOrEqual(1024)
+
+    // The same section instance, no re-mount: the next assembly renders with
+    // the new budget.
+    live = { truncate: false, maxBytes: 1024, minEntryBytes: 40 }
+    const uncapped = await textOf()
+    expect(Buffer.byteLength(uncapped, 'utf8')).toBeGreaterThan(1024)
+    expect(uncapped).toContain('d'.repeat(300))
     await ctx.fiber.dispose()
   })
 })

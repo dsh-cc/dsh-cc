@@ -167,6 +167,39 @@ backend provider names (`fork`/`spawn`/`codex`/`claude-code`) as if they were ad
 agent types; bare plugin agent names are not addressable either — only `plugin:agent`
 scoped ids are.
 
+### Catalog byte budget (`cc-subagent-catalog`)
+
+The rendered catalog is capped in UTF-8 **bytes** (`Buffer.byteLength`, never
+`text.length`), so a CJK `whenToUse` cannot overflow the budget by being counted in
+characters. The cap is a pure function of `(defs, settings)`; the ordinary render, the
+500 ms first-assembly readiness re-render and the `system-prompt/change` re-render all
+read the live settings on every render, so a settings write applies to the next assembly.
+
+| key | type | default | bounds |
+|---|---|---|---|
+| `truncate` | bool | `true` | explicit on/off; `false` renders the roster uncapped |
+| `max-bytes` | int | `8192` (**provisional**) | `1024..65536` |
+| `min-entry-bytes` | int | `40` | `20..400` |
+
+When the uncapped roster exceeds `max-bytes`:
+
+1. **Pass 1 — names stay, text is sliced.** Every `agentType` name is kept; each
+   `whenToUse` is truncated to `max(min-entry-bytes, floor((max-bytes − reserved) / N))`
+   bytes, `reserved` being the header, the trailer and the names-only note. Slices cut on
+   char boundaries only: a multi-byte sequence is never split.
+2. **Pass 2 — names-only collapse.** If pass 1 still overflows, the first K entries keep
+   their truncated text and the remaining agents collapse into one names-only line plus
+   `… (N more agents listed by name only)`. K is the largest count that fits, over the
+   **alphabetical** roster — stated as alphabetical, not a relevance claim.
+3. **Oversized-names floor.** If even the names-only render overflows, the names line
+   itself gives way and carries `… (N more agents omitted by cc-subagent-catalog.max-bytes;
+   the catalog's usage line stays)`. Whole names are dropped there and only there — never
+   silently — and the usage (trailer) line always stays.
+
+`truncate: false` restores the pre-budget behavior (the full roster). `8192` is a
+provisional default: it is re-tuned from the assemble-row byte distribution (doc 3)
+after a release of data.
+
 ## Isolated worktree (`isolation: worktree`)
 
 A definition whose frontmatter pins `isolation: worktree` is dispatched into a per-child
@@ -262,7 +295,15 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
 - `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL` (`./release-agent`) — register the
   `release_agent` release-valve tool (dropped-return mount, F16 precedent).
 - `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER` (`./catalog`) —
-  mount the `Available subagents` section.
+  mount the `Available subagents` section; also registers the `cc-subagent-catalog`
+  settings namespace.
+- `renderCatalog` (`./catalog`) — the pure catalog renderer, `renderCatalog(defs, settings?)`;
+  the settings argument defaults to `DEFAULT_SUBAGENT_CATALOG_SETTINGS`.
+- `registerSubagentCatalogSettings` / `SUBAGENT_CATALOG_NAMESPACE` /
+  `DEFAULT_SUBAGENT_CATALOG_SETTINGS` (`./catalog-settings`) — the `cc-subagent-catalog`
+  namespace (live reader; design defaults without a settings provider).
+- `renderCatalogBudgeted` / `truncateToBytes` (`./catalog-budget`) — the pure UTF-8 byte
+  budgeting core (import-free at runtime).
 - `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`
   (`./strip-instructions`) — mount (or classify for) the pre-step strip of the harness
   `agent-instructions` workspace baseline on delegated Task children.

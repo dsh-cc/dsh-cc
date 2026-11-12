@@ -74,6 +74,24 @@ To delegate to one, pass its name as the `subagent_type` argument of the Task to
 
 由于 section 文本是同步组装的而发现是异步的，未知工作区的首次组装会显示空，随后 discovery 落地后触发 `system-prompt/change`，重组即显示目录。当工作区未定义任何 agent（或没有可 scope 的 agent）时，section 渲染空串并从提示词中消失。目录列出文件定义以及按 scoped id 呈现的插件 agent——刻意**不**把 seam 后端 provider 名（`fork`/`spawn`/`codex`/`claude-code`）当作可寻址的 agent 类型来枚举；裸插件 agent 名同样不可寻址——只有 `plugin:agent` scoped id 可以。
 
+### 目录字节预算（`cc-subagent-catalog`）
+
+渲染出的目录按 UTF-8 **字节**封顶（`Buffer.byteLength`，绝不用 `text.length`），因此 CJK 的 `whenToUse` 不会因为按字符计数而溢出预算。上限是 `(defs, settings)` 的纯函数；普通渲染、500 ms 首次组装就绪重渲染与 `system-prompt/change` 重渲染都在每次渲染时读取实时设置，因此一次设置写入会在下一次组装生效。
+
+| 键 | 类型 | 默认 | 范围 |
+|---|---|---|---|
+| `truncate` | bool | `true` | 显式开关；`false` 渲染不封顶的完整目录 |
+| `max-bytes` | int | `8192`（**暂定**） | `1024..65536` |
+| `min-entry-bytes` | int | `40` | `20..400` |
+
+当未封顶的目录超过 `max-bytes` 时：
+
+1. **第一遍——名字全保留，文本切片。** 每个 `agentType` 名字都保留；每个 `whenToUse` 截断到 `max(min-entry-bytes, floor((max-bytes − reserved) / N))` 字节，`reserved` 为 header、trailer 与 names-only 提示行。切片只在字符边界切：多字节序列绝不被劈开。
+2. **第二遍——names-only 折叠。** 若第一遍仍超限，前 K 条保留截断后的文本，其余 agent 折叠成一行仅名字列表加 `… (N more agents listed by name only)`。K 是能容纳的最大条数，按**字母序**——明说是字母序，不是相关性排序。
+3. **超长名字兜底。** 若连 names-only 渲染都超限，则名字行本身让位，并携带 `… (N more agents omitted by cc-subagent-catalog.max-bytes; the catalog's usage line stays)`。只有这里、也仅在这里丢弃名字（整名丢弃，绝不静默），用法（trailer）行永远保留。
+
+`truncate: false` 恢复预算前的行为（完整目录）。`8192` 是暂定默认值：等 assemble-row 字节分布（doc 3）积累一个版本的数据后再调。
+
 ## 隔离工作树（`isolation: worktree`）
 
 frontmatter 钉了 `isolation: worktree` 的定义会被派发到 per-child 的 git worktree，而不是父工作树（`docs/plans/2026-09-14-cc-worktree-parity.md` WS-3）：
@@ -112,7 +130,10 @@ harness 的 `agent-instructions` 插件会在**每个**会话（包括 Task chil
 - `registerTaskTool` / `TASK_TOOL`（`./tool`）— 注册 `subagent_fork` Task 工具。
 - `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL`（`./release-agent`）— 注册
   `release_agent` 释放阀工具（挂载遵循丢弃返回值的 F16 先例）。
-- `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER`（`./catalog`）— 挂载 `Available subagents` section。
+- `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER`（`./catalog`）— 挂载 `Available subagents` section；同时注册 `cc-subagent-catalog` 设置命名空间。
+- `renderCatalog`（`./catalog`）— 纯目录渲染器 `renderCatalog(defs, settings?)`；设置参数缺省时取 `DEFAULT_SUBAGENT_CATALOG_SETTINGS`。
+- `registerSubagentCatalogSettings` / `SUBAGENT_CATALOG_NAMESPACE` / `DEFAULT_SUBAGENT_CATALOG_SETTINGS`（`./catalog-settings`）— `cc-subagent-catalog` 命名空间（实时读取；无 settings provider 时读设计默认值）。
+- `renderCatalogBudgeted` / `truncateToBytes`（`./catalog-budget`）— 纯 UTF-8 字节预算内核（运行时零依赖）。
 - `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`（`./strip-instructions`）— 挂载（或为测试分类）pre-step 剥离监听器，把 harness `agent-instructions` 工作区基线从被委派的 Task child 中移除。
 - `dispatchWorktreeIsolation` / `mountWorktreeIsolation` / `SubagentWorktreeRegistry`（`./worktree-isolation`）— `isolation: worktree` 的 create/adopt/settle/lock 生命周期（git 命令构造在 `@dsh-cc/tool-git-worktree`，绝不重复实现）。
 
