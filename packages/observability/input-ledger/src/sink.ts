@@ -61,23 +61,40 @@ export function sessionLedgerPath(dshHome: string, projectKey: string, sessionId
  *   straight through.
  * @param row - the row to persist.
  * @param onError - optional extra sink for the swallowed error.
+ * @param maxRowsPerFile - row cap before rotation; defaults to
+ *   {@link DEFAULT_MAX_ROWS_PER_FILE} and is narrowed by the
+ *   `cc-input-ledger.max-rows-per-file` setting.
  */
 export async function appendLedgerRow(
   filePath: string | undefined,
   row: LedgerRow,
   onError?: LedgerErrorSink,
+  maxRowsPerFile: number = DEFAULT_MAX_ROWS_PER_FILE,
 ): Promise<void> {
   if (filePath === undefined) return
   const target = filePath
-  const write = (): Promise<void> => writeRow(target, row, onError)
+  const cap = rowsCapOf(maxRowsPerFile)
+  const write = (): Promise<void> => writeRow(target, row, cap, onError)
   const prev = writeChains.get(target) ?? Promise.resolve()
   const next = prev.then(write, write)
   writeChains.set(target, next)
   await next
 }
 
+/** Coerce a caller-supplied row cap: a non-finite or sub-1 value falls back to the default. */
+function rowsCapOf(maxRowsPerFile: number): number {
+  if (!Number.isFinite(maxRowsPerFile)) return DEFAULT_MAX_ROWS_PER_FILE
+  const cap = Math.trunc(maxRowsPerFile)
+  return cap < 1 ? DEFAULT_MAX_ROWS_PER_FILE : cap
+}
+
 /** One serialized append; the only place the rotation rule is applied. */
-async function writeRow(filePath: string, row: LedgerRow, onError?: LedgerErrorSink): Promise<void> {
+async function writeRow(
+  filePath: string,
+  row: LedgerRow,
+  maxRowsPerFile: number,
+  onError?: LedgerErrorSink,
+): Promise<void> {
   let failed = false
   const report = (error: unknown): void => {
     failed = true
@@ -91,7 +108,7 @@ async function writeRow(filePath: string, row: LedgerRow, onError?: LedgerErrorS
   }
   try {
     let count = rowCounts.get(filePath) ?? 0
-    if (count >= DEFAULT_MAX_ROWS_PER_FILE && (await rotate(filePath))) count = 0
+    if (count >= maxRowsPerFile && (await rotate(filePath))) count = 0
     await appendJsonl(filePath, row, { repairTail: true, onError: report })
     if (!failed) rowCounts.set(filePath, count + 1)
   } catch (error) {

@@ -95,6 +95,18 @@ describe('appendLedgerRow rotation', () => {
     expect(fresh.runningCount).toBe(cap)
   })
 
+  it('honors a caller-supplied row cap (the cc-input-ledger setting)', async () => {
+    const root = await tempDir()
+    const file = join(root, 'ledger.jsonl')
+    for (let i = 0; i < 3; i++) await appendLedgerRow(file, capRow(i), undefined, 3)
+    expect(await readLines(file)).toHaveLength(3)
+
+    await appendLedgerRow(file, capRow(3), undefined, 3)
+
+    expect(await readLines(`${file}.1`)).toHaveLength(3)
+    expect(await readLines(file)).toHaveLength(1)
+  })
+
   it('clobbers the previous archive instead of accumulating rotations', async () => {
     const root = await tempDir()
     const file = join(root, 'ledger.jsonl')

@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../sidecar-io"
+    },
+    {
+      "path": "../../settings/settings"
     }
   ]
 }

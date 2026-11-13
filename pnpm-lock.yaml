@@ -2921,10 +2921,19 @@ importers:
 
   packages/observability/input-ledger:
     dependencies:
+      '@dsh-cc/settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
       '@dsh-cc/sidecar-io':
         specifier: workspace:^
         version: link:../sidecar-io
     devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
