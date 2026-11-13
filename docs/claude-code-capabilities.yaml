@@ -2955,10 +2955,12 @@ capabilities:
     plane: preset
     upstream:
       summary: >-
-        dsh-cc extension — an optional, explicitly mounted `recommend_skill`
-        tool that judges the visible `ctx.skills` catalog against a task and
-        returns a few names with relevance and prerequisite evidence, mounted
-        through the explicit-plugin row rather than the default preset.
+        dsh-cc extension — an advisory `recommend_skill` tool that judges the
+        visible `ctx.skills` catalog against a task and returns a few names
+        with relevance and prerequisite evidence. The `cc` and `vwa` presets
+        mount it as a dark row, so the tool is present while
+        `cc-skill-recommendation.mode` defaults to `off`.
+        〔src:ws:packages/preset/cc/agent.shared.cordis.yml#L114-L128〕
         〔src:ws:packages/skill/skill-recommender/README.md#L49-L57〕
         It is a read-only consumer of the catalog: it never reads a body
         (`ctx.skills.get` is never called), never executes or invokes a skill,
@@ -2972,10 +2974,11 @@ capabilities:
       refs: []
     dimensions:
       recognized: true
-      mounted: { status: false, notes: "optional plugin mounted explicitly; absent from the default preset, and cc-skill-recommendation.mode defaults to off" }
+      mounted: { status: true, notes: "mounted top level by the cc and vwa presets (packages/preset/cc/agent.shared.cordis.yml, beside tool-skill); cc-skill-recommendation.mode still defaults to off, so no judgment runs until a deployment sets shadow or active" }
       behavioral: partial
       ux: partial
     evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: skill-recommender" }
       - { type: source, path: packages/skill/skill-recommender/src/index.ts, anchor: "recommend_skill" }
       - { type: source, path: packages/skill/skill-recommender/scripts/eval-recommendation.mjs, anchor: "--mode replay" }
       - { type: test, path: packages/skill/skill-recommender/tests/recommend.spec.ts }
@@ -2984,9 +2987,9 @@ capabilities:
       kind: downgrade
       summary: >-
         dsh-cc extension with no Claude Code counterpart: an advisory
-        recommendation consumer rather than an execution path. The plugin is
-        mounted explicitly and is not in the default preset; `mode: off` is the
-        default and leaves the catalog, `/skills`, explicit slash invocation and
+        recommendation consumer rather than an execution path. The default
+        cc/vwa compositions mount the row, but `mode: off` is the default and
+        leaves the catalog, `/skills`, explicit slash invocation and
         mandatory-skill rules untouched. Judgments require the optional
         decision runtime (`ctx.systemoneDecisions`, or the root-realm
         `ccSystemoneDecisions` bridge) and are `unavailable` without it, so the

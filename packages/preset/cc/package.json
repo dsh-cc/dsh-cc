@@ -76,6 +76,7 @@
     "@dsh-cc/retry-attendant": "workspace:^",
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/skill-loader": "workspace:^",
+    "@dsh-cc/skill-recommender": "workspace:^",
     "@dsh-cc/skill-usage": "workspace:^",
     "@dsh-cc/subagent-resume-pins": "workspace:^",
     "@dsh-cc/subagent-task": "workspace:^",

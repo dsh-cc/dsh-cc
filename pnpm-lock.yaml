@@ -3176,6 +3176,9 @@ importers:
       '@dsh-cc/skill-loader':
         specifier: workspace:^
         version: link:../../skill/skill-claude-code
+      '@dsh-cc/skill-recommender':
+        specifier: workspace:^
+        version: link:../../skill/skill-recommender
       '@dsh-cc/skill-usage':
         specifier: workspace:^
         version: link:../../skill/skill-usage

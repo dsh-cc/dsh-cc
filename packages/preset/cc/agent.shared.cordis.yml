@@ -111,6 +111,22 @@
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 
+# Advisory skill recommendation (plan
+# docs/plans/2026-11-02-systemone-06-skill-recommendation.md, package
+# packages/skill/skill-recommender): the `recommend_skill` tool that judges the
+# VISIBLE skill catalog against a task and returns a few names with relevance
+# and prerequisite evidence. Dark mount: `cc-skill-recommendation.mode`
+# defaults to `off`, so the tool answers the off result and calls no runner;
+# `shadow` records judgments for audit only, `active` returns names. Plain
+# plugin (publishes no Service, so it needs no isolate realm): it consumes the
+# host `skills` service and reads the decision runtime through the root-realm
+# `ccSystemoneDecisions` bridge that the decision-usage row publishes, and
+# answers `unavailable` when that service, a bound actor, a route or a session
+# watermark is missing. It never loads, runs or invokes a skill; the normal
+# skill tool remains the only execution entry point.
+- id: skill-recommender
+  name: '@dsh-cc/skill-recommender'
+
 # ── goals ───────────────────────────────────────────────────────────────────
 
 # Only the model-facing tool. The goal SERVICE, its session driver, and the
