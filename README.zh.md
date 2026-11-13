@@ -220,7 +220,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 30 | 4 | 2 |
+| Engine subsystems | 11 | 31 | 4 | 2 |
 | Hook events | 9 | 8 | 4 | 0 |
 | Command surface | 22 | 10 | 1 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |
