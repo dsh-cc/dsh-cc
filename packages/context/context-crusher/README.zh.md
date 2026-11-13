@@ -43,7 +43,29 @@ CCR（Compress-Cache-Retrieve）可逆的工具输出压缩。一个 `tools/post
 | `defer-max-age-ms` | `1800000` | 从未换出的驻留项的清扫时限（毫秒）。 |
 | `defer-urgency-tokens` | 未设置（不激活） | 窗口压力覆盖距离（token）：会话估算距模型窗口不足该距离时，驻留项无视闸门直接换出；没有窗口来源时不激活。 |
 
-## foldCounters 约定
+## reducer 决策闸门（S1-12）
+
+可选对象 `reducer-decision-gate`，嵌在同一命名空间 `cc-context-compression` 之下。它是该命名空间中唯一按 key 逐个深合并的子对象（上面的扁平键仍保持替换语义）。闸门在生成式 reducer 花掉调用之前，用一个 SystemOne 决策判断"这份回执是否值得尝试"；回执是否有效仍由确定性校验器判定，因此一次跳过只是可撤销的调用预算策略——绝不是"回执不可能生成"的证明。它跑在所有廉价检查之后、lane 溯源检查之后，紧邻侧查询之前。
+
+| 键（对象内） | 类型、范围 | 默认 |
+|---|---|---|
+| `mode` | `off` \| `shadow` \| `active` | `off` |
+| `timeout-ms` | 整数，100–3000；整组判定共用一个预算 | `800` |
+| `max-input-tokens` | 整数，512–16384；单次请求，含 state、全部问题与余量 | `4096` |
+| `max-source-tokens` | 整数，512–32768；完整原文的上限 | `16384` |
+| `max-chunks` | 整数，1–16 | `8` |
+| `max-skip-index` | 有限数，0–4；实验性阈值 | `1` |
+| `max-compressibility` | 有限数，0–1；实验性阈值 | `0.2` |
+| `cache-entries` | 整数，0–1024；`0` 表示禁用缓存 | `128` |
+| `cache-ttl-ms` | 整数，0–300000 | `60000` |
+
+模式：`off`（默认）从不调用闸门——无请求、无台账行，reducer 路径与加闸门前逐字节一致。`shadow` 判定并记录台账，但始终继续原有生成。`active` 可以跳过生成，且仅当每个分块都回答 `score ≤ max-skip-index` 且 `noul ≤ max-compressibility`；跳过会记入台账 `applied: false`，原因 `decision-gate`，并显式写入零节省（闸门的分数绝不会被当成节省量）。
+
+开放失败：非法值（类型不符或超出范围）、非对象值、未知 `mode` 都会让该次解析的整个闸门退化为 `off`——配置错误绝不解读为"reducer 被禁用"，原有 reducer 照常继续。缺少决策服务、决策 scope 或会话水位时，闸门同样保持不激活。`enabled: false` 或 `reducer-enabled: false` 让闸门休眠，且 `mode: active` 无法启动一个本来关闭的 reducer；闸门的 `active` 与 crusher 的 `dry-run`/`on` 是相互独立的状态。
+
+回滚：把 `reducer-decision-gate` 设为 `{ mode: off }`（或删除该对象）——reducer 回到加闸门前的路径，没有其他键需要回退。
+
+## `foldCounters` 约定
 
 本包为 `@dsh-cc/token-efficiency` 导出 `foldCounters(materials)`；标记/台账形态的任何变更必须在同一个 PR 中同步更新该 fold 及其测试。
 

@@ -13,6 +13,7 @@
  * @module @dsh-cc/context-crusher/reducer
  */
 
+import { createHash } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolExecution } from '@dsh-cc/tools'
 import { resolveAlias } from '@dsh-cc/model-aliases'
@@ -20,6 +21,7 @@ import { runSideQuery } from '@dsh-cc/side-query'
 import { buildMarker } from './marker.ts'
 import { parseReceipt, renderReceipt } from './receipt.ts'
 import { verifyReceipt } from './verifier.ts'
+import type { ReducerGateDecision } from './reducer-gate.ts'
 import type { CrusherMode, LedgerRow, ResolvedConfig } from './types.ts'
 
 /** Tools whose invocation command line is reducer-eligible (§3.2). */
@@ -87,6 +89,21 @@ function laneReason(reason: 'unrouted' | 'timeout' | 'error' | 'empty'): string 
   }
 }
 
+/** The gate input the wiring closure cannot derive itself (S1-12). */
+export interface ReducerGateCallInput {
+  tool: string
+  command: string
+  view: string
+  originalHash: string
+  viewHash: string
+  sourceTokens: number
+  isError: boolean
+  viewTruncated: boolean
+  minSavingsRatio: number
+  /** The generative alias's resolved route identity (cache binding only). */
+  generativeRoute: { alias: string; provider: string; model?: string | undefined }
+}
+
 export interface ReducerStageDeps {
   ctx: Context
   cfg: ResolvedConfig
@@ -97,6 +114,13 @@ export interface ReducerStageDeps {
   estimate: (text: string) => number
   projectKey: string | undefined
   mode: CrusherMode
+  /**
+   * S1-12 decision gate: filled by the wiring layer (scope + signal +
+   * coalescing cache live there) and present only when the gate mode is
+   * shadow or active and the configuration parsed clean. Absent = straight
+   * to the side query, the original behavior.
+   */
+  evaluateGate?: (fields: ReducerGateCallInput) => Promise<ReducerGateDecision>
   /** Store write for the full original text (only called in `on` mode). */
   put: (projectKey: string, text: string) => Promise<string>
   ledgerRow: (row: Omit<LedgerRow, 'ts' | 'sessionId' | 'tool'>) => Promise<void>
@@ -119,6 +143,7 @@ export async function reduceToolOutput(deps: ReducerStageDeps): Promise<string |
       reason?: string,
       hash?: string,
       charsAfter?: number,
+      decisionId?: string,
     ): Promise<void> => {
       await deps.ledgerRow({
         kind: 'receipt',
@@ -129,6 +154,7 @@ export async function reduceToolOutput(deps: ReducerStageDeps): Promise<string |
         applied,
         ...(reason === undefined ? {} : { reason }),
         ...(hash === undefined ? {} : { hash }),
+        ...(decisionId === undefined ? {} : { decisionId }),
       })
     }
 
@@ -155,6 +181,45 @@ export async function reduceToolOutput(deps: ReducerStageDeps): Promise<string |
     if (route.provider === undefined || route.provider.length === 0) {
       await ledger(false, 0, 'lane-inherited')
       return undefined
+    }
+
+    // S1-12 decision gate (optional): after every cheap check and the route
+    // provenance declines above, before the generator is paid. `off` reaches
+    // this point only when the wiring omitted the closure, so mode off goes
+    // straight to runSideQuery either way. shadow judges but ALWAYS continues
+    // generation; active may skip it. A cancelled gate verdict forbids
+    // starting the generator; every other gate outcome continues unchanged.
+    const gateCfg = deps.cfg.reducerDecisionGate
+    if (deps.evaluateGate !== undefined && gateCfg.valid) {
+      const command = invocationCommand(deps.exec) ?? ''
+      let verdict: ReducerGateDecision | undefined
+      try {
+        verdict = await deps.evaluateGate({
+          tool: deps.exec.name,
+          command,
+          view,
+          originalHash: `sha256:${createHash('sha256').update(originalText).digest('hex')}`,
+          viewHash: `sha256:${createHash('sha256').update(view).digest('hex')}`,
+          sourceTokens: tokensBefore,
+          isError: deps.isError,
+          viewTruncated: view !== originalText,
+          minSavingsRatio: deps.cfg.reducerMinSavingsRatio,
+          generativeRoute: { alias: deps.cfg.reducerAlias, provider: route.provider, model: route.model },
+        })
+      } catch {
+        // Fail-soft inside the existing backstop: a gate error degrades to
+        // attempt — never to a cancelled or skipped generation.
+        verdict = undefined
+      }
+      if (verdict?.reason === 'cancelled') return undefined
+      if (verdict !== undefined && !verdict.attempt && gateCfg.mode === 'active') {
+        // Skip row: EXPLICIT zero-savings values (the closure's charsAfter
+        // default would be the receipt body — wrong for skips). The gate's
+        // score is never written as savings.
+        await ledger(false, tokensBefore, 'decision-gate', undefined, originalText.length,
+          verdict.decisionIds.length > 0 ? verdict.decisionIds.join(',') : undefined)
+        return undefined
+      }
     }
 
     const side = await runSideQuery(deps.ctx, {

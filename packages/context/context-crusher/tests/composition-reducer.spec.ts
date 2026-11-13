@@ -79,9 +79,69 @@ interface HarnessOptions {
   /** Fake ccModelRoutes resolve for 'haiku'; defaults to an explicit cheap route. */
   routes?: () => { provider?: string; model?: string } | undefined
   cheapScript?: readonly StreamChunk[]
+  /** Raw nested reducer-decision-gate settings object (S1-12). */
+  gate?: Record<string, unknown>
+  /** Mount the fake decision service (S1-12); its runs are counted separately from the generator. */
+  decision?: DecisionFakeOptions
+  /** Extra registrations after the plugins mount (e.g. a downstream accept with additionalContexts). */
+  afterPlugins?: (ctx: Context) => void
 }
 
-export async function harness(opts: HarnessOptions): Promise<{ ctx: Context; agent: Agent; home: string; replay: ReplayAdapter }> {
+interface DecisionFakeOptions {
+  /** Scripted answers per `run` call index (defaults to the low-opportunity pair). */
+  answers?: (callIndex: number) => Record<string, unknown>
+  /** Scripted route identity per `identifyRoute` call index (defaults to a fixed route). */
+  routeOf?: (identifyIndex: number) => Record<string, unknown> | undefined
+}
+
+/** Separate counters for the decision runner and the cheap-lane generator. */
+interface DecisionStats { runs: number; identifies: number }
+
+const GATE_ROUTE = {
+  provider: 'gauge-provider', model: 'gauge-model', revision: 'rev-1',
+  perRequestTokens: 8192, perQuestionTokens: 8192, maxQuestions: 4, maxOutputTokens: 64,
+}
+
+/** The always-skippable verdict pair (S1-12 thresholds cleared). */
+const LOW_ANSWERS = {
+  receiptOpportunity: { type: 'score', score: 0.5, probabilities: { '0': 1 } },
+  compressible: { type: 'noul', noul: 0.05 },
+}
+
+/** The clear-opportunity verdict pair from the design's example (3.6/.95). */
+const HIGH_ANSWERS = {
+  receiptOpportunity: { type: 'score', score: 3.6, probabilities: { '3': 0.4, '4': 0.6 } },
+  compressible: { type: 'noul', noul: 0.95 },
+}
+
+function decisionFake(opts: DecisionFakeOptions = {}): { service: unknown; stats: DecisionStats } {
+  const stats: DecisionStats = { runs: 0, identifies: 0 }
+  return {
+    stats,
+    service: {
+      forAgent: () => ({
+        identifyRoute: () => {
+          stats.identifies += 1
+          return opts.routeOf === undefined ? GATE_ROUTE : opts.routeOf(stats.identifies - 1)
+        },
+        scope: (originSeq?: number) => ({ projectKey: 'proj', sessionId: 'sess', agentId: 'agent', originSeq: originSeq ?? 0 }),
+        run: async () => {
+          stats.runs += 1
+          return {
+            status: 'answered',
+            answers: (opts.answers ?? (() => LOW_ANSWERS))(stats.runs - 1),
+            model: GATE_ROUTE.model,
+            usage: { input_tokens: 10, output_tokens: 2 },
+            decisionId: `d-${stats.runs}`,
+            inputHash: `h-${stats.runs}`,
+          }
+        },
+      }),
+    },
+  }
+}
+
+export async function harness(opts: HarnessOptions): Promise<{ ctx: Context; agent: Agent; home: string; replay: ReplayAdapter; decision?: DecisionStats }> {
   const home = mkdtempSync(join(tmpdir(), 'ccr-reducer-home-'))
   dirs.push(home)
   const ctx = new Context()
@@ -111,6 +171,7 @@ export async function harness(opts: HarnessOptions): Promise<{ ctx: Context; age
     enabled: true,
     mode: opts.mode ?? 'on',
     'min-bytes': 60,
+    ...(opts.gate === undefined ? {} : { 'reducer-decision-gate': opts.gate }),
     ...(opts.config ?? {}),
   })
   if (opts.realBash !== true) {
@@ -121,8 +182,16 @@ export async function harness(opts: HarnessOptions): Promise<{ ctx: Context; age
   }
   ctx.llm.registerAdapter(['mock'], opts.adapter)
   ctx.llm.registerAdapter(['cheap'], replay)
+  // S1-12: the root-realm bridge name the production resolver lands on.
+  let decision: DecisionStats | undefined
+  if (opts.decision !== undefined) {
+    const fake = decisionFake(opts.decision)
+    decision = fake.stats
+    ctx.provide('ccSystemoneDecisions', fake.service as never)
+  }
+  opts.afterPlugins?.(ctx)
   const agent = await ctx.agentLoop.create(SessionId('ccr1'), { provider: 'mock', model: 'mock' })
-  return { ctx, agent, home, replay }
+  return { ctx, agent, home, replay, ...(decision === undefined ? {} : { decision }) }
 }
 
 export async function run(agent: Agent, adapter: MockAdapter): Promise<void> {
@@ -289,5 +358,203 @@ describe('reducer composition', () => {
     expect(rows[0]).toMatchObject({ applied: false })
     expect(rows[0].hash).toBeUndefined()
     expect(storedText(home, shortHash(VITEST_LOG))).toBeUndefined()
+  })
+})
+
+/** The D11 idiom: a downstream accept carries additionalContexts (extra context block). */
+function withExtraContext(ctx: Context): void {
+  ctx.on('tools/post-execute', async (_exec, _result, next) => {
+    await next()
+    return {
+      kind: 'accept',
+      additionalContexts: [createUserMessage({
+        content: [{ type: 'text', text: 'dsh-cc gate extra context marker' }],
+        source: { kind: 'plugin', plugin: 'test' } as never,
+      })],
+    }
+  })
+}
+
+/** The downstream additional-context block landed as a user/message AFTER the tool result. */
+function extraContextCommitted(agent: Agent): boolean {
+  const log: SessionEvent[] = [...agent.session.snapshotEvents()]
+  const resultIdx = log.findIndex((e) => e.type === 'tool/result')
+  const ctxIdx = log.findIndex((e) => e.type === 'user/message' && (e.data as { source?: { kind?: string } }).source?.kind !== 'user')
+  if (ctxIdx <= resultIdx) return false
+  const message = log[ctxIdx] as { data: { content: { type: string; text?: string }[] } }
+  return message.data.content.some((b) => b.text?.includes('dsh-cc gate extra context marker'))
+}
+
+describe('reducer decision gate (S1-12)', () => {
+  it('cheap declines with the gate active: decision=0, generation=0, identical source text', async () => {
+    // Command misses the reducer regex: neither model is consulted.
+    const miss = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'cat foo.txt' }), textResponse('done')])
+    {
+      const { agent, replay, decision } = await harness({
+        adapter: miss, config: { 'reducer-enabled': true }, gate: { mode: 'active' }, decision: {},
+      })
+      await run(agent, miss)
+      expect(decision!.runs).toBe(0)
+      expect(replay.calls).toHaveLength(0)
+      expect(resultTexts(agent)[0]).toBe(VITEST_LOG)
+    }
+    // Unconfigured reducer alias: the original lane-missing decline, no gate call.
+    const unrouted = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    {
+      const { agent, home, replay, decision } = await harness({
+        adapter: unrouted, config: { 'reducer-enabled': true }, gate: { mode: 'active' }, decision: {}, routes: () => undefined,
+      })
+      await run(agent, unrouted)
+      expect(decision!.runs).toBe(0)
+      expect(replay.calls).toHaveLength(0)
+      expect(resultTexts(agent)[0]).toBe(VITEST_LOG)
+      expect(ledgerRows(home).filter((r) => r.kind === 'receipt')).toEqual([
+        expect.objectContaining({ applied: false, reason: 'lane-missing' }),
+      ])
+    }
+    // Protected tool list bypass: the crusher never reaches the reducer at all.
+    const protected_ = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    {
+      const { agent, replay, decision } = await harness({
+        adapter: protected_, config: { 'reducer-enabled': true, 'protected-tools': ['bash'] }, gate: { mode: 'active' }, decision: {},
+      })
+      await run(agent, protected_)
+      expect(decision!.runs).toBe(0)
+      expect(replay.calls).toHaveLength(0)
+      expect(resultTexts(agent)[0]).toBe(VITEST_LOG)
+    }
+  })
+
+  it('active + every chunk .5/.05: generation=0, put=0, source text character-identical, explicit zero-savings skip row', async () => {
+    const adapter = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    const { agent, home, replay, decision } = await harness({
+      adapter, config: { 'reducer-enabled': true }, gate: { mode: 'active' }, decision: {}, afterPlugins: withExtraContext,
+    })
+    await run(agent, adapter)
+
+    expect(decision!.runs).toBe(1)
+    expect(replay.calls).toHaveLength(0) // the generator never ran
+    expect(resultTexts(agent)[0]).toBe(VITEST_LOG) // source text, character-identical
+    expect(storedText(home, shortHash(VITEST_LOG))).toBeUndefined() // put=0
+    const row = ledgerRows(home).find((r) => r.kind === 'receipt')
+    expect(row).toMatchObject({
+      applied: false,
+      reason: 'decision-gate',
+      charsBefore: VITEST_LOG.length,
+      charsAfter: VITEST_LOG.length,
+      decisionId: 'd-1',
+    })
+    expect(row!.tokensAfter).toBe(row!.tokensBefore) // zero savings, never an overstated benefit
+    // additionalContexts preserved on the skip path.
+    expect(extraContextCommitted(agent)).toBe(true)
+  })
+
+  it('active + a 3.6/.95 chunk: the generator runs, the verifier applies, additionalContexts survive success', async () => {
+    const adapter = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    const { agent, home, replay, decision } = await harness({
+      adapter, config: { 'reducer-enabled': true }, gate: { mode: 'active' }, decision: { answers: () => HIGH_ANSWERS }, afterPlugins: withExtraContext,
+    })
+    await run(agent, adapter)
+
+    expect(decision!.runs).toBe(1)
+    expect(replay.calls).toHaveLength(1)
+    const committed = resultTexts(agent)[0]
+    const lines = committed.split('\n')
+    expect(lines[0]).toBe('cmd: vitest run')
+    expect(isCrusherStub(committed)).toBe(true)
+    const marker = parseMarker(lines.at(-1)!)
+    expect(marker).not.toBeNull()
+    const stored = storedText(home, marker!.hash)
+    expect(stored === undefined ? undefined : (JSON.parse(stored) as { text: string }).text).toBe(VITEST_LOG)
+    expect(ledgerRows(home).find((r) => r.kind === 'receipt')).toMatchObject({ applied: true, hash: marker!.hash })
+    // additionalContexts preserved on the successful-replacement path.
+    expect(extraContextCommitted(agent)).toBe(true)
+  })
+
+  it('a fabricated receipt after an attempt verdict: the verifier declines, source text passes, put=0', async () => {
+    const fabricated = JSON.stringify({
+      v: 1, cmd: 'vitest run', exit: { ok: true },
+      failures: [{ name: 'ghost.spec.ts', evidence: 'THIS QUOTE IS NOT IN THE SOURCE' }],
+      key_output: [],
+    })
+    const adapter = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    const { agent, home, replay, decision } = await harness({
+      adapter, config: { 'reducer-enabled': true }, gate: { mode: 'active' },
+      decision: { answers: () => HIGH_ANSWERS }, cheapScript: streamScript(fabricated), afterPlugins: withExtraContext,
+    })
+    await run(agent, adapter)
+
+    expect(decision!.runs).toBe(1)
+    expect(replay.calls).toHaveLength(1)
+    expect(resultTexts(agent)[0]).toBe(VITEST_LOG) // the verifier declined; gates change nothing here
+    expect(ledgerRows(home).find((r) => r.kind === 'receipt')).toMatchObject({ applied: false, reason: expect.stringMatching(/^verify:/) })
+    expect(storedText(home, shortHash(VITEST_LOG))).toBeUndefined()
+    // additionalContexts preserved on the failure path.
+    expect(extraContextCommitted(agent)).toBe(true)
+  })
+
+  it('truncated view: decision=0 and the generator receives the same view as before', async () => {
+    const big = [VITEST_LOG, VITEST_LOG, VITEST_LOG].join('\n')
+    const adapter = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    const { agent, replay, decision } = await harness({
+      adapter,
+      config: { 'reducer-enabled': true, 'reducer-max-input-tokens': 400 },
+      gate: { mode: 'active' },
+      decision: {},
+      toolOutput: big,
+    })
+    await run(agent, adapter)
+
+    expect(decision!.runs).toBe(0) // an incomplete view is never judged
+    expect(replay.calls).toHaveLength(1)
+    const promptText = String((replay.calls[0].messages.at(-1) as { content?: { text?: string }[] }).content?.[0]?.text ?? '')
+    expect(promptText.length).toBeLessThan(big.length / 2) // the same truncated view as without the gate
+    expect(promptText).toContain('Test Files  1 failed (1)')
+    expect(isCrusherStub(resultTexts(agent)[0])).toBe(true)
+  })
+
+  it('shadow + dry-run: the judgment and the original generation run, nothing is applied or replaced', async () => {
+    const adapter = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    const { agent, home, replay, decision } = await harness({
+      adapter, mode: 'dry-run', config: { 'reducer-enabled': true }, gate: { mode: 'shadow' }, decision: {},
+    })
+    await run(agent, adapter)
+
+    expect(decision!.runs).toBe(1)
+    expect(replay.calls).toHaveLength(1)
+    expect(resultTexts(agent)[0]).toBe(VITEST_LOG)
+    const rows = ledgerRows(home).filter((r) => r.kind === 'receipt')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ applied: false })
+    expect(rows[0].reason).toBeUndefined() // shadow never writes a decision-gate row
+    expect(storedText(home, shortHash(VITEST_LOG))).toBeUndefined()
+  })
+
+  it('a route revision change after the await drops the judgment; the model is not re-asked; generation continues', async () => {
+    const adapter = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    const { agent, home, replay, decision } = await harness({
+      adapter, config: { 'reducer-enabled': true }, gate: { mode: 'active' },
+      decision: { routeOf: (i) => ({ ...GATE_ROUTE, revision: i < 2 ? 'rev-1' : 'rev-2' }) },
+    })
+    await run(agent, adapter)
+
+    expect(decision!.runs).toBe(1) // ONE wire attempt per batch; no re-ask under a moved identity
+    expect(replay.calls).toHaveLength(1)
+    expect(ledgerRows(home).find((r) => r.kind === 'receipt')).toMatchObject({ applied: true })
+    expect(isCrusherStub(resultTexts(agent)[0])).toBe(true)
+  })
+
+  it('an invalid chunk answer (a missing question key) drops the group; generation continues', async () => {
+    const adapter = new MockAdapter([toolCallResponse('c1', 'bash', { command: 'vitest run' }), textResponse('done')])
+    const { agent, home, replay, decision } = await harness({
+      adapter, config: { 'reducer-enabled': true }, gate: { mode: 'active' },
+      decision: { answers: () => ({ receiptOpportunity: { type: 'score', score: 0.5, probabilities: { '0': 1 } } }) },
+    })
+    await run(agent, adapter)
+
+    expect(decision!.runs).toBe(1)
+    expect(replay.calls).toHaveLength(1)
+    expect(ledgerRows(home).find((r) => r.kind === 'receipt')).toMatchObject({ applied: true })
+    expect(isCrusherStub(resultTexts(agent)[0])).toBe(true)
   })
 })

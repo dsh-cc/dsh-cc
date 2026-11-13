@@ -43,7 +43,29 @@ Namespace `cc-context-compression` (settings overlay re-read on every use; confi
 | `defer-max-age-ms` | `1800000` | Sweep age (ms) for deferred residents that never swapped. |
 | `defer-urgency-tokens` | unset (inactive) | Window-pressure override distance in tokens: when the session estimate comes within this distance of the model window, residents swap regardless of the gate. Inactive without a window source. |
 
-## foldCounters convention
+## Reducer decision gate (S1-12)
+
+Optional `reducer-decision-gate` object nested under the same `cc-context-compression` namespace. It is the only sub-object in that namespace merged key by key (the flat keys above keep their replace semantics). The gate asks a SystemOne decision whether a receipt is worth ATTEMPTING before the generative reducer is paid; receipt validity stays with the deterministic verifier, so a skip is only a revocable call-budget policy — never proof that a receipt was impossible. It runs after every cheap check and after the lane-provenance declines, immediately before the side query.
+
+| Key (inside the object) | Type, range | Default |
+|---|---|---|
+| `mode` | `off` \| `shadow` \| `active` | `off` |
+| `timeout-ms` | integer, 100–3000; one budget for the whole group judgement | `800` |
+| `max-input-tokens` | integer, 512–16384; per request, including state, all questions and headroom | `4096` |
+| `max-source-tokens` | integer, 512–32768; cap on the complete source text | `16384` |
+| `max-chunks` | integer, 1–16 | `8` |
+| `max-skip-index` | finite number, 0–4; experimental threshold | `1` |
+| `max-compressibility` | finite number, 0–1; experimental threshold | `0.2` |
+| `cache-entries` | integer, 0–1024; `0` disables the cache | `128` |
+| `cache-ttl-ms` | integer, 0–300000 | `60000` |
+
+Modes: `off` (default) never calls the gate — no request, no ledger row, the reducer path is byte-identical to the pre-gate behavior. `shadow` judges and ledgers the verdict but ALWAYS continues the original generation. `active` may skip generation, and only when EVERY chunk answers `score ≤ max-skip-index` AND `noul ≤ max-compressibility`; the skip is ledgered `applied: false` with reason `decision-gate` and explicit zero savings (the gate's score is never written as savings).
+
+Fail-open: an invalid value (wrong type or out of range), a non-object value, or an unknown `mode` degrades the whole gate to `off` for that resolution — a configuration error is never read as "reducer disabled", and the existing reducer continues unchanged. A missing decision service, decision scope or session watermark likewise leaves the gate inert. `enabled: false` or `reducer-enabled: false` keeps the gate dormant, and `mode: active` cannot start a reducer that is otherwise off; the gate's `active` and the crusher's `dry-run`/`on` are independent states.
+
+Rollback: set `reducer-decision-gate: { mode: off }` (or drop the object) — the reducer returns to the pre-gate path, with no other key to unwind.
+
+## `foldCounters` convention
 
 This package exports `foldCounters(materials)` for `@dsh-cc/token-efficiency`; any change to the marker/ledger shape MUST update the fold and its tests in the same PR.
 
