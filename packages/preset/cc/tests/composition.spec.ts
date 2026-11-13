@@ -269,6 +269,35 @@ describe('agent.cordis.yml composition', () => {
     expect(row.config).toBeUndefined()
   })
 
+  it('mounts the input-ledger row top level beside cache-health (no isolate key, no group realm)', () => {
+    // The input ledger (design
+    // docs/plans/2026-11-12-per-step-input-ledger.md §"Package") publishes no
+    // Service — plain plugin, progress-rebuild precedent — so it needs no
+    // isolate key and must NOT sit inside the isolate cc-services group: a
+    // grouped mount would inherit a realm it never uses.
+    const row = doc.find((r) => r.id === 'input-ledger')!
+    expect(row.name).toBe('@dsh-cc/input-ledger')
+    expect(row.config).toBeUndefined()
+    expect(row.disabled).toBeUndefined()
+    const group = doc.find((r) => r.id === 'cc-services')!
+    expect((group.config as any[]).map((r) => r.id)).not.toContain('input-ledger')
+    expect(Object.keys(group.isolate as Record<string, unknown>)).not.toContain('inputLedger')
+    // The vwa wrapper includes the shared body, so the row composes into BOTH
+    // preset closures — and the reference-counted root mount (src/mount.ts)
+    // keeps the double include at ONE listener set (unit-pinned in
+    // packages/observability/input-ledger/tests/mount.spec.ts).
+    expect(expandIncludes(vwaCordisPath).map((r) => r.id)).toContain('input-ledger')
+    // ORDER TRIPWIRE: top level in the observability neighbourhood, the row
+    // immediately before the slash-command rows and therefore immediately
+    // above cache-health — the two llm/stream wire-view observers stay
+    // physically adjacent so their composition is reviewable together.
+    const ids = doc.map((r) => r.id)
+    expect(ids.indexOf('input-ledger')).toBe(ids.indexOf('cache-health') - 1)
+    const rowIdx = yamlText.indexOf('- id: input-ledger')
+    expect(rowIdx).toBeGreaterThan(yamlText.indexOf('- id: tool-structured-output'))
+    expect(rowIdx).toBeLessThan(yamlText.indexOf('- id: cache-health'))
+  })
+
   it('mounts the preset-scoped tool-schedule row right after tool-jobs', () => {
     // Harness 0.2.1-rc.5 moved the reminder tools out of the host-plane
     // `@deepseek-ai/dsh-schedule` service into this preset-scoped package, so

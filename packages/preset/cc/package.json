@@ -61,6 +61,7 @@
     "@dsh-cc/decision-usage": "workspace:^",
     "@dsh-cc/handoff-store": "workspace:^",
     "@dsh-cc/hooks-claude-code": "workspace:^",
+    "@dsh-cc/input-ledger": "workspace:^",
     "@dsh-cc/lsp-on-write": "workspace:^",
     "@dsh-cc/memory": "workspace:^",
     "@dsh-cc/memory-consolidation": "workspace:^",

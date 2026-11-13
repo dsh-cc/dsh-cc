@@ -220,7 +220,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 28 | 4 | 2 |
+| Engine subsystems | 11 | 30 | 4 | 2 |
 | Hook events | 9 | 8 | 4 | 0 |
 | Command surface | 22 | 10 | 1 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |
@@ -229,7 +229,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | Subagents | 0 | 4 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
 | Plugins and marketplaces | 0 | 6 | 0 | 0 |
-| Settings | 2 | 1 | 1 | 0 |
+| Settings | 2 | 3 | 1 | 0 |
 | Permissions | 0 | 1 | 0 | 0 |
 | Models | 0 | 1 | 0 | 0 |
 | Workspace | 0 | 4 | 0 | 0 |
