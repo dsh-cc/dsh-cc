@@ -138,3 +138,36 @@ dsh --profile tui
 
 这些角色驱动编辑器边框与自动补全、会话记录行、diff 卡片、overlay 盒子、围栏代码
 高亮，以及 `!` shell 模式边框。
+
+## 插件横条
+
+其他 cordis 插件可以通过 TUI 挂载时提供的 `tuiBands` 服务，在输入框上方显示一到两行
+实时状态。横条只用于显示：不接收按键、不能获得焦点，交互仍交给斜杠命令（横条可以
+指向某个命令，例如 `📥 2 waiting · /inbox`）。
+
+```ts
+export function apply(ctx: Context) {
+  // 可选注入：同一插件在没有 TUI 的 profile 中仍能加载。
+  ctx.inject(['tuiBands'], (ctx) => {
+    ctx.effect(() => ctx.tuiBands.register({
+      id: 'my-plugin/inbox',
+      tone: 'accent',                       // muted | accent | success | warning | error
+      render: ({ sessionId }) => {
+        const waiting = countFor(sessionId)   // the session the TUI shows now
+        return waiting > 0 ? `📥 ${waiting} waiting · /inbox` : undefined
+      },
+    }))
+    const timer = setInterval(() => ctx.tuiBands.refresh(), 3000)
+    ctx.effect(() => () => clearInterval(timer))
+  })
+}
+```
+
+- `render({ width, sessionId })` 每一帧都会调用：保持廉价且同步；返回 `undefined`
+  （或空字符串、空数组）即隐藏横条。`sessionId` 是 TUI 当前显示的会话，横条可以
+  按会话显示。
+- 每个横条最多显示两行；每行按终端宽度截断，行内换行变为空格。
+- 横条按 `order` 升序（默认 0）绘制在提示行与 overlay 之间，常规模式与全屏模式
+  都一样。
+- `render` 抛错的横条在该帧被跳过，并向日志报告一次；TUI 继续运行。
+- `register` 返回一个注销函数；存活横条的 id 必须唯一。
