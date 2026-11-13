@@ -47,6 +47,17 @@ function expandIncludes(file: string, seen = new Set<string>()): any[] {
 // The cc surface, unchanged: wrapper rows (persona) plus the shared closure.
 const doc = expandIncludes(agentCordisPath)
 
+/**
+ * Every row id in one expanded closure, including group-nested rows (a group
+ * row's nested entries live in its `config` array).
+ */
+function flattenIds(rows: any[]): string[] {
+  return rows.flatMap((row) => [
+    row.id,
+    ...(Array.isArray(row.config) ? flattenIds(row.config as any[]) : []),
+  ])
+}
+
 const BASE_IDS = [
   'persona', 'agent-instructions', 'tool-bash', 'tool-pwsh', 'tool-fs',
   'tool-fs-search', 'tool-jobs', 'skill-filesystem', 'tool-skill', 'tool-goal',
@@ -296,6 +307,51 @@ describe('agent.cordis.yml composition', () => {
     const rowIdx = yamlText.indexOf('- id: input-ledger')
     expect(rowIdx).toBeGreaterThan(yamlText.indexOf('- id: tool-structured-output'))
     expect(rowIdx).toBeLessThan(yamlText.indexOf('- id: cache-health'))
+  })
+
+  it('mounts the input-budget governor after every preset-mounted prepend pre-step rewriter', () => {
+    // The governor (design
+    // docs/plans/2026-11-12-per-step-input-budget-governor.md §"Package & seam")
+    // publishes no Service — plain plugin, progress-rebuild precedent — so it
+    // needs no isolate key.
+    const group = doc.find((r) => r.id === 'cc-services')!
+    const row = (group.config as any[]).find((r) => r.id === 'input-budget')!
+    expect(row.name).toBe('@dsh-cc/input-budget')
+    expect(row.config).toBeUndefined()
+    expect(row.disabled).toBeUndefined()
+    expect(Object.keys(group.isolate as Record<string, unknown>)).not.toContain('inputBudget')
+    const configIds = (group.config as any[]).map((r) => r.id)
+    const topIds = doc.map((r) => r.id)
+    // It lives INSIDE the group, in the pre-step rewriter neighbourhood the row
+    // it must wrap (context-crusher / turn-rules) and the producers it guards
+    // (memory, compaction-micro, advisor-watchdog, progress-rebuild) occupy.
+    expect(configIds).toContain('input-budget')
+    expect(topIds).not.toContain('input-budget')
+    expect(configIds.indexOf('input-budget')).toBeGreaterThan(configIds.indexOf('context-crusher'))
+    // ORDER TRIPWIRE: prepend unshifts, so the LATER-registered prepended
+    // listener is OUTERMOST. The only preset-mounted prepended `agent/pre-step`
+    // REWRITERS are the subagent strip-instructions + settled-notice suppression
+    // pair registered by the `tool-task` row, so the governor row must sort AFTER
+    // it to arbitrate the batch the model actually receives. Everything else is
+    // plain (hooks-claude-code's pre-step bridge, the cc-shell-glue mcp-ready
+    // notice, progress-rebuild's splice) and therefore always inside.
+    expect(configIds.indexOf('input-budget')).toBeGreaterThan(configIds.indexOf('tool-task'))
+    expect(configIds.indexOf('input-budget')).toBe(configIds.indexOf('tool-task') + 1)
+    // The vwa wrapper includes the shared body, so the row composes into BOTH
+    // preset closures; each tree gates its own agents with its own per-session
+    // clocks and defer backlogs.
+    expect(flattenIds(expandIncludes(vwaCordisPath))).toContain('input-budget')
+    // Raw-text tripwire: the row sits immediately after tool-task, and every
+    // pre-step rewriter it must wrap precedes it. PLAIN producers (memory
+    // recall, turn-rules, progress-rebuild, the hook bridge, the mcp-ready
+    // notice) are inside the gate by construction whatever their row order, so
+    // their position is deliberately not pinned here.
+    const governorIdx = yamlText.indexOf('- id: input-budget')
+    expect(governorIdx).toBeGreaterThan(yamlText.indexOf('- id: tool-task'))
+    expect(governorIdx).toBeLessThan(yamlText.indexOf('- id: command-agents'))
+    for (const rewriter of ['context-crusher', 'compaction-micro', 'retry-attendant']) {
+      expect(governorIdx, rewriter).toBeGreaterThan(yamlText.indexOf(`- id: ${rewriter}`))
+    }
   })
 
   it('mounts the preset-scoped tool-schedule row right after tool-jobs', () => {

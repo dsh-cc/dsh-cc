@@ -2,8 +2,8 @@
  * Class map (plan §"Classes (explicit membership only)"): the exact table,
  * closed membership, and the two safety properties the inversion buys —
  * unknown kinds and `cc-shell-glue` are passthrough, so never trimmed and never
- * deferred. The full repo-scan enumeration assert lands with the slice-5
- * wiring; here the map function itself is pinned.
+ * deferred. The repo-scan enumeration assert over every declared kind lives in
+ * `kinds-enumeration.spec.ts`; here the map function itself is pinned.
  */
 
 import { describe, expect, it } from 'vitest'

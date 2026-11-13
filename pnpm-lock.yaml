@@ -3131,6 +3131,9 @@ importers:
       '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code
+      '@dsh-cc/input-budget':
+        specifier: workspace:^
+        version: link:../../context/input-budget
       '@dsh-cc/input-ledger':
         specifier: workspace:^
         version: link:../../observability/input-ledger
