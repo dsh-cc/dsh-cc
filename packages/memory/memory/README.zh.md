@@ -21,14 +21,15 @@ side-query 动态召回。所有文件访问都走可选的 `ctx.fs` 缝，因�
   home 根本身是所有工作区共享的全局层。不同仓库的会话互相看不到对方的私有记忆；
   到处都用得上的事实以 `scope: "global"` 保存。会话转录仍按原始 cwd 分组
   （`sessions/--<cwd-slug>--`）；worktree 会话的记忆目录不再与之对齐。
-- **`memory` 系统提示词 section** —— 保存通道指引、各层入口内容（截断）、按
-  scope 标注的合并主题索引、以及 grep 搜索指引。section 始终渲染（无记忆的层显示
-  占位符），保存指引永不缺席。一次全局注册服务所有 agent：text 回调渲染发起组装
-  的 agent 自己的工作区层（agent 经 assemble scope 传入）。委派 child
-  （`delegationDepth > 0`）渲染空串，section 从 child 提示词中消失——对齐 Claude
-  Code：自动记忆不与非 fork 子代理共享，父 prompt 必须自行传递 child 需要的事实。
-  目录扫描经 `ctx.fs` 在后台进行；各层渲染片段缓存，仅当片段实际变化时才发出
-  `system-prompt/change`；轮末监听器会重新扫描，host 侧写入无需重启即可进入提示词。
+- **`memory` 系统提示词 section** —— 保存通道指引，加上覆盖各层的**一个**按 scope
+  标注的主题目录（catalog），排序为「`MEMORY.md` 维护的指针顺序优先、其余按文件名」，
+  以及 grep 搜索指引。section 始终渲染（无记忆的 agent 显示占位符），保存指引永不
+  缺席。一次全局注册服务所有 agent：text 回调渲染发起组装的 agent 自己的工作区层
+  （agent 经 assemble scope 传入）。委派 child（`delegationDepth > 0`）渲染空串，
+  section 从 child 提示词中消失——对齐 Claude Code：自动记忆不与非 fork 子代理共享，
+  父 prompt 必须自行传递 child 需要的事实。目录扫描经 `ctx.fs` 在后台进行；每个目录
+  的目录指纹（fingerprint）被缓存，仅当指纹实际变化时才发出 `system-prompt/change`；
+  轮末监听器会重新扫描，host 侧写入无需重启即可进入提示词。
 - **`memory_save` 工具** —— 唯一可用的保存通道。记忆目录在所有会话 workspace
   之外，直接的 `write`/`edit` 调用会被 fs sandbox 拦截、必然失败，section 文案
   对此有明确说明。工具接收结构化字段（`name`、`type`、`description`、`body`、可选
@@ -146,31 +147,51 @@ selector）。**没有任何 profile 默认启用该特性**：`cc` preset 会�
 { "cc-systemone-memory-recall": { "mode": "shadow" } }
 ```
 
-## 记忆 section 预算（`cc-memory-section`，默认开启）
+## 记忆目录预算（`cc-memory-section`，默认开启）
 
-本节中**合并主题索引**是唯一没有被其他上限覆盖的表面：每层 `MEMORY.md` 片段已由
-`truncateEntrypointContent` 截断（每层 200 行 / 25 KB），因此该命名空间只限制索引块——
-section 标题、各层片段与「Searching past context」检索指引块始终与未设上限时**逐字节
-一致**。预算位于独立命名空间 `cc-memory-section`（通过 `registerNamespaceSafe` 注册，
-键名为 kebab-case），并在**每次渲染**时重新读取——settings 写入对下一次组装立即生效，
-包括首次组装的就绪重渲染与每次 `system-prompt/change` 重渲染。没有 settings 服务的宿主
-完全按下列默认值运行。
+section 渲染**一个**带 scope 标注的记忆主题目录——不再有各层 `MEMORY.md` 片段块（它把
+同一份清单又列了一遍，还沿另一条轴截断）。目录是 section 中唯一可变的部分：标题、
+保存指引与「Searching past context」块都是固定的。预算位于独立命名空间
+`cc-memory-section`（通过 `registerNamespaceSafe` 注册，键名为 kebab-case），并在
+**每次渲染**时重新读取——settings 写入对下一次组装立即生效，包括首次组装的就绪重渲染
+与每次 `system-prompt/change` 重渲染（但 settings 写入本身不发出
+`system-prompt/change`）。没有 settings 服务的宿主完全按下列默认值运行。
 
 | 字段 | 默认值 | 范围与含义 |
 |---|---|---|
-| `truncate` | `true` | 索引上限的显式开关。`false` 表示索引**不设上限**——绝不会移除该 section（恢复旧行为的开关） |
-| `max-bytes` | `8192`（**暂定**） | 1024-65536；整个索引块（`## Memory index` 标题加条目）的 UTF-8 字节上限。**暂定值**，待组装账本给出 section 字节分布后再调整；取值非法即被拒绝、绝不夹取，被拒的更新保留上一个有效快照 |
+| `truncate` | `true` | 目录上限的显式开关。`false` 表示目录**完整渲染**——绝不会移除该 section（恢复旧行为的开关） |
+| `max-bytes` | `24576` | 1024-65536；整个目录块（`## Memory index` 标题 + 条目 + 省略行）的 UTF-8 字节上限。取值非法即被拒绝、绝不夹取，被拒的更新保留上一个有效快照 |
+| `description-max-bytes` | `160` | `0`，或 8-1024；每条描述在 UTF-8 字节层面的上限。`0` 表示不截断。1-7 一律拒绝：比省略号还小的上限只是噪声，不是上限 |
 
-截断语义（所有尺寸均为 UTF-8 字节，与 `truncateEntrypointContent` 的度量方式一致）：
+排序如实描述：`MEMORY.md` 索引里列出的条目排在最前，按该文件自身的顺序（精确、大小写
+敏感的文件名匹配；指向不存在条目、或指向其他 scope 条目的指针会落到后面），按
+workspace → team → global 的 scope 顺序轮询交错；其余条目随后按各 scope 内文件名排序。
+「维护顺序」是一种呈现策略，不是重要度评分；轮询是排序公平性，并不保证条目开始被丢弃
+后每个 scope 仍然可见。
 
-1. 索引块超过 `max-bytes` 时，从**字母序**列表底部丢弃整条条目——绝不产生半行，因此
-   多字节（如中文）描述不会被截断在字符中间；保留的前缀与未设上限时的字母序完全一致。
-   省略与相关性无关：字母序 ≠ 相关性。
-2. 块末追加 `… (N more memory topics; grep the memory directory for older entries)`，
-   其中 **N 统计条目数**，不是行数。
-3. **地板规则**：若连一条条目都无法与该行一起容纳，则块内只渲染 `## Memory index`
+截断语义（所有尺寸均为 UTF-8 字节）：
+
+1. 超过 `description-max-bytes` 的描述在字符边界处切分并以 `…` 结尾，该省略号计入上限——
+   多字节字符（如中文）与 emoji 绝不会被截断在字符中间。截断发生在装填之前，因此只会
+   增加能容纳的条目数。
+2. 目录仍超过 `max-bytes` 时，从交错顺序的**底部**丢弃整条条目——绝不产生半行。存活的是
+   一个前缀：各 scope 靠前的维护条目留得最久，各 scope 靠后的条目都可能被丢弃。省略与
+   相关性无关。
+3. 块末追加 `… (N more memory topics; grep the memory directory)`，其中 **N 统计条目数**，
+   不是行数。
+4. **地板规则**：若连一条条目都无法与该行一起容纳，则块内只渲染 `## Memory index`
    标题与该省略行、**不含任何条目**——section 保留检索指引，只失去枚举。预算永远是
    地板之上的上限、绝不低于地板，这也是低于 1024 的 `max-bytes` 会被拒绝的原因。
+
+目录只枚举**解析成功**的主题文件，并以 frontmatter 形态呈现；它不注入 `MEMORY.md` 文本，
+因此该文件里的策展人散文、以及目标没有可解析主题文件的指针行，都不会进入提示词。两者
+都留在盘上：`MEMORY.md` 可直接读取，搜索指引会 grep 这些目录。
+
+### 从「索引 + 各层片段」升级
+
+`max-bytes` 现在限制整个目录，而不是原来那块 8 KB 的索引；各层片段已移除。如果你曾固定
+`"max-bytes": 8192`，该值现在会渲染出比原有片段小得多的目录——请调高它（默认 `24576`
+是实测的替代值），或设 `"description-max-bytes": 0` 把同样的字节花在更少但更完整的条目上。
 
 召回不受影响：它直接扫描记忆目录，不读这个索引。
 
@@ -195,9 +216,16 @@ section 标题、各层片段与「Searching past context」检索指引块始�
 - `renderMemorySection(globalDir, workspaceDir, ...)` /
   `renderTeamMemorySection(...)` / `renderLayers(layers, budget?)` /
   `saveGuidance(workspaceDir, globalDir)` —— section 文本构建器。
-  `renderLayers` 接受**可选**的 `CombinedIndexBudget`（`{ truncate?, maxBytes? }`）；
-  不传即保持不设上限的旧行为，`renderMemorySection` / `renderTeamMemorySection`
-  永不设上限（它们不传 budget）。
+  `renderLayers` 接受**可选**的 `CombinedIndexBudget`
+  （`{ truncate?, maxBytes?, descriptionMaxBytes? }`）。整个对象不传时——以及
+  `renderMemorySection` / `renderTeamMemorySection`——渲染**既不设上限也不截断描述**；
+  传部分字段时各字段独立取默认（`truncate` ⇒ `true`，`maxBytes` ⇒ settings 默认值，
+  `descriptionMaxBytes` ⇒ `0`，即不截断）。
+- `renderCatalog(layers, options)` / `fitCatalog(entries, maxBytes)` /
+  `trimDescription(text, maxBytes)` / `renderLayerFingerprint(state)` /
+  `compareFilename(a, b)` / `ellipsisLine(n)` —— 目录基础设施：渲染、字节装填器、
+  UTF-8 安全的描述截断器、每目录的 `system-prompt/change` 指纹、全序文件名比较器、
+  以及省略行。
 - `MemorySection` —— section 的后台刷新缓存持有者（一次注册，按 agent 呈现
   工作区层）。
 - `registerMemorySaveTool(ctx, home, section)` / `MEMORY_SAVE_TOOL` /

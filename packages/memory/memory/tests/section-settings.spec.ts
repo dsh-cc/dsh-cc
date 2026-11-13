@@ -1,9 +1,11 @@
 /**
  * Settings specs for the `cc-memory-section` namespace (design
- * docs/plans/2026-11-12-selective-system-prompt-sections.md §A): kebab-case
- * external keys, camelCase internal shape, the provisional design defaults,
- * reject-invalid-keep-previous on updates, and the `max-bytes >= 1024` floor
- * that keeps the index cap from fighting the index floor.
+ * docs/plans/2026-11-13-memory-section-unified-catalog.md §G): kebab-case
+ * external keys, camelCase internal shape, the design-table defaults, the
+ * discontinuous `description-max-bytes` domain (`0`, or 8 … 1024 — rejected,
+ * never clamped), reject-invalid-keep-previous on updates, and the
+ * `max-bytes >= 1024` floor that keeps the catalog cap from fighting the
+ * catalog floor.
  *
  * The provider double mirrors `SettingsProvider`'s resolution contract
  * (`resolveValue`: schema first, then the owner's own `validate`, committing
@@ -13,7 +15,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_MEMORY_SECTION_SETTINGS,
+  MAX_DESCRIPTION_MAX_BYTES,
   MAX_INDEX_MAX_BYTES,
+  MIN_DESCRIPTION_MAX_BYTES,
   MIN_INDEX_MAX_BYTES,
   SETTINGS_NAMESPACE,
   SettingsSchema,
@@ -85,10 +89,12 @@ describe('cc-memory-section defaults', () => {
     expect(SETTINGS_NAMESPACE).toBe('cc-memory-section')
   })
 
-  it('publishes the design-table defaults (truncate on, 8192 provisional bytes)', () => {
-    expect(DEFAULT_MEMORY_SECTION_SETTINGS).toEqual({ truncate: true, maxBytes: 8192 })
+  it('publishes the design-table defaults (truncate on, 24576 catalog bytes, 160-byte descriptions)', () => {
+    expect(DEFAULT_MEMORY_SECTION_SETTINGS).toEqual({ truncate: true, maxBytes: 24576, descriptionMaxBytes: 160 })
     expect(MIN_INDEX_MAX_BYTES).toBe(1024)
     expect(MAX_INDEX_MAX_BYTES).toBe(65536)
+    expect(MIN_DESCRIPTION_MAX_BYTES).toBe(8)
+    expect(MAX_DESCRIPTION_MAX_BYTES).toBe(1024)
   })
 
   it('resolves defaults for an absent namespace', () => {
@@ -100,21 +106,31 @@ describe('cc-memory-section defaults', () => {
     expect(read()).toBeUndefined()
   })
 
-  it('maps the kebab-case section onto the camelCase internal shape', () => {
-    expect(memorySectionSettings({ truncate: false, 'max-bytes': 2048 })).toEqual({
+  it('maps the kebab-case section onto the three-field camelCase internal shape', () => {
+    expect(memorySectionSettings({ truncate: false, 'max-bytes': 2048, 'description-max-bytes': 64 })).toEqual({
       truncate: false,
       maxBytes: 2048,
+      descriptionMaxBytes: 64,
     })
   })
 
   it('keeps an explicit `truncate: false` through the schema (never re-defaults to true)', () => {
     const resolved = (SettingsSchema as Schema)({ truncate: false }) as MemorySectionSettingsSection
-    expect(memorySectionSettings(resolved)).toEqual({ truncate: false, maxBytes: 8192 })
+    expect(memorySectionSettings(resolved)).toEqual({ truncate: false, maxBytes: 24576, descriptionMaxBytes: 160 })
   })
 
   it('fills the defaults through the schema when only some fields are set', () => {
     const resolved = (SettingsSchema as Schema)({ 'max-bytes': 4096 }) as MemorySectionSettingsSection
-    expect(memorySectionSettings(resolved)).toEqual({ truncate: true, maxBytes: 4096 })
+    expect(memorySectionSettings(resolved)).toEqual({ truncate: true, maxBytes: 4096, descriptionMaxBytes: 160 })
+  })
+
+  it('preserves a stored `0` (trimming off) instead of re-defaulting it to 160', () => {
+    // The schema carries no `.min()`, so the legal `0` reaches the mapping and
+    // `??` keeps it (a `||` would silently restore the default).
+    const resolved = (SettingsSchema as Schema)({ 'description-max-bytes': 0 }) as MemorySectionSettingsSection
+    expect(resolved['description-max-bytes']).toBe(0)
+    expect(memorySectionSettings(resolved)).toEqual({ truncate: true, maxBytes: 24576, descriptionMaxBytes: 0 })
+    expect(memorySectionSettings({ 'description-max-bytes': 0 }).descriptionMaxBytes).toBe(0)
   })
 })
 
@@ -136,23 +152,48 @@ describe('cc-memory-section validation', () => {
     expect(() => validateMemorySectionSettings({ 'max-bytes': Number.NaN })).toThrow()
     expect(() => validateMemorySectionSettings({ truncate: 'yes' as never })).toThrow()
   })
+
+  it('accepts the whole description-max-bytes domain: `0`, and 8 … 1024 inclusive', () => {
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': 0 })).not.toThrow()
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': MIN_DESCRIPTION_MAX_BYTES })).not.toThrow()
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': 160 })).not.toThrow()
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': MAX_DESCRIPTION_MAX_BYTES })).not.toThrow()
+  })
+
+  it('rejects 1 … 7 and >1024 instead of clamping them', () => {
+    for (let value = 1; value < MIN_DESCRIPTION_MAX_BYTES; value += 1) {
+      expect(() => validateMemorySectionSettings({ 'description-max-bytes': value }), `value ${value}`).toThrow()
+    }
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': -1 })).toThrow()
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': MAX_DESCRIPTION_MAX_BYTES + 1 })).toThrow()
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': 100_000 })).toThrow()
+  })
+
+  it('rejects non-integer and non-finite description-max-bytes', () => {
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': 100.5 })).toThrow()
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': Number.NaN })).toThrow()
+    expect(() => validateMemorySectionSettings({ 'description-max-bytes': Number.POSITIVE_INFINITY })).toThrow()
+  })
 })
 
 describe('cc-memory-section live reader', () => {
   it('re-reads the scope on every call, so a write applies to the next use', () => {
     const { read, update } = harness()
     expect(read()).toEqual(DEFAULT_MEMORY_SECTION_SETTINGS)
-    update({ truncate: false, 'max-bytes': 4096 })
-    expect(read()).toEqual({ truncate: false, maxBytes: 4096 })
+    update({ truncate: false, 'max-bytes': 4096, 'description-max-bytes': 32 })
+    expect(read()).toEqual({ truncate: false, maxBytes: 4096, descriptionMaxBytes: 32 })
     update({ 'max-bytes': 16384 })
-    expect(read()).toEqual({ truncate: true, maxBytes: 16384 })
+    expect(read()).toEqual({ truncate: true, maxBytes: 16384, descriptionMaxBytes: 160 })
   })
 
   it('keeps the previous valid snapshot when an update is rejected', () => {
     const { read, update } = harness()
-    update({ 'max-bytes': 4096 })
+    update({ 'max-bytes': 4096, 'description-max-bytes': 0 })
     expect(() => update({ 'max-bytes': 512 })).toThrow()
-    expect(read()).toEqual({ truncate: true, maxBytes: 4096 })
+    expect(read()).toEqual({ truncate: true, maxBytes: 4096, descriptionMaxBytes: 0 })
+    // A rejected description ceiling keeps the snapshot too — including a `0`.
+    expect(() => update({ 'description-max-bytes': 4 })).toThrow()
+    expect(read()).toEqual({ truncate: true, maxBytes: 4096, descriptionMaxBytes: 0 })
   })
 
   it('degrades to the defaults when the first registration is rejected', () => {

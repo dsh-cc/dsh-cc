@@ -54,8 +54,20 @@ export type { TitleSidecarOptions } from './title-sidecar.ts'
 export { MemorySection, renderMemorySection, renderTeamMemorySection, renderLayers, saveGuidance, MEMORY_SECTION_NAME, MEMORY_SECTION_ORDER } from './section.ts'
 export type { CombinedIndexBudget, MemoryLayer } from './section.ts'
 export {
+  MEMORY_CATALOG_HEADER,
+  compareFilename,
+  ellipsisLine,
+  fitCatalog,
+  renderCatalog,
+  renderLayerFingerprint,
+  trimDescription,
+} from './catalog.ts'
+
+export {
   DEFAULT_MEMORY_SECTION_SETTINGS,
+  MAX_DESCRIPTION_MAX_BYTES,
   MAX_INDEX_MAX_BYTES,
+  MIN_DESCRIPTION_MAX_BYTES,
   MIN_INDEX_MAX_BYTES,
   SETTINGS_NAMESPACE as MEMORY_SECTION_SETTINGS_NAMESPACE,
   memorySectionSettings,

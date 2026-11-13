@@ -1,30 +1,37 @@
 /**
- * The `memory` system-prompt section: save-channel guidance plus one layer
- * per memory scope — the workspace-private directory, the global directory,
- * and (when `teamEnabled`) the workspace's team directory. Plugins mount once
- * on the root context, so a single global section serves every agent: the
- * text callback receives the assembling agent through `AssembleContext.scope`
- * (the agent loop passes `scope: agent`) and renders that agent's workspace
- * layer. Delegated children (`delegationDepth > 0`) render an empty string so
- * the section drops out of the child prompt. Directory scans run in the
- * background through `ctx.fs`; rendered per-layer fragments are cached and
- * `system-prompt/change` fires only when a fragment actually changed. The
- * section always renders for a top-level agent (a memoryless layer shows a
+ * The `memory` system-prompt section: save-channel guidance plus ONE
+ * scope-tagged topic catalog over every memory scope — the workspace-private
+ * directory, the global directory, and (when `teamEnabled`) the workspace's team
+ * directory (design docs/plans/2026-11-13-memory-section-unified-catalog.md).
+ * Plugins mount once on the root context, so a single global section serves every
+ * agent: the text callback receives the assembling agent through
+ * `AssembleContext.scope` (the agent loop passes `scope: agent`) and renders that
+ * agent's workspace layer. Delegated children (`delegationDepth > 0`) render an
+ * empty string so the section drops out of the child prompt.
+ *
+ * Directory scans run in the background through `ctx.fs`; each directory's
+ * catalog FINGERPRINT is cached and `system-prompt/change` fires only when a
+ * fingerprint actually changed. The rendering itself lives in `catalog.ts`.
+ * The section always renders for a top-level agent (a memoryless agent shows a
  * placeholder) so the save guidance never disappears.
  * @module @dsh-cc/memory/section
  */
 
-import { Buffer } from 'node:buffer'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { delegationDepthOf } from '@deepseek-ai/dsh-subagent'
-import { ENTRYPOINT_NAME, truncateEntrypointContent } from './truncate.ts'
+import { renderCatalog, renderLayerFingerprint } from './catalog.ts'
+import type { CombinedIndexBudget, MemoryLayer } from './catalog.ts'
+import { ENTRYPOINT_NAME } from './truncate.ts'
 import { scanMemoryDirectory } from './scan.ts'
 import type { MemoryDirectoryState } from './scan.ts'
 import { cwdOf, resolveWorkspaceMemoryDir } from './paths.ts'
 import { resolveTeamMemoryRoot } from './team.ts'
 import { DEFAULT_MEMORY_SECTION_SETTINGS } from './section-settings.ts'
 import type { MemorySectionSettingsReader } from './section-settings.ts'
+
+export type { CombinedIndexBudget, MemoryLayer } from './catalog.ts'
+
 
 /** Default order slot for the memory section (before tool guidance). */
 export const MEMORY_SECTION_ORDER = 90
@@ -54,37 +61,6 @@ function withinBudget<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, budget]).finally(() => clearTimeout(timer))
 }
 
-/** A memory layer surfaced in the section. */
-export interface MemoryLayer {
-  /** Scope tag shown in the combined index. */
-  scope: 'workspace' | 'global' | 'team'
-  /** Heading label for the layer's entrypoint block. */
-  label: string
-  /** The layer's directory. */
-  dir: string
-  /** The last scanned state, or `undefined` while the first scan is pending. */
-  state: MemoryDirectoryState | undefined
-}
-
-/**
- * Budget for the COMBINED topic-index block (design
- * docs/plans/2026-11-12-selective-system-prompt-sections.md §A). The parameter
- * is optional everywhere: omitting it keeps the historical uncapped render, so
- * the public `renderLayers` / `renderMemorySection` / `renderTeamMemorySection`
- * exports stay source- and behavior-compatible for callers that predate the
- * budget.
- */
-export interface CombinedIndexBudget {
-  /**
-   * Whether the index block is capped at all. Defaults to `true` when a budget
-   * object is passed; `false` renders the index uncapped (it never removes the
-   * section).
-   */
-  truncate?: boolean
-  /** UTF-8 byte ceiling for the whole index block; defaults to the settings default. */
-  maxBytes?: number
-}
-
 /**
  * Extract the assembling agent from an `AssembleContext`. The agent loop
  * assembles with `scope: agent` (a runtime contract; `ScopeKey` is opaque),
@@ -104,7 +80,7 @@ function agentFromScope(scope: unknown): Agent | undefined {
  */
 export class MemorySection {
   private readonly states = new Map<string, MemoryDirectoryState>()
-  private readonly fragments = new Map<string, string>()
+  private readonly fingerprints = new Map<string, string>()
   private readonly refreshers = new Map<string, Promise<void>>()
   private readonly teamEnabled: boolean
 
@@ -230,21 +206,26 @@ export class MemorySection {
   }
 
   /**
-   * The current combined-index budget. Read per render (never cached) so a
-   * settings update — or a rejected update that keeps the previous snapshot —
-   * is observed by the very next render. No reader, or a reader that resolves
-   * `undefined` (no settings service / nothing registered), means the defaults.
+   * The current catalog options. Read per render (never cached) so a settings
+   * update — or a rejected update that keeps the previous snapshot — is observed
+   * by the very next render. No reader, or a reader that resolves `undefined`
+   * (no settings service / nothing registered), means the defaults.
    */
-  private indexBudget(): CombinedIndexBudget {
+  private indexBudget(): Required<CombinedIndexBudget> {
     const settings = this.readSettings?.() ?? DEFAULT_MEMORY_SECTION_SETTINGS
-    return { truncate: settings.truncate, maxBytes: settings.maxBytes }
+    return {
+      truncate: settings.truncate,
+      maxBytes: settings.maxBytes,
+      descriptionMaxBytes: settings.descriptionMaxBytes,
+    }
   }
 
   /**
    * Re-scan the global directory plus the agent's workspace (and team)
    * directories. Overlapping scans of one directory share a single background
-   * promise. Emits `system-prompt/change` only when a rendered fragment
-   * actually changed, so an unchanged disk does not churn reassembly.
+   * promise. Emits `system-prompt/change` only when a directory's catalog
+   * fingerprint actually changed, so an unchanged disk does not churn
+   * reassembly.
    * @param agent - whose workspace layers to refresh; omitted = global only.
    */
   async refresh(agent?: Agent): Promise<void> {
@@ -271,13 +252,13 @@ export class MemorySection {
     const fileSystem = this.ctx.get('fs')
     if (fileSystem === undefined) return
     const state = await scanMemoryDirectory(fileSystem, dir)
-    const fragment = renderLayerFragment({ scope: 'global', label: '', dir, state })
-    if (fragment === this.fragments.get(dir)) {
+    const fingerprint = renderLayerFingerprint(state)
+    if (fingerprint === this.fingerprints.get(dir)) {
       this.states.set(dir, state)
       return
     }
     this.states.set(dir, state)
-    this.fragments.set(dir, fragment)
+    this.fingerprints.set(dir, fingerprint)
     this.ctx.emit('system-prompt/change')
   }
 }
@@ -354,24 +335,15 @@ export function renderTeamMemorySection(
   ])
 }
 
-/** Render one layer's entrypoint block (heading + truncated body). */
-function renderLayerFragment(layer: MemoryLayer): string {
-  const entry = layer.state?.entrypoint?.trim()
-  const body = entry !== undefined && entry.length > 0
-    ? truncateEntrypointContent(entry).content
-    : '(no memories yet)'
-  return `## ${ENTRYPOINT_NAME} (${layer.label})\n\n${body}`
-}
-
 /**
  * Compose the full section text from the observed layers.
  *
- * Only the combined topic index is budgeted: the section header, the per-layer
- * `MEMORY.md` fragments (already capped by `truncateEntrypointContent`) and the
- * "Searching past context" guidance render byte-identical whether or not a
- * budget is passed. Omitting `budget` keeps the historical uncapped behavior.
+ * The section header and the save guidance are fixed; the ONLY variable body is
+ * the scope-tagged catalog rendered by `catalog.ts` (a memoryless agent gets the
+ * `(no memories yet)` placeholder instead). Omitting `budget` keeps the
+ * historical uncapped, untrimmed behavior for public callers.
  * @param layers - the layers this render observes.
- * @param budget - optional combined-index budget.
+ * @param budget - optional catalog options.
  * @returns the rendered section.
  */
 export function renderLayers(layers: readonly MemoryLayer[], budget?: CombinedIndexBudget): string {
@@ -399,71 +371,28 @@ export function renderLayers(layers: readonly MemoryLayer[], budget?: CombinedIn
     '',
   )
   const ordered = [workspace, team, global].filter((layer): layer is MemoryLayer => layer !== undefined)
-  lines.push(ordered.map(layer => renderLayerFragment(layer)).join('\n\n'))
-  const index = renderCombinedIndex(ordered, budget)
-  if (index.length > 0) lines.push('', ...index)
+  const catalog = renderCatalog(ordered, resolveCatalogOptions(budget))
+  lines.push(...(catalog.length > 0 ? catalog : ['(no memories yet)']))
   const search = renderSearch(ordered)
   if (search.length > 0) lines.push('', ...search)
   return lines.join('\n')
 }
 
-/** A combined topic index with each layer's scope tagged, sorted by filename. */
-function renderCombinedIndex(layers: readonly MemoryLayer[], budget?: CombinedIndexBudget): string[] {
-  const combined = layers.flatMap(layer =>
-    (layer.state?.topics ?? []).map(topic => ({ ...topic, scope: layer.scope })),
-  )
-  if (combined.length === 0) return []
-  combined.sort((a, b) => a.filename.localeCompare(b.filename))
-  const lines = combined.map((topic) => {
-    const type = topic.frontmatter.type === undefined ? '' : ` [${topic.frontmatter.type}]`
-    return `- [${escapeLinkText(topic.frontmatter.name)}](${topic.filename}) — ${topic.frontmatter.description} (${topic.scope})${type}`
-  })
-  return [...INDEX_HEADER, ...fitIndexEntries(lines, budget)]
-}
-
-/** The index block's fixed heading lines. */
-const INDEX_HEADER = ['## Memory index', '']
-
 /**
- * The line standing in for the omitted tail of the alphabetical topic list.
- * `omitted` counts ENTRIES, not lines.
- * @param omitted - how many topic entries were dropped.
- * @returns the ellipsis line.
+ * Resolve every optional catalog option independently (design §G): a partially
+ * specified budget never forces a caller to infer a default. `truncate` omitted
+ * ⇒ capped (passing a budget opts into capping), `maxBytes` omitted ⇒ the
+ * settings default, `descriptionMaxBytes` omitted ⇒ `0` (no trimming, so a
+ * caller predating trimming keeps byte-identical descriptions).
+ * @param budget - the caller's optional budget.
+ * @returns the fully resolved options.
  */
-function indexEllipsisLine(omitted: number): string {
-  return `… (${omitted} more memory topics; grep the memory directory for older entries)`
-}
-
-/** UTF-8 size of an index block, newline-joined exactly as it renders. */
-function indexBlockBytes(lines: readonly string[]): number {
-  return Buffer.byteLength(lines.join('\n'), 'utf8')
-}
-
-/**
- * Fit the entry lines into the block budget by dropping whole entries from the
- * BOTTOM of the alphabetical list — never a partial line, so multi-byte (CJK)
- * text can never be sliced mid-character. The retained prefix keeps the same
- * alphabetical order the uncapped render produced.
- *
- * Floor rule: the ellipsis line (and therefore the retrieval guidance that
- * follows it) always survives. When not even one entry fits beside it, the
- * block renders the header plus the ellipsis line with no entries — the budget
- * is a cap above the floor, never below it.
- * @param entries - the rendered entry lines, alphabetical.
- * @param budget - the optional budget; absent or `truncate: false` = uncapped.
- * @returns the entry lines to render (uncapped, truncated, or none).
- */
-function fitIndexEntries(entries: readonly string[], budget?: CombinedIndexBudget): string[] {
-  if (budget === undefined || budget.truncate === false) return [...entries]
-  const maxBytes = budget.maxBytes ?? DEFAULT_MEMORY_SECTION_SETTINGS.maxBytes
-  if (indexBlockBytes([...INDEX_HEADER, ...entries]) <= maxBytes) return [...entries]
-  for (let kept = entries.length - 1; kept > 0; kept -= 1) {
-    const candidate = [...INDEX_HEADER, ...entries.slice(0, kept), indexEllipsisLine(entries.length - kept)]
-    if (indexBlockBytes(candidate) <= maxBytes) return candidate.slice(INDEX_HEADER.length)
+function resolveCatalogOptions(budget?: CombinedIndexBudget): Required<CombinedIndexBudget> {
+  return {
+    truncate: budget?.truncate ?? true,
+    maxBytes: budget?.maxBytes ?? DEFAULT_MEMORY_SECTION_SETTINGS.maxBytes,
+    descriptionMaxBytes: budget?.descriptionMaxBytes ?? 0,
   }
-  // Floor: no entry fits beside the ellipsis line; the section keeps its
-  // retrieval guidance and loses only enumeration.
-  return [indexEllipsisLine(entries.length)]
 }
 
 function renderSearch(layers: readonly MemoryLayer[]): string[] {
@@ -472,15 +401,11 @@ function renderSearch(layers: readonly MemoryLayer[]): string[] {
   const dirs = populated.map(layer => `${layer.dir}/`).join(' ')
   return [
     '## Searching past context',
-    'When a MEMORY.md entry is not enough, search topic files and the transcript log with narrow terms (error messages, file paths, function names):',
+    'When an index entry is not enough, search topic files and the transcript log with narrow terms (error messages, file paths, function names):',
     '```',
     `grep -rn "<search term>" ${dirs} --include="*.md"`,
     '```',
   ]
-}
-
-function escapeLinkText(name: string): string {
-  return name.replace(/[\\[\]]/g, '\\$&')
 }
 
 /**

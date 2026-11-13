@@ -315,7 +315,7 @@ describe('memory_save tool', () => {
       expect(result.isError).toBeFalsy()
       const text = (result.content as Array<{ text?: string }>).map(c => c.text ?? '').join('')
       expect(text).toContain('already over its 200-line/25000-byte cap')
-      expect(text).toContain('tail entries are invisible until consolidation compacts it')
+      expect(text).toContain('consolidating it will shrink the index')
       expect(fs.backingText(`${WS_DIR}/user-profile.md`)).toBe(renderTopicFile(VALID))
       expect(fs.backingText(`${WS_DIR}/MEMORY.md`)).toContain('- [user-profile](user-profile.md)')
       expect(section.refresh).toHaveBeenCalledTimes(1)

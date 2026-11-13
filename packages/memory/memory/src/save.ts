@@ -250,8 +250,8 @@ export function registerMemorySaveTool(
       let message = `Saved memory "${args.name}" (${args.type}) to ${filename} and updated ${ENTRYPOINT_NAME}.`
       if (preExistingOverLimit) {
         message += ` WARNING: ${ENTRYPOINT_NAME} was already over its ${MAX_ENTRYPOINT_LINES}-line/`
-          + `${MAX_ENTRYPOINT_BYTES}-byte cap before this save; tail entries are invisible until `
-          + 'consolidation compacts it.'
+          + `${MAX_ENTRYPOINT_BYTES}-byte cap before this save; consolidating it will `
+          + 'shrink the index.'
         // Legacy fail-open over-limit: queue the repair here too. Again
         // workspace-scope only (see the rejection arm point above), and the
         // sentence is appended only when the marker write actually landed.
