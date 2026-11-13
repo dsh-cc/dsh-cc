@@ -5,12 +5,18 @@
  * a pointer added by a concurrent writer after the job's baseline capture is
  * preserved rather than erased. A batch with no index write keeps the plain
  * `writeMemoryFiles` path.
+ *
+ * The `memory-consolidation` (dream) label keeps that protocol byte-for-byte;
+ * the `extract-memories` label ignores the fork's index write and upserts one
+ * pointer per batch topic host-side (design
+ * docs/plans/2026-11-12-extraction-index-coverage-fix.md §A).
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Buffer } from 'node:buffer'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
+import { MAX_ENTRYPOINT_BYTES, MAX_ENTRYPOINT_LINES } from '@dsh-cc/memory'
 import { startMemoryJob } from '../src/memory-job.ts'
 
 const DIR = '/mem'
@@ -25,14 +31,18 @@ function fakeAgent(): Agent {
 
 /**
  * In-memory fs seam. `afterWrite` hooks observe each completed `writeText`, so
- * a test can script a foreign writer landing at a precise commit-protocol step.
+ * a test can script a foreign writer landing at a precise commit-protocol step;
+ * `writes` records every completed write in order (the "was this content ever
+ * written?" assertion surface).
  */
 function makeFs(seed: Record<string, string> = {}) {
   const backing = new Map(Object.entries(seed))
-  const afterWrite: Array<(key: string) => void> = []
+  const afterWrite: Array<(key: string, content: string) => void> = []
+  const writes: Array<[string, string]> = []
   const fs = {
     backing,
     afterWrite,
+    writes,
     async resolve(path: string) { return { targetKey: path, displayPath: path } },
     async stat(target: unknown) {
       const content = backing.get(String((target as { targetKey: unknown }).targetKey))
@@ -47,7 +57,8 @@ function makeFs(seed: Record<string, string> = {}) {
     async writeText(target: unknown, content: string) {
       const key = String((target as { targetKey: unknown }).targetKey)
       backing.set(key, content)
-      for (const hook of afterWrite) hook(key)
+      writes.push([key, content])
+      for (const hook of afterWrite) hook(key, content)
       return {}
     },
     async listDir() { return [] },
@@ -60,9 +71,10 @@ async function runJob(
   fs: ReturnType<typeof makeFs>,
   writes: unknown,
   baselineIndex: string,
-  opts: { onStart?: () => void } = {},
+  opts: { onStart?: () => void; label?: string; warnSink?: string[] } = {},
 ): Promise<{ status: string; detail?: string }> {
   const ctx = new Context()
+  const warnSpy = vi.spyOn(ctx.logger, 'warn')
   const subagents = {
     async startActivation() {
       opts.onStart?.()
@@ -76,8 +88,39 @@ async function runJob(
   }
   ctx.provide('subagents' as never, subagents as never)
   ctx.provide('fs' as never, fs as unknown as FileSystem as never)
-  const job = await startMemoryJob(ctx, fakeAgent(), DIR, 'fork', 'dream', 'prompt', baselineIndex)
-  return job.done
+  const job = await startMemoryJob(
+    ctx,
+    fakeAgent(),
+    DIR,
+    'fork',
+    opts.label ?? 'memory-consolidation',
+    'prompt',
+    baselineIndex,
+  )
+  const outcome = await job.done
+  opts.warnSink?.push(...warnSpy.mock.calls.map(call => call.map(String).join(' ')))
+  return outcome
+}
+
+/** A memdir topic file body: frontmatter (name/description/type) plus a body. */
+function topicFile(name: string, description: string): string {
+  return ['---', `name: ${name}`, `description: ${description}`, 'type: project', '---', '', 'Body.', ''].join('\n')
+}
+
+/** `count` baseline pointer lines in the save path's line format. */
+function pointers(count: number, prefix = 'topic'): string {
+  return `${Array.from({ length: count }, (_, i) => `- [${prefix}-${i}](${prefix}-${i}.md) — d${i}`).join('\n')}\n`
+}
+
+/**
+ * An index of `lines` pointer lines whose trimmed size is EXACTLY `bytes` UTF-8
+ * bytes (the last line carries the padding), so the per-upsert byte gate can be
+ * pinned without magic lengths.
+ */
+function sizedIndex(bytes: number, firstLine = '- [batch](batch.md) — old', lines = 5): string {
+  const body = [firstLine, ...Array.from({ length: lines - 1 }, (_, i) => `- [pad-${i}](pad-${i}.md) — pad`)].join('\n')
+  const missing = bytes - Buffer.byteLength(body, 'utf8')
+  return `${body}${'x'.repeat(missing)}\n`
 }
 
 describe('memory-job MEMORY.md write-back (design §3.4)', () => {
@@ -171,5 +214,241 @@ describe('memory-job MEMORY.md write-back (design §3.4)', () => {
     expect(outcome.status).toBe('failed')
     expect(outcome.detail).toContain('duplicate memory filename "MEMORY.md"')
     expect(fs.backing.get(INDEX)).toBeUndefined()
+  })
+})
+
+describe('memory-job extraction write-back (2026-11-12 design §A)', () => {
+  it('incident reproduction: keeps every baseline pointer byte-identical, appends the new one, and never executes the fork index write', async () => {
+    // The 2026-11-12 incident shape: the fork reported one topic plus a
+    // MEMORY.md holding only its own pointer; the host committed it verbatim and
+    // 30 baseline pointers vanished.
+    const baseline = pointers(8)
+    const fs = makeFs({ [INDEX]: baseline })
+    const outcome = await runJob(fs, [
+      { path: 'incident.md', content: topicFile('incident', 'one new fact') },
+      { path: 'MEMORY.md', content: '- [incident](incident.md) — one new fact\n' },
+    ], baseline, { label: 'extract-memories' })
+
+    expect(outcome).toEqual({ status: 'completed' })
+    const expected = `${baseline}- [incident](incident.md) — one new fact\n`
+    expect(fs.backing.get(INDEX)).toBe(expected)
+    // Every baseline line survives verbatim, in order.
+    expect(fs.backing.get(INDEX)!.startsWith(baseline)).toBe(true)
+    // The only MEMORY.md write that ever reached the fs is the host-generated
+    // upsert result — the fork's own content was never written.
+    expect(fs.writes.filter(([key]) => key === INDEX).map(([, content]) => content)).toEqual([expected])
+    expect(fs.backing.get(`${DIR}/incident.md`)).toBe(topicFile('incident', 'one new fact'))
+  })
+
+  it('drops an over-cap fork index before validation and still commits the topic', async () => {
+    const baseline = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: baseline })
+    const overCap = Array.from({ length: 210 }, (_, i) => `- [x-${i}](x-${i}.md) — d`).join('\n')
+    const outcome = await runJob(fs, [
+      { path: 'fresh.md', content: topicFile('fresh', 'a fresh fact') },
+      { path: 'MEMORY.md', content: overCap },
+    ], baseline, { label: 'extract-memories' })
+
+    // A batch whose index write would fail validateMemoryWrites still succeeds.
+    expect(outcome).toEqual({ status: 'completed' })
+    expect(fs.backing.get(`${DIR}/fresh.md`)).toBe(topicFile('fresh', 'a fresh fact'))
+    expect(fs.backing.get(INDEX)).toBe(`${baseline}- [fresh](fresh.md) — a fresh fact\n`)
+  })
+
+  it('skips an append that would exceed the entrypoint caps and commits the topic only', async () => {
+    const baseline = pointers(MAX_ENTRYPOINT_LINES)
+    const fs = makeFs({ [INDEX]: baseline })
+    const warnings: string[] = []
+    const outcome = await runJob(fs, [{ path: 'late.md', content: topicFile('late', 'late fact') }], baseline, {
+      label: 'extract-memories',
+      warnSink: warnings,
+    })
+
+    expect(outcome).toEqual({ status: 'completed' })
+    expect(fs.backing.get(INDEX)).toBe(baseline)
+    expect(fs.backing.get(`${DIR}/late.md`)).toBe(topicFile('late', 'late fact'))
+    expect(warnings.join('\n')).toContain('cap')
+  })
+
+  it('freezes a pre-existing over-cap index without failing the job', async () => {
+    const baseline = pointers(MAX_ENTRYPOINT_LINES + 10)
+    const fs = makeFs({ [INDEX]: baseline })
+    const warnings: string[] = []
+    const outcome = await runJob(fs, [{ path: 'extra.md', content: topicFile('extra', 'extra fact') }], baseline, {
+      label: 'extract-memories',
+      warnSink: warnings,
+    })
+
+    expect(outcome).toEqual({ status: 'completed' })
+    expect(fs.backing.get(INDEX)).toBe(baseline)
+    expect(fs.backing.get(`${DIR}/extra.md`)).toBe(topicFile('extra', 'extra fact'))
+    expect(warnings.join('\n')).toContain('cap')
+  })
+
+  it('preserves a pointer a concurrent save added after the job started', async () => {
+    const baseline = '- [topic-a](topic-a.md) — A\n'
+    const fs = makeFs({ [INDEX]: baseline })
+    const outcome = await runJob(fs, [
+      { path: 'topic-b.md', content: topicFile('topic-b', 'B') },
+      { path: 'MEMORY.md', content: '- [topic-b](topic-b.md) — B\n' },
+    ], baseline, {
+      label: 'extract-memories',
+      onStart: () => fs.backing.set(INDEX, `${baseline}- [saved](saved.md) — S\n`),
+    })
+
+    expect(outcome).toEqual({ status: 'completed' })
+    expect(fs.backing.get(INDEX)).toBe(`${baseline}- [saved](saved.md) — S\n- [topic-b](topic-b.md) — B\n`)
+  })
+
+  it('completes with zero writes when the report carried only an index write', async () => {
+    const fs = makeFs({ [INDEX]: '- [a](a.md) — A\n' })
+    const outcome = await runJob(fs, [{ path: 'MEMORY.md', content: '- [a](a.md) — A\n- [b](b.md) — B\n' }], '', {
+      label: 'extract-memories',
+    })
+
+    expect(outcome).toEqual({ status: 'completed' })
+    expect(fs.backing.get(INDEX)).toBe('- [a](a.md) — A\n')
+    expect(fs.writes).toEqual([])
+  })
+
+  it('commits frontmatter-less topics with no pointer and one warn per batch', async () => {
+    const baseline = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: baseline })
+    const warnings: string[] = []
+    const outcome = await runJob(fs, [
+      { path: 'raw.md', content: 'no frontmatter here\n' },
+      { path: 'raw-two.md', content: 'nor here\n' },
+    ], baseline, { label: 'extract-memories', warnSink: warnings })
+
+    expect(outcome).toEqual({ status: 'completed' })
+    expect(fs.backing.get(`${DIR}/raw.md`)).toBe('no frontmatter here\n')
+    expect(fs.backing.get(`${DIR}/raw-two.md`)).toBe('nor here\n')
+    expect(fs.backing.get(INDEX)).toBe(baseline)
+    const degraded = warnings.filter(warning => warning.includes('grep only'))
+    expect(degraded).toHaveLength(1)
+    expect(degraded[0]).toContain('raw.md')
+    expect(degraded[0]).toContain('raw-two.md')
+  })
+
+  it('applies cap skips in batch order: a too-wide append is skipped, a later fitting one lands', async () => {
+    // One line of headroom under the line cap and ~200 bytes under the byte
+    // cap: the first append's (clamped, 200-char) description cannot fit, the
+    // second one's short description does.
+    const baseline = sizedIndex(MAX_ENTRYPOINT_BYTES - 200)
+    expect(baseline.trim().split('\n')).toHaveLength(5)
+    const headroom = MAX_ENTRYPOINT_BYTES - Buffer.byteLength(baseline.trim(), 'utf8')
+    expect(headroom).toBe(200)
+    const fs = makeFs({ [INDEX]: baseline })
+    const warnings: string[] = []
+    const outcome = await runJob(fs, [
+      { path: 'wide.md', content: topicFile('wide', 'w'.repeat(400)) },
+      { path: 'narrow.md', content: topicFile('narrow', 'short') },
+    ], baseline, { label: 'extract-memories', warnSink: warnings })
+
+    expect(outcome).toEqual({ status: 'completed' })
+    const written = fs.backing.get(INDEX)!
+    expect(written).not.toContain('wide.md')
+    expect(written).toBe(`${baseline.trimEnd()}\n- [narrow](narrow.md) — short\n`)
+    expect(warnings.join('\n')).toContain('cap')
+    expect(fs.backing.get(`${DIR}/wide.md`)).toBe(topicFile('wide', 'w'.repeat(400)))
+    expect(fs.backing.get(`${DIR}/narrow.md`)).toBe(topicFile('narrow', 'short'))
+  })
+})
+
+describe('memory-job label validation (2026-11-12 design §B)', () => {
+  it('rejects an unknown label before dispatching anything', async () => {
+    const ctx = new Context()
+    let dispatched = 0
+    const subagents = {
+      async startActivation() {
+        dispatched += 1
+        return {
+          dispose: () => Promise.resolve(),
+          result: Promise.resolve({ structured: { writes: [] }, stopReason: 'completed' }),
+        }
+      },
+    }
+    ctx.provide('subagents' as never, subagents as never)
+    ctx.provide('fs' as never, makeFs() as unknown as FileSystem as never)
+
+    await expect(startMemoryJob(ctx, fakeAgent(), DIR, 'fork', 'dream', 'prompt', ''))
+      .rejects.toThrow('unknown memory job label "dream"')
+    expect(dispatched).toBe(0)
+  })
+
+  it('dispatches both known labels', async () => {
+    for (const label of ['extract-memories', 'memory-consolidation']) {
+      const fs = makeFs()
+      const outcome = await runJob(fs, [{ path: 'topic-a.md', content: topicFile('topic-a', 'A') }], '', { label })
+      expect(outcome).toEqual({ status: 'completed' })
+      expect(fs.backing.get(`${DIR}/topic-a.md`)).toBe(topicFile('topic-a', 'A'))
+    }
+  })
+})
+
+describe('extraction write-back — case-variant index alias (grok r4 P1)', () => {
+  it('fails the batch closed instead of writing a topic over the index', async () => {
+    const index = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: index })
+    const outcome = await runJob(
+      fs,
+      [
+        { path: 'memory.md', content: '# Memory index\n\n- [evil](memory.md) — replaced\n' },
+        { path: 'topic-a.md', content: topicFile('topic-a', 'A') },
+      ],
+      index,
+      { label: 'extract-memories' },
+    )
+    expect(outcome.status).toBe('failed')
+    expect(outcome.detail).toMatch(/case-folds to the reserved index name/)
+    // Nothing landed: the index and the topic set are untouched.
+    expect(fs.backing.get(INDEX)).toBe(index)
+    expect(fs.backing.get(`${DIR}/topic-a.md`)).toBeUndefined()
+  })
+
+  it('the exact MEMORY.md entry is still dropped silently before validation', async () => {
+    const index = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: index })
+    const outcome = await runJob(
+      fs,
+      [
+        { path: 'MEMORY.md', content: '- [only](only.md) — fork rewrite\n' },
+        { path: 'topic-a.md', content: topicFile('topic-a', 'A') },
+      ],
+      index,
+      { label: 'extract-memories' },
+    )
+    expect(outcome).toEqual({ status: 'completed' })
+    // The fork's rewrite never landed; the host appended its own pointer for
+    // the batch topic instead.
+    expect(fs.backing.get(INDEX)).toBe(`${index}- [topic-a](topic-a.md) — A\n`)
+  })
+})
+
+describe('extraction write-back — CAS rebase round (grok r4 P2)', () => {
+  it('re-derives the upsert against the fresh index after a concurrent interleave, without duplicating the line', async () => {
+    const index = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: index })
+    // A foreign writer lands on the topic write (which precedes the index
+    // write), so the commit loop's `pre !== fresh` check trips exactly once and
+    // the builder re-runs against the winner's index.
+    let fired = 0
+    fs.afterWrite.push((key) => {
+      if (key === `${DIR}/topic-a.md` && fired === 0) {
+        fired += 1
+        fs.backing.set(INDEX, `${index}- [winner](winner.md) — W\n`)
+      }
+    })
+    const outcome = await runJob(
+      fs,
+      [{ path: 'topic-a.md', content: topicFile('topic-a', 'A') }],
+      index,
+      { label: 'extract-memories' },
+    )
+    expect(outcome).toEqual({ status: 'completed' })
+    const written = fs.backing.get(INDEX)!
+    // The concurrent line survives and the batch pointer appears exactly once.
+    expect(written).toContain('- [winner](winner.md) — W')
+    expect(written.match(/- \[topic-a\]\(topic-a\.md\)/g)).toHaveLength(1)
   })
 })

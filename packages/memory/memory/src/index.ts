@@ -92,6 +92,7 @@ export { TeamMemoryError, sanitizePathKey, resolveTeamMemoryRoot, validateTeamMe
 export {
   MEMORY_SAVE_TOOL,
   MEMORY_SAVE_SCOPES,
+  MAX_DESCRIPTION_CHARS,
   MemorySaveError,
   pointerLine,
   registerMemorySaveTool,
@@ -113,11 +114,22 @@ export {
   MemoryIndexConflictError,
   carveEntrypointRoom,
   commitMemoryWrites,
+  firstPointerTarget,
   mergeIndexContent,
   pointerAdditions,
   readIndexStrict,
 } from './index-commit.ts'
 export type { CommitResult } from './index-commit.ts'
+export {
+  renderExtractionPointer,
+  sanitizePointerText,
+  upsertExtractionPointer,
+} from './extraction-upsert.ts'
+export type {
+  ExtractionUpsert,
+  ExtractionUpsertAction,
+  RenderedPointer,
+} from './extraction-upsert.ts'
 export { PRESSURE_FILE, readPressure, armPressure, markPressureForced, clearPressure } from './pressure.ts'
 export type { PressureState } from './pressure.ts'
 

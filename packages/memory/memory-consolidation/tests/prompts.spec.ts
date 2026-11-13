@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { MEMORY_AGENT_TOOLS, MEMORY_TOOL_FILTER, DRIVER_INJECTED_TOOL } from '../src/tools.ts'
-import { buildConsolidationPrompt, buildExtractionPrompt } from '../src/prompts.ts'
+import { buildConsolidationPrompt, buildExtractionPrompt, buildWindowedExtractionPrompt } from '../src/prompts.ts'
+import type { ExtractionWindow } from '../src/extraction-window.ts'
+
+/** A minimal complete review window (the prompt builder reads only its fields). */
+function window(existingIndex: string): ExtractionWindow {
+  return {
+    fromExclusive: -1,
+    throughInclusive: 2,
+    events: [{ kind: 'user', seq: 0, text: 'hello' }] as unknown as ExtractionWindow['events'],
+    evidenceHash: 'evidence',
+    indexHash: 'index',
+    existingIndex,
+    complete: true,
+  }
+}
 
 describe('MEMORY_TOOL_FILTER', () => {
   it('allows only read/search plus the structured-output report tool', () => {
@@ -37,6 +51,25 @@ describe('buildExtractionPrompt', () => {
     expect(prompt).toContain('FINAL CONTRACT: your turn is incomplete until you have called `structured_output` with the full report.')
     const lines = prompt.split('\n').filter(line => line.trim() !== '')
     expect(lines[lines.length - 1]).toContain('FINAL CONTRACT')
+  })
+})
+
+describe('extraction prompts declare the host as the index owner (2026-11-12 design §C)', () => {
+  it('buildExtractionPrompt reports topic files only and drops the index-maintenance instruction', () => {
+    const prompt = buildExtractionPrompt(3, '/mem', '- a.md: desc')
+    expect(prompt).not.toContain('Add or update a one-line pointer')
+    expect(prompt).toContain('the host maintains `MEMORY.md`')
+    // The dedupe guidance survives the rewrite.
+    expect(prompt).toContain('Existing topics:')
+    expect(prompt).toContain('- a.md: desc')
+  })
+
+  it('buildWindowedExtractionPrompt reports topic files only and drops the index-maintenance instruction', () => {
+    const prompt = buildWindowedExtractionPrompt(window('- a.md: desc'), '/mem')
+    expect(prompt).not.toContain('Add or update a one-line pointer')
+    expect(prompt).toContain('the host maintains `MEMORY.md`')
+    expect(prompt).toContain('Existing topics:')
+    expect(prompt).toContain('- a.md: desc')
   })
 })
 

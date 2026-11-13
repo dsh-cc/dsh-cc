@@ -28,8 +28,14 @@ import type { MemoryWrite } from './writeback.ts'
 /** One line's first pointer target: the `<name>.md` inside `](...)`. */
 const POINTER_TARGET = /\]\(([^()\s]+\.md)\)/g
 
-/** Extract the first pointer target on a line (case-sensitive, exact string). */
-function firstPointerTarget(line: string): string | undefined {
+/**
+ * Extract the first pointer target on a line (case-sensitive, exact string).
+ * The extraction write-back's line ownership rule reads this too, so it is
+ * exported: a line belongs to its first link's target.
+ * @param line - one index line.
+ * @returns the `<name>.md` inside the line's first `](...)`, or `undefined`.
+ */
+export function firstPointerTarget(line: string): string | undefined {
   POINTER_TARGET.lastIndex = 0
   const match = POINTER_TARGET.exec(line)
   return match?.[1]

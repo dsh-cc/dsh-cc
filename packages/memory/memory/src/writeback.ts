@@ -123,6 +123,16 @@ export function validateMemoryWrites(
     if (!FILE_NAME.test(path)) {
       throw new Error(`invalid memory filename "${path}": expected a flat .md name`)
     }
+    // Case-variant index alias (grok r4 P1): on a case-insensitive volume a
+    // write to `memory.md`/`Memory.md` IS a write to the MEMORY.md index —
+    // committing it as a topic would replace the index with a topic body.
+    // The exact entrypoint name is legal (it is the index write itself, which
+    // each arm routes deliberately); every other case-fold of it fails closed.
+    if (path !== ENTRYPOINT_NAME && path.toLowerCase() === ENTRYPOINT_NAME.toLowerCase()) {
+      throw new Error(
+        `invalid memory filename "${path}": it case-folds to the reserved index name ${ENTRYPOINT_NAME}`,
+      )
+    }
     if (seen.has(path)) {
       throw new Error(`duplicate memory filename "${path}" in one batch`)
     }
