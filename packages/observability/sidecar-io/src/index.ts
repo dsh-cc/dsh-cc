@@ -62,16 +62,29 @@ export function jsonlPath(root: string, ...parts: string[]): string {
 }
 
 /**
+ * Append options:
+ * - `repairTail` — append a missing trailing newline to a pre-existing
+ *   non-empty file first (best-effort: a concurrent appender may interleave,
+ *   leaving one unparseable line — readers skip it).
+ * - `onError` — called once with the swallowed error. Opt-in only: with no
+ *   callback the failure stays invisible, exactly as before. A throwing
+ *   callback is itself swallowed, so a sink can never crash an append.
+ */
+export interface AppendJsonlOptions {
+  repairTail?: boolean
+  onError?: (err: unknown) => void
+}
+
+/**
  * Append one JSONL row; never throws. Creates the parent directory when
- * missing. With `repairTail`, append a missing trailing newline to a
- * pre-existing non-empty file first (best-effort: a concurrent appender may
- * interleave, leaving one unparseable line — readers skip it). Best-effort
- * observability — must never surface into the caller's waterfall.
+ * missing. Swallowed write errors are reported to `opts.onError` when one is
+ * supplied. Best-effort observability — must never surface into the caller's
+ * waterfall.
  */
 export async function appendJsonl(
   filePath: string,
   row: unknown,
-  opts: { repairTail?: boolean } = {},
+  opts: AppendJsonlOptions = {},
 ): Promise<void> {
   try {
     await mkdir(dirname(filePath), { recursive: true })
@@ -91,8 +104,13 @@ export async function appendJsonl(
       }
     }
     await appendFile(filePath, `${JSON.stringify(row)}\n`, 'utf8')
-  } catch {
+  } catch (error) {
     // Best-effort observability; never surface into the caller's waterfall.
+    try {
+      opts.onError?.(error)
+    } catch {
+      // The error sink is best-effort too.
+    }
   }
 }
 

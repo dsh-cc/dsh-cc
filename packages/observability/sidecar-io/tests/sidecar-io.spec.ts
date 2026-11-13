@@ -57,6 +57,44 @@ describe('appendJsonl + readJsonl', () => {
   })
 })
 
+describe('appendJsonl onError', () => {
+  it('reports the swallowed error to the callback exactly once', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
+    const blocked = join(dir, 'blocked')
+    await writeFile(blocked, 'not a dir')
+    await chmod(blocked, 0o444)
+    const seen: unknown[] = []
+    await expect(
+      appendJsonl(join(blocked, 'ledger.jsonl'), { a: 1 }, { onError: (err) => seen.push(err) }),
+    ).resolves.toBeUndefined()
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toBeInstanceOf(Error)
+  })
+
+  it('never rejects when the onError sink itself throws', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
+    const blocked = join(dir, 'blocked')
+    await writeFile(blocked, 'not a dir')
+    await chmod(blocked, 0o444)
+    await expect(
+      appendJsonl(join(blocked, 'ledger.jsonl'), { a: 1 }, {
+        onError: () => {
+          throw new Error('sink failure')
+        },
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('does not call the callback on a successful append', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
+    const file = jsonlPath(dir, 'ledger.jsonl')
+    const seen: unknown[] = []
+    await appendJsonl(file, { a: 1 }, { onError: (err) => seen.push(err) })
+    expect(seen).toEqual([])
+    expect(await readJsonl<{ a: number }>(file)).toEqual([{ a: 1 }])
+  })
+})
+
 describe('appendJsonl repairTail', () => {
   it('terminates a pre-existing unterminated tail so the new row starts on its own line', async () => {
     dir = await mkdtemp(join(tmpdir(), 'sidecar-io-'))
