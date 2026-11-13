@@ -385,3 +385,70 @@ describe('memory-job label validation (2026-11-12 design §B)', () => {
     }
   })
 })
+
+describe('extraction write-back — case-variant index alias (grok r4 P1)', () => {
+  it('fails the batch closed instead of writing a topic over the index', async () => {
+    const index = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: index })
+    const outcome = await runJob(
+      fs,
+      [
+        { path: 'memory.md', content: '# Memory index\n\n- [evil](memory.md) — replaced\n' },
+        { path: 'topic-a.md', content: topicFile('topic-a', 'A') },
+      ],
+      index,
+      { label: 'extract-memories' },
+    )
+    expect(outcome.status).toBe('failed')
+    expect(outcome.detail).toMatch(/case-folds to the reserved index name/)
+    // Nothing landed: the index and the topic set are untouched.
+    expect(fs.backing.get(INDEX)).toBe(index)
+    expect(fs.backing.get(`${DIR}/topic-a.md`)).toBeUndefined()
+  })
+
+  it('the exact MEMORY.md entry is still dropped silently before validation', async () => {
+    const index = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: index })
+    const outcome = await runJob(
+      fs,
+      [
+        { path: 'MEMORY.md', content: '- [only](only.md) — fork rewrite\n' },
+        { path: 'topic-a.md', content: topicFile('topic-a', 'A') },
+      ],
+      index,
+      { label: 'extract-memories' },
+    )
+    expect(outcome).toEqual({ status: 'completed' })
+    // The fork's rewrite never landed; the host appended its own pointer for
+    // the batch topic instead.
+    expect(fs.backing.get(INDEX)).toBe(`${index}- [topic-a](topic-a.md) — A\n`)
+  })
+})
+
+describe('extraction write-back — CAS rebase round (grok r4 P2)', () => {
+  it('re-derives the upsert against the fresh index after a concurrent interleave, without duplicating the line', async () => {
+    const index = '- [a](a.md) — A\n'
+    const fs = makeFs({ [INDEX]: index })
+    // A foreign writer lands on the topic write (which precedes the index
+    // write), so the commit loop's `pre !== fresh` check trips exactly once and
+    // the builder re-runs against the winner's index.
+    let fired = 0
+    fs.afterWrite.push((key) => {
+      if (key === `${DIR}/topic-a.md` && fired === 0) {
+        fired += 1
+        fs.backing.set(INDEX, `${index}- [winner](winner.md) — W\n`)
+      }
+    })
+    const outcome = await runJob(
+      fs,
+      [{ path: 'topic-a.md', content: topicFile('topic-a', 'A') }],
+      index,
+      { label: 'extract-memories' },
+    )
+    expect(outcome).toEqual({ status: 'completed' })
+    const written = fs.backing.get(INDEX)!
+    // The concurrent line survives and the batch pointer appears exactly once.
+    expect(written).toContain('- [winner](winner.md) — W')
+    expect(written.match(/- \[topic-a\]\(topic-a\.md\)/g)).toHaveLength(1)
+  })
+})

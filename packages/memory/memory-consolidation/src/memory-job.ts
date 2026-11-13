@@ -278,8 +278,11 @@ async function writeExtractionReport(
         continue
       }
       const rendered = renderExtractionPointer(write.path, parsed.frontmatter)
-      warnings.push(...rendered.warnings)
       const upsert = upsertExtractionPointer(index, write.path, rendered.line)
+      // Rendering warnings (truncation) describe the emitted line: they fire
+      // only when that line actually lands — a cap-skipped or multi-target-
+      // skipped upsert never wrote it (grok r4 P2). Skip warnings always fire.
+      if (upsert.action !== 'skipped') warnings.push(...rendered.warnings)
       if (upsert.warning !== undefined) warnings.push(upsert.warning)
       index = upsert.content
     }

@@ -154,3 +154,32 @@ describe('upsertExtractionPointer', () => {
     expect(result.content).toContain('- [t-3](t-3.md) — refreshed')
   })
 })
+
+describe('upsertExtractionPointer (grok r4 folds)', () => {
+  it('titled sibling: a foreign link with a title on the owned line is seen and the refresh is skipped', () => {
+    const index = '- [batch](batch.md) — see [foreign](foreign.md "kept")\n'
+    const result = upsertExtractionPointer(index, 'batch.md', '- [batch](batch.md) — new\n')
+    expect(result.action).toBe('skipped')
+    expect(result.content).toBe(index)
+    expect(result.warning).toBeDefined()
+  })
+
+  it('duplicate same-path links on one line do not over-skip: the refresh still lands', () => {
+    const index = '- [batch](batch.md) and again [batch](batch.md) — old\n'
+    const result = upsertExtractionPointer(index, 'batch.md', '- [batch](batch.md) — new')
+    expect(result.action).toBe('replaced')
+    expect(result.content).toBe('- [batch](batch.md) — new\n')
+  })
+
+  it('byte-preserving append: a body ending mid-line keeps its bytes and only gains the separator', () => {
+    const index = '- [a](a.md) — d'
+    const result = upsertExtractionPointer(index, 'b.md', '- [b](b.md) — e\n'.trimEnd())
+    expect(result.content).toBe('- [a](a.md) — d\n- [b](b.md) — e\n')
+  })
+
+  it('byte-preserving append: trailing blank lines and the last line\'s trailing spaces survive untouched', () => {
+    const index = '- [a](a.md) — d  \n\n'
+    const result = upsertExtractionPointer(index, 'b.md', '- [b](b.md) — e')
+    expect(result.content).toBe('- [a](a.md) — d  \n\n- [b](b.md) — e\n')
+  })
+})

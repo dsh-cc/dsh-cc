@@ -28,8 +28,8 @@ import { firstPointerTarget } from './index-commit.ts'
 import { MAX_DESCRIPTION_CHARS } from './save.ts'
 import { MAX_ENTRYPOINT_BYTES, MAX_ENTRYPOINT_LINES } from './truncate.ts'
 
-/** Every pointer target on one line (`](<name>.md)` occurrences). */
-const ALL_POINTER_TARGETS = /\]\([^()\s]+\.md\)/g
+/** Every pointer target on one line, titled links included (`](<name>.md …)`). */
+const ALL_POINTER_TARGETS = /\]\(([^()\s]+\.md)[^)]*\)/g
 
 /** Run-of-whitespace, newlines included (a pointer must stay one line). */
 const WHITESPACE_RUN = /\s+/g
@@ -128,15 +128,18 @@ function shrinks(before: IndexSize, after: IndexSize): boolean {
     && (after.lines < before.lines || after.bytes < before.bytes)
 }
 
-/** All pointer targets on one line, in order. */
+/** All pointer targets on one line, in order, deduplicated by target. */
 function pointerTargets(line: string): string[] {
-  return [...line.matchAll(ALL_POINTER_TARGETS)].map(match => match[1]!)
+  return [...new Set([...line.matchAll(ALL_POINTER_TARGETS)].map(match => match[1]!))]
 }
 
 /** Append one pointer line, newline-terminated, to a (possibly empty) body. */
 function appendLine(body: string, line: string): string {
-  const trimmed = body.trimEnd()
-  return trimmed.length > 0 ? `${trimmed}\n${line}\n` : `${line}\n`
+  // Byte-preserving append (grok r4 P2): never rewrite the trailing bytes of a
+  // non-owned last line — only add the separator the one-line-per-entry shape
+  // requires when the body does not already end on a line boundary.
+  if (body === '') return `${line}\n`
+  return body.endsWith('\n') ? `${body}${line}\n` : `${body}\n${line}\n`
 }
 
 /**

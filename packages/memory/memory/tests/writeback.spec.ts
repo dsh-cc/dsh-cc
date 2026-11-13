@@ -156,6 +156,27 @@ describe('validateMemoryWrites', () => {
   })
 })
 
+describe('validateMemoryWrites — reserved index name (grok r4 P1)', () => {
+  it('rejects a case-variant of the index name: it would clobber MEMORY.md on a case-insensitive volume', () => {
+    for (const path of ['memory.md', 'Memory.md', 'mEmOrY.md']) {
+      expect(() => validateMemoryWrites({ writes: [{ path, content: 'body' }] }))
+        .toThrow(/case-folds to the reserved index name/)
+    }
+    // An uppercase extension is already refused by the flat-name rule; either
+    // rejection is a closed door, the name never reaches the filesystem.
+    expect(() => validateMemoryWrites({ writes: [{ path: 'MEMORY.MD', content: 'body' }] }))
+      .toThrow(/invalid memory filename/)
+  })
+
+  it('still accepts the exact index entry (each arm routes its own index writes deliberately)', () => {
+    expect(validateMemoryWrites({ writes: [{ path: 'MEMORY.md', content: '# index' }] })).toHaveLength(1)
+  })
+
+  it('accepts ordinary topics that merely contain the word memory', () => {
+    expect(validateMemoryWrites({ writes: [{ path: 'memory-recall-notes.md', content: 'x' }] })).toHaveLength(1)
+  })
+})
+
 describe('writeMemoryFiles', () => {
   it('writes each file under the memory dir with the confined per-call policy', async () => {
     const fs = fsMock()

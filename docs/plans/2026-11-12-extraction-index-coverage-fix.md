@@ -1,7 +1,7 @@
 # Extraction Write-Back Index Coverage Fix (v2.1)
 
 - Date: 2026-11-12
-- Status: Implemented — PR #405 (open, pending merge); review converged at v2.1 r3 (critic + codex; grok seat down on auth)
+- Status: Implemented — PR #405 (open, pending merge); review converged over four rounds (critic, codex, and grok after re-auth at r4)
 - Program: memory integrity (incident-driven)
 - Depends on: nothing hard. The dream path and the optimistic index commit protocol (`commitMemoryWrites`, modeled by `specs/tla/memory-write-lifecycle`) are unchanged.
 
@@ -23,6 +23,13 @@ At 2026-11-12 21:45:11 the workspace `MEMORY.md` shrank from 13,615 bytes (~37 p
 - **Single-target replacement rule** (codex r3, its own prescribed fix): first-target ownership alone still loses a secondary target on a grouped line whose first target IS the batch path (`- [batch](batch.md), [foreign](foreign.md)`). Replacement now requires the matched line to carry no other pointer target; otherwise the line is preserved, the refresh skipped, a warn fired.
 - **Empty batch** (critic P2#4): a report whose only write is the dropped index write completes with zero writes.
 - **Resurrection risk reworded** (critic P2#5): any legacy-extraction batch writing topic T unconditionally re-upserts T's pointer (no conditional on dream rewrites).
+
+**v2.1 → v2.2 (grok r4, third seat after re-auth GO-WITH-CONCERNS)**:
+- **P1 case-variant index alias (blocking, fixed)**: `dropIndexWrites` matched only the exact `MEMORY.md`, while the validator's `FILE_NAME` accepts `memory.md`/`Memory.md`. On a case-insensitive volume (default APFS — where the incident happened) such a "topic" write IS a write to the index: the topic body replaces the index and the job still reports `completed`, or the rebase rebuilds the index from the destroyed body. Fix: `validateMemoryWrites` now fails closed on any path that case-folds to the index name unless it is the exact entry (which each arm routes deliberately). Tests: validator-level (three fold variants + exact-entry acceptance) and end-to-end (batch fails closed, nothing on disk).
+- **P2 titled/parenthetical sibling (fixed)**: the multi-target counter missed `](foreign.md "kept")` while the recall preselect parser indexes exactly that form — a refresh would have dropped the sibling from the recall tie-break set. The counter now accepts a titled target and dedupes by target (same-path duplicates no longer over-skip forever).
+- **P2 byte-preserving append (fixed)**: `appendLine` trimmed the whole document; it now only adds the separator when the body does not already end on a line boundary, so a non-owned last line's trailing bytes survive.
+- **P2 warn ordering (fixed)**: a truncation warning is emitted only when the emitted line actually landed (cap-skipped / multi-target-skipped renders no longer warn about text that was never written).
+- **P2 missing CAS coverage (fixed)**: added a rebase-round test that forces `pre !== fresh` once and asserts the concurrent line survives and the batch pointer lands exactly once.
 
 ## Goals
 
