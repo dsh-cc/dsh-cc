@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/input-ledger",
   "description": "Single schema source and pure sink/reader core for the per-step input ledger — content-free composition, governor, dedupe and cap rows for the context-engineering input-governance program (docs/plans/2026-11-12-per-step-input-ledger.md)",
-  "version": "0.9.5-rc.1",
+  "version": "0.9.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

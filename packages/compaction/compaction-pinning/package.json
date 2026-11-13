@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/compaction-pinning",
   "description": "Compaction governed-message pinning: capture governance-class user messages verbatim in a bounded per-session ring so summarization compaction cannot erase their durable effect mid-session; user-layer-only settings, default ON",
-  "version": "0.9.5-rc.1",
+  "version": "0.9.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

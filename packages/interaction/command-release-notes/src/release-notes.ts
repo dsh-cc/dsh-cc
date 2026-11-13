@@ -17,6 +17,40 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.9.5 — governed model input, skill routing and one memory catalog
+
+- **Input ledger** — every model step now records what it actually received
+  (system sections, injected context, tools) as a sidecar row, so input cost
+  can be read per step instead of reconstructed after the fact. On by default.
+- **Input budget** — a governor arbitrates the same input before it is sent:
+  per-class caps, a duplicate window and a defer backlog, with protected
+  classes that are never trimmed. On by default in \`observe\` mode, which
+  accounts for what it would cut without cutting yet.
+- **Compaction pinning** — governance messages (turn rules, edit-recovery
+  hints) are restored verbatim across summarization compaction, gated on a
+  checkpoint that actually committed; a turn without one still falls back to
+  the old belt. \`cc-compaction-pinning\` is on by default.
+- **Prompt sections** — the memory topic index and the subagent catalog are
+  byte-capped under a shared budget, and the memory section renders one
+  scope-tagged catalog instead of per-scope lists. Dropped entries leave a
+  count and a grep hint, so nothing becomes unreachable.
+- **Reducer gate** — the context reducer asks a decision model for a
+  pre-generation feasibility verdict and skips attempts that are clearly not
+  worth a receipt. Receipt validity stays with the deterministic verifier.
+- **Skills** — a new read-only \`recommend_skill\` tool ranks skills for a
+  task using packed, token-budgeted batches with route-aware budgets and
+  deadline-partial coverage. It is mounted in the \`cc\` and \`vwa\` presets
+  and dark by default (\`mode: off\`); shadow and active are separate opt-ins.
+- **Memory fixes** — extraction write-backs can no longer destroy the topic
+  index, and Chinese no-relevant recall queries stay off the corpus
+  vocabulary.
+- **Routing** — moa gains context-routing v2 with a tail-risk tier policy.
+- **Tool discovery** — an activation eval harness (judge-stub gate plus a
+  live runtime arm) decides whether semantic tool discovery may leave shadow
+  mode. No default changed.
+- **Tooling** — \`/release-notes\` is written in the same commit as the
+  version bump, so a release can no longer ship a stale newest section.
+
 ## 0.9.5-rc.1 — defaults, SystemOne decisions and fixes
 
 - **Defaults** — the completion gate, turn rules (judged and repeat
