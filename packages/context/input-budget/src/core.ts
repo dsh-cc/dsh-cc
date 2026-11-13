@@ -20,7 +20,6 @@
  * @module @dsh-cc/input-budget/core
  */
 
-import { clampLabel } from '@dsh-cc/input-ledger'
 import type { GovernorTrim, TrimAction } from '@dsh-cc/input-ledger'
 import { BUDGETED_CLASSES, INPUT_CLASSES, classifyKind, type InputClass } from './classes.ts'
 
@@ -180,7 +179,22 @@ function classify<T extends GovernedMessage>(message: T): FreshEntry<T> {
   }
 }
 
-/** One `GovernorRow.trimmed` element; kind strings are label-capped like the ledger's. */
+/**
+ * One `GovernorRow.trimmed` element; kind strings are label-capped like the ledger's.
+ * Local replica of the ledger's `clampLabel` (`input-ledger/src/rows.ts`, same
+ * 64-char privacy cap): the pure core must stay free of RUNTIME imports beyond
+ * its own files — the formal-design conformance adapter executes `core.ts`
+ * under Node type-stripping on a fresh CI checkout, where no workspace
+ * `lib/` (nor the sibling-harness `lib/` its bare imports would resolve to)
+ * has been built yet. Type-only imports are erased, so the schema dependency
+ * on `@dsh-cc/input-ledger` survives this constraint.
+ */
+const MAX_LABEL_CHARS = 64
+
+function clampLabel(label: string): string {
+  return label.length <= MAX_LABEL_CHARS ? label : label.slice(0, MAX_LABEL_CHARS)
+}
+
 function trimRow(message: GovernedMessage, bytes: number, action: TrimAction): GovernorTrim {
   const kind = sourceKindOf(message)
   return { kind: clampLabel(kind.length > 0 ? kind : 'unlabelled'), bytes, action }

@@ -1,10 +1,12 @@
 // Conformance adapter for input-admission-arithmetic. Binds the REAL
 // @dsh-cc/input-budget core (packages/context/input-budget/src/core.ts) through
 // Node ESM resolution relative to this module, never the process working
-// directory. The core's own `@dsh-cc/input-ledger` import resolves through the
-// workspace node_modules chain, so a build of that dependency must exist (the
-// formal-design-lean CI job builds it before validating this model). Stdout is
-// protocol-only; diagnostics go to stderr.
+// directory. The core keeps ZERO runtime imports beyond its own relative
+// files (its `@dsh-cc/input-ledger` dependency is type-only, erased by Node
+// type-stripping), so this adapter executes on a fresh checkout with no
+// workspace lib/ and no sibling-harness build — do not add a runtime
+// workspace-import to src/core.ts without re-adding a CI build step for it.
+// Stdout is protocol-only; diagnostics go to stderr.
 import { charged, fits, oversize } from '../../../../packages/context/input-budget/src/core.ts'
 
 const CLASSES = new Set(['governance', 'task', 'memory', 'advisory', 'passthrough'])
