@@ -280,6 +280,32 @@ describe('agent.cordis.yml composition', () => {
     expect(row.config).toBeUndefined()
   })
 
+  it('mounts the skill-recommender row top level beside tool-skill (dark, no isolate key)', () => {
+    // S1-06 skill recommendation (design
+    // docs/plans/2026-11-02-systemone-06-skill-recommendation.md): the plugin
+    // registers only a tool plus the `cc-skill-recommendation` settings
+    // namespace — no Service — so it takes no isolate key and must NOT sit
+    // inside the isolate cc-services group. It is a DARK mount: `mode` defaults
+    // to `off`, so the row adds the tool while every call answers the off result
+    // and no runner runs; `shadow`/`active` stay a deployment settings change.
+    const ids = flattenIds(expandIncludes(sharedCordisPath))
+    const row = doc.find((r) => r.id === 'skill-recommender')!
+    expect(row.name).toBe('@dsh-cc/skill-recommender')
+    expect(row.config).toBeUndefined()
+    expect(row.disabled).toBeUndefined()
+    // Tool ordering: `recommend_skill` is deliberately NOT in the frozen
+    // cc-tool-order fixture — an unlisted tool renders in the
+    // `<unlisted-tools>` rest bucket of tests/tool-order-catalog.spec.ts, which
+    // keeps that fixture pinned to the always-registered pre-existing catalog.
+    const group = doc.find((r) => r.id === 'cc-services')!
+    expect((group.config as any[]).map((r) => r.id)).not.toContain('skill-recommender')
+    expect(Object.keys(group.isolate as Record<string, unknown>)).not.toContain('skillRecommender')
+    // Sits in the skills cluster: straight after tool-skill, before tool-goal.
+    expect(ids.indexOf('skill-recommender')).toBe(ids.indexOf('tool-skill') + 1)
+    // The vwa wrapper includes the shared body, so the row reaches BOTH closures.
+    expect(expandIncludes(vwaCordisPath).map((r) => r.id)).toContain('skill-recommender')
+  })
+
   it('mounts the input-ledger row top level beside cache-health (no isolate key, no group realm)', () => {
     // The input ledger (design
     // docs/plans/2026-11-12-per-step-input-ledger.md §"Package") publishes no
@@ -1061,6 +1087,11 @@ const DRIFT_ALLOWANCE: Record<string, string> = {
   // upstream has no post-compaction pin restore, and the row deliberately sits
   // OUTSIDE the compaction group (plain, non-isolate).
   'compaction-pinning': 'cc-only row (no upstream counterpart), top-level plain row',
+  // Advisory skill recommendation (design
+  // docs/plans/2026-11-02-systemone-06-skill-recommendation.md) is a cc-only
+  // row: upstream has no recommendation tool. It is a DARK mount — the row adds
+  // the tool while `cc-skill-recommendation.mode` stays `off` by default.
+  'skill-recommender': 'cc-only row (no upstream counterpart), dark mount beside tool-skill',
   // CC workflow surface: the journal provider + @dsh-cc/tool-workflow replace
   // workflow-ptc; the harness tool-workflow adapter stays disabled (duplicate
   // `workflow` registration) and tool-ralph stays enabled; the harness

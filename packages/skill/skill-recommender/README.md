@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-An advisory, read-only `recommend_skill` tool: given a task description, it returns a few visible skill names with relevance and prerequisite evidence. It is a **consumer** of the `ctx.skills` catalog — it never loads a body, runs a skill, invokes one, changes invocation policy or hides a skill. **Default off** (`cc-skill-recommendation.mode: off`), and mounted explicitly: it is **not** part of the default preset.
+An advisory, read-only `recommend_skill` tool: given a task description, it returns a few visible skill names with relevance and prerequisite evidence. It is a **consumer** of the `ctx.skills` catalog — it never loads a body, runs a skill, invokes one, changes invocation policy or hides a skill. **Default off** (`cc-skill-recommendation.mode: off`), and mounted by the `cc` and `vwa` presets as a dark row: the tool is present, `off` answers the off result and no runner runs until `mode` is set.
 
 ## What it does
 
@@ -48,14 +48,14 @@ Values are read live on every call, so a mid-session change applies to the next 
 
 ## Install
 
-The package is published as `@dsh-cc/skill-recommender` and is not mounted by any shipped composition. Mount it explicitly in the profile or agent composition you own:
+The package is published as `@dsh-cc/skill-recommender` and is mounted by the `cc` and `vwa` presets (`packages/preset/cc/agent.shared.cordis.yml`), where `mode` stays `off` until you set it. Any other profile or agent composition mounts it explicitly:
 
 ```yml
 - id: skill-recommender
   name: '@dsh-cc/skill-recommender'
 ```
 
-The plugin injects `tools` and `skills`; it stays pending until both services exist. It also needs the optional decision runtime (`ctx.systemoneDecisions`, with the root-realm `ccSystemoneDecisions` bridge as the fallback that S1-02's `decision-usage` plugin publishes). Without that service, a bound actor, a resolvable route or a session watermark, every call is `unavailable` with no model call — the catalog stays fully usable. After mounting, `mode` still defaults to `off`; enabling a mode is a separate settings change.
+The plugin injects `tools` and `skills`; it stays pending until both services exist. It also needs the optional decision runtime (`ctx.systemoneDecisions`, with the root-realm `ccSystemoneDecisions` bridge as the fallback that S1-02's `decision-usage` plugin publishes). Without that service, a bound actor, a resolvable route or a session watermark, every call is `unavailable` with no model call — the catalog stays fully usable. Mounting enables nothing by itself: `mode` defaults to `off`, and enabling a mode is a separate settings change.
 
 ## Cache and coalescing
 

@@ -1,6 +1,6 @@
 # S1-06: Add a task-based recommendation consumer outside the skill provider
 
-**Status: Implemented — PR #397 (merged 2026-11-12), in `packages/skill/skill-recommender` (read-only `recommend_skill` tool; mode defaults to off and the plugin is not in the default preset). Priority: P3.** This document defines the implementation boundaries and acceptance method for a separate plugin.
+**Status: Implemented — PR #397 (merged 2026-11-12), in `packages/skill/skill-recommender` (read-only `recommend_skill` tool; mode defaults to off). PR #TBD-MOUNT-PR took the separate default-mount decision and mounted the row in the cc/vwa presets. Priority: P3.** This document defines the implementation boundaries and acceptance method for a separate plugin.
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 **Dependencies:** [Overview](2026-11-02-systemone-00-overview.md), [Answer contract validation](2026-11-02-systemone-01-contract-validation.md), [Decision runtime and metering](2026-11-02-systemone-02-decision-runtime-metering.md). Recommendation does not depend on S1-05 and can ship on its own.
 
@@ -52,8 +52,8 @@ All paths below are new, identified as new implementation rather than existing A
 | `packages/skill/skill-recommender/tests/composition.spec.ts` | Composition tests for scope, paths, explicit invocation, cancellation, and no runner |
 | `packages/skill/skill-recommender/package.json`, `tsconfig.json` | New package exports and compilation; depends on the existing dsh-skill, tools, settings-ns, and systemone service contracts |
 
-Add the package to `tsconfig.packages.json`. It is mounted explicitly following the existing plugin installation pattern and is not added to the default preset. After mounting, `mode` still defaults to off; under off the tool returns only the off result described below and does not call the runner.
-If default mounting is decided separately in the future, the preset and composition tests must be changed independently; this design must not be used to enable it as a side effect.
+Add the package to `tsconfig.packages.json`. The shipped composition carries the row: since PR #TBD-MOUNT-PR the cc/vwa shared body (`packages/preset/cc/agent.shared.cordis.yml`) carries the row top level beside `tool-skill`, pinned by `packages/preset/cc/tests/composition.spec.ts`. That default mount was decided separately from this design, as required below; it changes nothing behavioural, because `mode` still defaults to off and under off the tool returns only the off result described below and does not call the runner.
+The original boundary stands for behaviour: mounting must not enable a mode. `mode` stays `off` until a deployment sets `shadow` or `active` in `cc-skill-recommendation`, so the preset and composition tests (not this design) remain the only place that decides whether the row is shipped.
 Obtain S1-02's BoundDecisionRunner from the optional `ctx.systemoneDecisions.forAgent(exec.agent)`. Read provider, model, revision, and windows via `runner.identifyRoute(DECISION_LANE_ALIAS, scope)` first, with no separate provider resolver; a missing service, actor, or identity yields unavailable.
 After every await, re-read and compare the full DecisionRouteIdentity; any field changing discards the entire recommendation. The actual responding model is checked by S1-02 against the trusted capability's actual-model-id; consumers must not compare `answered.model` directly with the gateway deployment alias. The existing `skill-claude-code`, `command-skills`, and `skill-usage` do not depend on this new package.
 

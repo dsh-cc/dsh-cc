@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-一个只读、仅作建议的 `recommend_skill` 工具：给定任务描述，返回少量当前可见的技能名，并附相关度与前置条件证据。它是 `ctx.skills` 目录的**消费者**——绝不加载正文、执行技能、调用技能、修改调用策略或隐藏技能。**默认关闭**（`cc-skill-recommendation.mode: off`），且需显式挂载：它**不在**默认 preset 中。
+一个只读、仅作建议的 `recommend_skill` 工具：给定任务描述，返回少量当前可见的技能名，并附相关度与前置条件证据。它是 `ctx.skills` 目录的**消费者**——绝不加载正文、执行技能、调用技能、修改调用策略或隐藏技能。**默认关闭**（`cc-skill-recommendation.mode: off`），由 `cc` 与 `vwa` preset 以暗装行的形式挂载：工具存在，`off` 时只返回关闭结果、`mode` 设置之前不跑任何 runner。
 
 ## 它做什么
 
@@ -48,14 +48,14 @@
 
 ## 安装
 
-包名为 `@dsh-cc/skill-recommender`，任何随附组合都未挂载它。请在你自己的 profile 或 agent 组合中显式挂载：
+包名为 `@dsh-cc/skill-recommender`，由 `cc` 与 `vwa` preset 挂载（`packages/preset/cc/agent.shared.cordis.yml`），其中 `mode` 在你设置之前保持 `off`。其他 profile 或 agent 组合请显式挂载：
 
 ```yml
 - id: skill-recommender
   name: '@dsh-cc/skill-recommender'
 ```
 
-插件注入 `tools` 与 `skills`，两者都存在前保持 pending。它还需要可选的决策运行时（`ctx.systemoneDecisions`，并以 S1-02 的 `decision-usage` 插件发布的根 realm 桥 `ccSystemoneDecisions` 作为后备）。缺少该服务、绑定的 actor、可解析的路由或会话水位时，每次调用都是 `unavailable` 且不发生模型调用——目录完全可用。挂载后 `mode` 仍默认 `off`；启用某个模式是另一次配置变更。
+插件注入 `tools` 与 `skills`，两者都存在前保持 pending。它还需要可选的决策运行时（`ctx.systemoneDecisions`，并以 S1-02 的 `decision-usage` 插件发布的根 realm 桥 `ccSystemoneDecisions` 作为后备）。缺少该服务、绑定的 actor、可解析的路由或会话水位时，每次调用都是 `unavailable` 且不发生模型调用——目录完全可用。挂载本身不启用任何行为：`mode` 默认 `off`，启用某个模式是另一次配置变更。
 
 ## 缓存与请求合并
 
