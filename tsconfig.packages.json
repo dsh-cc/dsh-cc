@@ -49,6 +49,9 @@
     {
       "path": "./packages/context/context-crusher"
     },
+    {
+      "path": "./packages/context/input-budget"
+    },
 
     {
       "path": "./packages/memory/memory"

@@ -137,3 +137,27 @@ were mine, not the tooling:
 Final local bridge flow: TLA aggregate verified; Lean proof verified;
 conformance 55/55 passed; `check-combined-evidence` valid,
 acceptanceReady=true. The probes model's evidence is separately valid.
+
+## Implementation acceptance (2026-11-14, stacked PR over #409)
+
+Implementation: `packages/context/input-budget` (`@dsh-cc/input-budget`).
+
+- Class map (never-trim classes, memory/advisory budgeted, unknown →
+  passthrough by construction): `src/classes.ts`, membership pinned by the
+  repo-scan enumeration test `tests/kinds-enumeration.spec.ts` (dsh-cc packages
+  + the pinned harness copy).
+- Budget/defer arithmetic (saturating `available`, `fits`, `oversize`,
+  `charged`, FIFO trim, drop-expired TTL on gateSeq, backlog admission against
+  the entry's OWN class budget, drop-oversize never enqueued):
+  `src/core.ts::govern`, unit-tested in `tests/core-*.spec.ts`.
+- Commit-on-admission atomicity / no-self-suppression / observe-enforce state
+  separation: `src/listener.ts` — delegate-first prepend listener, decision
+  rewritten by spread (never reconstructed), exception → unmodified decision +
+  error row, defer queue exists in enforce mode only, flip boundary resets the
+  queue; live waterfall ordering defenses in `tests/live-fold.spec.ts`
+  (plain producer visible; late prepended listener outside, by construction).
+- Model inputDigest of the accepted run (bridge re-run, this tree):
+  0bd1027c22035de64ccac7548e0444fcdc55cc45013f7a1b1f6685667c180ad1
+  (TLA aggregate verified; Lean side accepted via the same bridge,
+  acceptanceReady). Probe model `input-admission-governance-probes` remains
+  deliberately red (negative controls) and is not part of the bound aggregate.

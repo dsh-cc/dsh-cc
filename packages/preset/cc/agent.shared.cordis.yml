@@ -574,6 +574,35 @@
     - id: tool-task
       name: '@dsh-cc/subagent-task'
 
+    # Per-step input budget governor (design
+    # docs/plans/2026-11-12-per-step-input-budget-governor.md §"Package & seam"):
+    # one `agent/pre-step` listener registered with `prepend: true`, mounted on
+    # this preset scope so each preset tree owns its per-session `gateSeq` clocks
+    # and defer backlogs. It byte-budgets the final enter batch by class (the
+    # memory/advisory rewriter neighbourhood of context-crusher and turn-rules).
+    # Publishes no Service (plain plugin, progress-rebuild precedent), so it needs
+    # no isolate key, and it ships DEFAULT ON in observe mode
+    # (cc-input-budget.enabled / mode: observe) — it records decisions and
+    # rewrites nothing until `mode: 'enforce'` is set explicitly.
+    # ORDER TRIPWIRE: cordis prepend UNSHIFTS, so among prepended listeners the
+    # LATER-registered one is OUTERMOST, and the governor must be outermost among
+    # the preset's pre-step REWRITERS so its budgets arbitrate the batch the model
+    # actually receives. The only preset-mounted prepended pre-step rewriters are
+    # the subagent strip-instructions + settled-notice suppression pair, both
+    # registered by the `tool-task` row directly above — so this row MUST sort
+    # after it (moving it earlier puts both outside the gate). Plain registrations
+    # (hooks-claude-code's pre-step bridge, the cc-shell-glue mcp-ready notice,
+    # progress-rebuild's splice) run inside every prepended listener by
+    # construction, so their row order is compose-order-insensitive.
+    # Two rewriters stay OUTSIDE the governor by construction, and the design
+    # accepts both: the moa sanitizer (installed per-agent after preset apply) and
+    # the input-ledger attribution observer (top-level row below; never rewrites).
+    # Safe either way because unlisted kinds default to passthrough: content that
+    # sits outside the gate is never trimmed by surprise.
+    # The order tripwire is pinned by packages/preset/cc/tests/composition.spec.ts.
+    - id: input-budget
+      name: '@dsh-cc/input-budget'
+
     # /agents: query/control surface for continuable background children
     # (plan docs/plans/2026-09-05-continuable-background-ux.md §3.2). Mounts
     # INSIDE cc-services (F8): the read-only snapshot joins the realm-interior

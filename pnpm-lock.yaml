@@ -881,6 +881,25 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
 
+  packages/context/input-budget:
+    dependencies:
+      '@dsh-cc/input-ledger':
+        specifier: workspace:^
+        version: link:../../observability/input-ledger
+      '@dsh-cc/settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../../../deepseek-harness/vendor/cordis
+        version: link:../../../../deepseek-harness/vendor/cordis
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../../deepseek-harness/vendor/schemastery
+        version: link:../../../../deepseek-harness/vendor/schemastery
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@22.20.1)(@vitest/coverage-v8@4.1.8)(vite@8.0.16(@types/node@22.20.1)(esbuild@0.28.1)(tsx@4.22.4)(yaml@2.9.0))
+
   packages/context/progress-rebuild:
     dependencies:
       '@dsh-cc/settings':
@@ -3112,6 +3131,9 @@ importers:
       '@dsh-cc/hooks-claude-code':
         specifier: workspace:^
         version: link:../../hooks/hooks-claude-code
+      '@dsh-cc/input-budget':
+        specifier: workspace:^
+        version: link:../../context/input-budget
       '@dsh-cc/input-ledger':
         specifier: workspace:^
         version: link:../../observability/input-ledger

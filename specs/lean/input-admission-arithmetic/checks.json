@@ -57,7 +57,9 @@
     "adapter": "conformance/adapter.mjs",
     "corpus": "conformance/cases.jsonl",
     "implementationFiles": [
-      "packages/plugin/dsh-cc-agents/tests/fixtures/formal-design-lean/input-governance/admission-arithmetic.ts"
+      "packages/context/input-budget/src/core.ts",
+      "packages/context/input-budget/src/classes.ts",
+      "packages/observability/input-ledger/src/rows.ts"
     ],
     "executionFiles": [],
     "command": [

@@ -6,7 +6,7 @@
 # Scope note (VWA, docs/plans/2026-10-12-verifiable-workspace-agent.md §3.2a):
 # this manifest is the CC-parity ledger. Capabilities exclusive to the VWA
 # agent preset (packages/preset/cc/agent.vwa.cordis.yml — verifiable workspace
-# deliverables with 〔src:ws:...〕 evidence receipts) have no Claude Code
+# deliverables with ws: source-marker evidence receipts) have no Claude Code
 # counterpart and deliberately stay OUT of this manifest.
 #
 # Coverage note (VWA lane one, same design doc): this ledger is machine-read
@@ -667,6 +667,45 @@ capabilities:
         is settings-gated with default ON since 2026-11-11
         (`cc-lsp-on-write.enabled`, user layer; inert without a serena mount),
         and is diagnostics-only — no navigation surface.
+
+  engine.input-budget:
+    title: Per-step input budget governor (class-based byte budgets over the enter batch)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. One outermost `agent/pre-step` waterfall listener —
+        registered `{ prepend: true }` and mounted by the preset row, delegate-first, so it rewrites the
+        decision after every inner listener returned — byte-budgets the final enter batch by content class:
+        `governance`, `task` and `passthrough` are never trimmed and never deferred, `memory` and `advisory`
+        are trimmed FIFO against their own budgets, and trimmed messages wait in a deterministic defer backlog aged by a monotonic per-session `gateSeq` counter that replaces the turn-local `step` 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L53-L59〕.
+        Class membership is explicit and closed, and every unlisted source kind is `passthrough` by construction, so an unenumerated producer is never trimmed by surprise 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L61-L73〕.
+        Budgets are UTF-8 bytes per enter batch: memory and advisory each carry their own limit, and an overflow the trimmable classes cannot pay for is recorded as `hardOver` instead of dropping protected content 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L77-L83〕.
+        Ships observe-first (the `mode: observe` ship default): the batch is returned untouched, no defer queue exists, and only the decisions are recorded, on the same row fields enforce mode uses 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L97-L103〕.
+        One content-free `GovernorRow` per gate invocation (mode, per-class bytes, trim actions, offered backlog, overflow flag) is appended to the input ledger at `$DSH_HOME/input-ledger/<projectKey>/<sessionId>.jsonl` 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L105-L107〕.
+        The ledger dependency is soft: absent or disabled, the governor still runs, rows are not persisted, and a sink failure is counted and swallowed rather than thrown into the waterfall 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L122-L131〕.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: divergent
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: input-budget" }
+      - { type: source, path: packages/context/input-budget/src/plugin.ts, anchor: "export function apply" }
+      - { type: source, path: packages/context/input-budget/src/core.ts, anchor: "export function govern" }
+      - { type: source, path: packages/context/input-budget/src/ledger.ts, anchor: "The ledger emission wiring" }
+      - { type: test, path: packages/context/input-budget/tests/listener.spec.ts }
+      - { type: test, path: packages/context/input-budget/tests/live-fold.spec.ts }
+      - { type: test, path: packages/context/input-budget/tests/kinds-enumeration.spec.ts }
+      - { type: test, path: packages/context/input-budget/tests/ledger-emission.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. CC has no per-step byte-budget gate over the final enter batch — its nearest caps are producer-local (turn-rules' per-session injection count, #403's section-level system-prompt byte caps), which is a different surface 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L21-L23〕.
+        Behavior diverges by design in three directions: the governor arbitrates only enumerated kinds and never touches the rest 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L61-L73〕, `cc-shell-glue` is passthrough in v1 as an algorithmic rule because its producer commits a once-per-session latch before returning the notice (an enforced drop would be a silent one-shot miss) 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L71-L71〕, and late-registered prepended listeners sit outside the gate by construction 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L55-L59〕.
+        Settings cc-input-budget.* (enabled, mode, enter-budget-bytes, advisory-budget-bytes, memory-budget-bytes, defer-ttl-steps) are hot-read per gate invocation, default on in observe mode 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L109-L120〕.
+        UX is partial on purpose: decisions are read back through the ledger rows and offline tooling, and there is no dedicated slash command yet 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L133-L137〕.
 
   engine.input-ledger:
     title: Per-step input ledger (content-free composition rows)
