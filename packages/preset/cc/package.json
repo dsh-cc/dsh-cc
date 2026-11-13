@@ -53,6 +53,7 @@
     "@dsh-cc/compaction-basic": "workspace:^",
     "@dsh-cc/compaction-cost-gate": "workspace:^",
     "@dsh-cc/compaction-micro": "workspace:^",
+    "@dsh-cc/compaction-pinning": "workspace:^",
     "@dsh-cc/completion-gate": "workspace:^",
     "@dsh-cc/config-snapshot": "workspace:^",
     "@dsh-cc/context-crusher": "workspace:^",

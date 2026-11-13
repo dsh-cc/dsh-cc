@@ -495,6 +495,39 @@ describe('agent.cordis.yml composition', () => {
     expect(gateIdx).toBeLessThan(yamlText.indexOf('- id: cc-services'))
   })
 
+  it('mounts the compaction-pinning row OUTSIDE the compaction realm', () => {
+    // Governed-message pinning (design
+    // docs/plans/2026-11-12-compaction-governed-pinning.md): a NON-isolate
+    // plain plugin. It publishes no Service and resolves nothing from the
+    // compaction realm — it only observes `session/event` and appends at the
+    // pre-step drain — so it must NOT sit inside the `compaction` group; the
+    // realm above exists for the rows that read compaction/toolResultPruner
+    // through a scoped get().
+    const group = doc.find((r) => r.id === 'compaction')!
+    const compactionConfigIds = (group.config as any[]).map((r) => r.id)
+    expect(compactionConfigIds).not.toContain('compaction-pinning')
+    const topIds = doc.map((r) => r.id)
+    expect(topIds).toContain('compaction-pinning')
+    const row = doc.find((r) => r.id === 'compaction-pinning')!
+    expect(row.name).toBe('@dsh-cc/compaction-pinning')
+    // Plain plugin: no isolate key, no group, no config of its own (every
+    // knob is the user-layer `cc-compaction-pinning` settings namespace).
+    expect(row.isolate).toBeUndefined()
+    expect(row.group).toBeUndefined()
+    expect(row.config).toBeUndefined()
+    // ORDER: immediately after the compaction group — the row is the restore
+    // half of what compaction removes, so it lives in that neighbourhood.
+    expect(topIds.indexOf('compaction-pinning')).toBe(topIds.indexOf('compaction') + 1)
+    // Raw-text tripwire: a TOP-LEVEL entry (column 0), so a future re-indent
+    // cannot silently fold it into the group's config list.
+    expect(yamlText.indexOf('\n- id: compaction-pinning\n')).toBeGreaterThan(
+      yamlText.indexOf('- id: compaction\n'),
+    )
+    expect(yamlText.indexOf('\n- id: compaction-pinning\n')).toBeLessThan(
+      yamlText.indexOf('# ── delegation and workflows'),
+    )
+  })
+
   it('swaps the harness tool-workflow row for @dsh-cc/tool-workflow in the delegation group', () => {
     // (plan docs/plans/2026-09-22-workflow-cc-parity-core.md §3.1) Both tools
     // register the `workflow` tool name and the harness tools registry throws
@@ -938,6 +971,11 @@ const DRIFT_ALLOWANCE: Record<string, string> = {
   // Deliberate name swaps, ids unchanged: the CC engine subclass folds a
   // /compact hint into the summarizer; the CC command forwards the argument.
   compaction: '@dsh-cc/compaction-basic + @dsh-cc/command-compact replace the upstream rows',
+  // Governed-message pinning (design
+  // docs/plans/2026-11-12-compaction-governed-pinning.md) is a cc-only row:
+  // upstream has no post-compaction pin restore, and the row deliberately sits
+  // OUTSIDE the compaction group (plain, non-isolate).
+  'compaction-pinning': 'cc-only row (no upstream counterpart), top-level plain row',
   // CC workflow surface: the journal provider + @dsh-cc/tool-workflow replace
   // workflow-ptc; the harness tool-workflow adapter stays disabled (duplicate
   // `workflow` registration) and tool-ralph stays enabled; the harness

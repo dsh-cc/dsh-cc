@@ -1,0 +1,54 @@
+{
+  "name": "@dsh-cc/compaction-pinning",
+  "description": "Compaction governed-message pinning: capture governance-class user messages verbatim in a bounded per-session ring so summarization compaction cannot erase their durable effect mid-session; user-layer-only settings, default ON",
+  "version": "0.9.5-rc.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/compaction/compaction-pinning"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --root ../../.. packages/compaction/compaction-pinning/tests"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@dsh-cc/settings": "workspace:^"
+  },
+  "dependencies": {
+    "@dsh-cc/settings": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:../../../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-agent-loop": "link:../../../../deepseek-harness/packages/core/agent-loop",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../../../deepseek-harness/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-compaction-basic": "link:../../../../deepseek-harness/packages/compaction/compaction-basic",
+    "@deepseek-ai/dsh-llm": "link:../../../../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../../../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "link:../../../../deepseek-harness/packages/session/session-persistence-jsonl",
+    "@deepseek-ai/dsh-token-meter": "link:../../../../deepseek-harness/packages/llm/token-meter",
+    "@deepseek-ai/schemastery": "link:../../../../deepseek-harness/vendor/schemastery",
+    "@dsh-cc/agent-loop-mock": "workspace:^",
+    "@dsh-cc/settings": "workspace:^",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

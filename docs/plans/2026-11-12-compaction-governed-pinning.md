@@ -1,7 +1,7 @@
 # Compaction Governed-Message Pinning
 
 - Date: 2026-11-12
-- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim) — **Implemented** (package `packages/compaction/compaction-pinning`, model acceptance in `specs/tla/compaction-pin-restore/implementation.md`; implementation fold: rule (b) is commit-gated per the verified model, see §Detect)
 
 r3 → r4 fold: the stale "summary fires only on success" anchor sentence deleted and replaced by the summary-then-commit ordering with the end-error cancellation contract (the exact premise the belt rejects).
 - Program: context-engineering input governance (doc 2 of 8)
@@ -58,7 +58,7 @@ One `session/event` listener (`{ global: true }`). For every `'user/message'` ev
 ### Detect
 
 - On `compaction/summary` at the firehose: if the event carries `shadowedSeqs`, compute `restorable = shadowedSeqs ∩ ring.keys()`; if empty, no-op; else schedule restores keyed by `compactionId`. The summary is **provisional scheduling evidence, not completion evidence**: the engine appends `compaction/summary` *before* the checkpoint commit (`compaction/compaction-basic/src/region.ts:470-510` in the pinned harness copy), so a failed commit append leaves a logged summary with `shadowedSeqs` and no actual shadowing (delta-round fold, all three seats — r2's "summary is success-only, belt redundant" was wrong).
-- `compaction/end` is therefore **load-bearing**: an end event carrying `error` (emitted on the failed-commit path at `region.ts:237-245`) **cancels** any pending schedule for that `compactionId`. Schedules become restore-eligible only when either (a) a successful end arrives, or (b) the gate's conservative rule applies: schedule exists for ≥ 1 turn with no end at all seen for that id (defensive — end events are normally always emitted). The drain rule in §Restore uses only eligible schedules.
+- `compaction/end` is therefore **load-bearing**: an end event carrying `error` (emitted on the failed-commit path at `region.ts:237-245`) **cancels** any pending schedule for that `compactionId`. Schedules become restore-eligible only when either (a) a successful end arrives, or (b) the conservative rule applies (implementation fold, matching the verified model's `RequireCheckpoint` convention): the schedule has existed for ≥ 1 turn with no end seen for that id **and** the checkpoint commit itself was witnessed — a later `user/message` whose `sourceEventSeqs` cites the summary's seq. The commit witness is required by the model's red probe (`strict-blind-rule-b` restores never-shadowed pins under the bare-turn shape); the drain rule in §Restore uses only eligible schedules.
 
 ### Restore
 

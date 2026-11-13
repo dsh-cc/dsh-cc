@@ -198,6 +198,18 @@
         headChars: 4096
         tailChars: 1024
 
+# Governed-message pinning (plan
+# docs/plans/2026-11-12-compaction-governed-pinning.md): a bounded per-session
+# ring keeps governance-class user messages (turn-rules reminders,
+# edit-recovery hints) VERBATIM and, once a compaction that shadowed them
+# commits its checkpoint, appends them back inside that same pre-step.
+# DEFAULT ON (cc-compaction-pinning.enabled, user layer). Publishes no Service
+# and resolves NOTHING from the compaction realm (it only observes session
+# events and appends), so it sits OUTSIDE the group above — that realm belongs
+# to the rows reading compaction / toolResultPruner through a scoped get().
+- id: compaction-pinning
+  name: '@dsh-cc/compaction-pinning'
+
 # ── delegation and workflows ────────────────────────────────────────────────
 
 # The `subagents` registry and its spawn/fork backends live in the HOST
