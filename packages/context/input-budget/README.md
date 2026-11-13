@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Per-step input budget governor for the context-engineering input-governance program: one outermost gate over the final `agent/pre-step` enter batch, arbitrating producer content by class and byte budget 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L53-L59〕. This package is the pure core — the class map, the governor algorithm and the settings surface. It has no cordis context, no module state and no clock read: `govern()` is a function of its arguments, so the whole algorithm is testable without a runtime. The `agent/pre-step` listener, the preset row and the ledger emission land in the later wiring slices.
+Per-step input budget governor for the context-engineering input-governance program: one outermost gate over the final `agent/pre-step` enter batch, arbitrating producer content by class and byte budget 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L53-L59〕. Three layers ship together: the pure core (`govern()` — a function of its arguments, so the whole algorithm is testable without a runtime), the `agent/pre-step` listener the preset's `input-budget` row mounts, and the row emission that persists one `GovernorRow` per gate invocation through `@dsh-cc/input-ledger` 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L105-L107〕. It ships observe-first: in observe mode the batch is returned untouched and only the decisions are recorded.
 
 ## Classes — explicit membership only
 
@@ -30,7 +30,7 @@ A trimmed message whose own bytes alone exceed its class budget is dropped `drop
 
 ## Defer queue
 
-Per-session backlog of `{ message, enqueuedAtSeq, lastOfferedSeq }`, all values in `gateSeq` units. `gateSeq` is a **monotonic per-session invocation counter** incremented on every gate call; `agent/pre-step`'s `step` is turn-local and is never used 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L75-L75〕. The counter is passed in and returned by `govern()`; the listener that owns it lands with the wiring slice.
+Per-session backlog of `{ message, enqueuedAtSeq, lastOfferedSeq }`, all values in `gateSeq` units. `gateSeq` is a **monotonic per-session invocation counter** incremented on every gate call; `agent/pre-step`'s `step` is turn-local and is never used 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L75-L75〕. `govern()` receives the counter and returns the next one; the listener owns it per session.
 
 Each invocation, in order 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L87-L95〕:
 
@@ -43,6 +43,12 @@ Each invocation, in order 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-
 ## Observe mode
 
 `mode: 'observe'` runs the identical fresh-batch computation and records the same rows under `mode: 'observe'`, but returns the incoming batch untouched, keeps no defer queue, simulates no backlog and emits no `drop-expired` rows. `drop-oversize` *is* possible in observe, because it is a fresh-batch computation 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L97-L103〕. Because an observe invocation returns an empty backlog, an `observe → enforce` flip starts with an empty queue by construction — no cross-mode carryover.
+
+## Wiring — listener, preset row, ledger emission
+
+`registerGovernorListener(ctx)` registers one `agent/pre-step` listener with `{ prepend: true }`, so it runs **outermost** among the preset's pre-step rewriters and sees the final decision on the way back out; it is delegate-first (it awaits `next()` and then spreads the returned decision, replacing only the message batch) and it never throws into the waterfall 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L53-L59〕. The preset row `input-budget` in the shared preset body mounts it through `apply()`, ordered after `tool-task` so the subagent strip-instructions/settled-notice pair stays inside the gate; the composition pin and the two live-fold ordering tests keep that boundary a tested property rather than an accident 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L57-L59〕.
+
+Rows leave through `createGovernorLedgerSink()`: one content-free `GovernorRow` per gate invocation, appended to `$DSH_HOME/input-ledger/<projectKey>/<sessionId>.jsonl`, the same sink and path convention the ledger's own observers use (the project bucket is the first 16 hex chars of `sha256(realpath(cwd))`, replicated locally because `@dsh-cc/input-ledger` keeps it private) 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L105-L107〕. The dependency is soft by design: with no dsh-home, no session cwd, or `cc-input-ledger.enabled: false` the governor still runs and rows are simply not persisted; an append failure is swallowed, debug-logged and counted in `getGovernorLedgerHealth().droppedRows` — never thrown into the waterfall and never awaited on the hot path 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L122-L131〕. A governor exception returns the unmodified decision with an `{ error: true }` row, so a failing gate can never half-apply a batch 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L122-L124〕.
 
 ## Arithmetic (pinned to the verified model)
 
@@ -72,18 +78,22 @@ Defaults are carried on four surfaces that must agree: the schema `.default()`s,
 ## Usage
 
 ```ts
-import { govern, messageBytes } from '@dsh-cc/input-budget'
+import { govern, messageBytes, createGovernorListener } from '@dsh-cc/input-budget'
 
+// The pure core: the whole algorithm as a function of its arguments.
 const result = govern({ messages, settings, backlog, gateSeq })
 // result.messages  — the decision batch (the input batch untouched in observe mode)
 // result.decision  — { mode, bytesByClass, trimmed, offeredBacklog, hardOver }
 // result.backlog   — the defer queue to carry into the next invocation
 // result.gateSeq   — the next gateSeq to carry into the next invocation
+
+// The wiring: a preset row mounts it, a test host can mount it directly.
+const release = registerGovernorListener(ctx) // prepended agent/pre-step listener
 ```
 
 ## Caveats
 
 - Observe mode is the ship default and the only mode exercised in production today; enforcement budgets are meant to be set from ledger data before flipping 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L137-L137〕.
 - Deferred messages re-enter only through the governor's own return value, never through `agent.inject`, so no extra claimed batches form.
-- The two ordering defenses (live-fold producer-chain tests, the late-prepended-listener boundary) and the repo-wide kind enumeration scan land with the wiring slices that can register listeners.
+- The two ordering defenses (live-fold producer-chain tests, the late-prepended-listener boundary) and the repo-wide kind enumeration scan are pinned in `tests/live-fold.spec.ts` and `tests/kinds-enumeration.spec.ts`; the enumeration hard-fails when the pinned harness checkout is missing 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L57-L59〕〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L73-L73〕.
 - Advisory starvation under sustained overload is bounded, not eliminated; per-kind caps are the sibling doc's job.

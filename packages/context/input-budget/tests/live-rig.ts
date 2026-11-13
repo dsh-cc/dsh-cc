@@ -100,11 +100,25 @@ export type SettingsSource =
   /** No settings file at all (the real reader's fail-soft path). */
   | { readonly fileless: true }
 
+/** Rig wiring variants. */
+export interface LiveRigOptions {
+  /**
+   * `'ledger'` keeps the SHIPPED row sink — the real input-ledger append under
+   * this rig's temp home — so `rows` stays empty and the test reads the JSONL.
+   */
+  readonly sink?: 'collect' | 'ledger'
+}
+
 /**
  * Build one live rig.
  * @param source - how the listener resolves settings per invocation.
+ * @param options - `sink: 'ledger'` keeps the SHIPPED row sink (the input-ledger
+ *   append under this rig's temp home) instead of capturing rows in memory.
  */
-export function liveRig(source: SettingsSource = { settings: enforceSettings() }): LiveRig {
+export function liveRig(
+  source: SettingsSource = { settings: enforceSettings() },
+  options: LiveRigOptions = {},
+): LiveRig {
   const home = mkdtempSync(join(tmpdir(), 'dsh-input-budget-'))
   roots.push(home)
   const ctx = new Context()
@@ -151,13 +165,15 @@ export function liveRig(source: SettingsSource = { settings: enforceSettings() }
   // let the shipped reader run. The closure reads `rig.settings` on every
   // invocation, so a test flips mode/budgets between steps exactly like a hot
   // settings edit does.
+  // Row collection is an override; `sink: 'ledger'` leaves the shipped
+  // input-ledger emission in place so the append path itself is exercised.
+  const collect = options.sink !== 'ledger'
+  const overrides = collect
+    ? { emit: (row: GovernorRow): void => { rows.push(row) }, gen: 'rig-gen' }
+    : { gen: 'rig-gen' }
   rig.release = 'settings' in source
-    ? registerGovernorListener(ctx, {
-      readSettings: () => rig.settings,
-      emit: (row) => { rows.push(row) },
-      gen: 'rig-gen',
-    })
-    : registerGovernorListener(ctx, { emit: (row) => { rows.push(row) }, gen: 'rig-gen' })
+    ? registerGovernorListener(ctx, { readSettings: () => rig.settings, ...overrides })
+    : registerGovernorListener(ctx, overrides)
   return rig
 }
 

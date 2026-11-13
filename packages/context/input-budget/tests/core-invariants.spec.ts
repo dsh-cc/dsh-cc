@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { classBudgetOf, govern, sourceKindOf } from '../src/index.ts'
+import { charged, classBudgetOf, govern, sourceKindOf } from '../src/index.ts'
 import { messageOf, settingsOf, sizesOf } from './rig.ts'
 
 describe('trim ordering', () => {
@@ -48,6 +48,13 @@ describe('class helpers', () => {
     expect(classBudgetOf('passthrough', settings)).toBeUndefined()
     expect(classBudgetOf('memory', settings)).toBe(16_384)
     expect(classBudgetOf('advisory', settings)).toBe(8192)
+    // A4 (Lean protected-never-charged): the charged projection skips
+    // protected classes rather than charging-then-ignoring them.
+    expect(charged('governance', 1_000)).toBe(0)
+    expect(charged('task', 1_000)).toBe(0)
+    expect(charged('passthrough', 1_000)).toBe(0)
+    expect(charged('memory', 1_000)).toBe(1_000)
+    expect(charged('advisory', 1_000)).toBe(1_000)
   })
 
   it('reports an absent source kind as an empty string', () => {

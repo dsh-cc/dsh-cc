@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-上下文工程输入治理program的逐步输入预算 governor：对最终的 `agent/pre-step` enter 批次施加唯一的最外层闸门，按类别与字节预算仲裁各生产者写入的内容 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L53-L59〕。本包是纯核——类别映射、governor 算法与设置面。它没有 cordis 上下文、没有模块状态、不读取时钟：`govern()` 只是其参数的函数，因此整个算法无需运行时即可单测。`agent/pre-step` 监听器、预设行与账本写入落在后续装配切片中。
+上下文工程输入治理 program 的逐步输入预算 governor：对最终的 `agent/pre-step` enter 批次施加唯一的最外层闸门，按类别与字节预算仲裁各生产者写入的内容 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L53-L59〕。三层一并交付：纯核（`govern()`——只是其参数的函数，因此整个算法无需运行时即可单测）、预设 `input-budget` 行所挂载的 `agent/pre-step` 监听器，以及每次闸门调用写入一条 `GovernorRow` 的账本写入 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L105-L107〕。出厂 observe 优先：observe 模式下批次原样返回，只记录决策。
 
 ## 类别——仅显式成员
 
@@ -30,7 +30,7 @@
 
 ## 延迟队列
 
-每会话的 `{ message, enqueuedAtSeq, lastOfferedSeq }` backlog，全部取值以 `gateSeq` 为单位。`gateSeq` 是**单调的每会话调用计数**，每次闸门调用递增；`agent/pre-step` 的 `step` 是回合内局部量，永不使用 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L75-L75〕。该计数由调用方传入并由 `govern()` 返回；持有它的监听器属于装配切片。
+每会话的 `{ message, enqueuedAtSeq, lastOfferedSeq }` backlog，全部取值以 `gateSeq` 为单位。`gateSeq` 是**单调的每会话调用计数**，每次闸门调用递增；`agent/pre-step` 的 `step` 是回合内局部量，永不使用 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L75-L75〕。`govern()` 接收该计数并返回下一个；监听器按会话持有它。
 
 每次调用按序执行 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L87-L95〕：
 
@@ -43,6 +43,12 @@
 ## Observe 模式
 
 `mode: 'observe'` 执行完全相同的新批计算并以 `mode: 'observe'` 记录相同的行，但原样返回输入批次、不保留延迟队列、不模拟 backlog、不产生 `drop-expired` 行。observe 下**仍可能**出现 `drop-oversize`，因为它属于新批计算 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L97-L103〕。由于 observe 调用返回空 backlog，`observe → enforce` 翻转由构造即从空队列开始——不存在跨模式遗留。
+
+## 装配——监听器、预设行、账本写入
+
+`registerGovernorListener(ctx)` 以一个 `{ prepend: true }` 的 `agent/pre-step` 监听器注册，因此它在预设的 pre-step 重写者中最外层运行，并在返回途中看到最终决策；它 delegate-first（先 await `next()`，再展开返回的决策、只替换消息批次），且绝不向瀑布抛错 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L53-L59〕。共享预设体中的预设行 `input-budget` 经 `apply()` 挂载它，排序在 `tool-task` 之后，使 subagent 的 strip-instructions/settled-notice 组合留在闸门之内；组合 pin 与两项 live-fold 顺序测试让该边界是被测试的性质而非偶然 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L57-L59〕。
+
+行经 `createGovernorLedgerSink()` 落地：每次闸门调用一条无内容 `GovernorRow`，追加到 `$DSH_HOME/input-ledger/<projectKey>/<sessionId>.jsonl`，与账本自身观察者使用同一 sink 与路径约定（project 桶为 `sha256(realpath(cwd))` 的前 16 个十六进制字符；因 `@dsh-cc/input-ledger` 不导出该函数，此处保有一份一致的本地副本） 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L105-L107〕。该依赖按设计是软依赖：没有 dsh-home、没有会话 cwd，或 `cc-input-ledger.enabled: false` 时 governor 照常运行，行只是不落盘；追加失败被吞掉、记入调试日志并计入 `getGovernorLedgerHealth().droppedRows`——绝不抛入瀑布，也绝不在热路径上等待 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L122-L131〕。governor 自身抛错时返回未改动的决策并记录 `{ error: true }` 行，因此失败的闸门绝不会半应用一个批次 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L122-L124〕。
 
 ## 算术（钉住已验证模型）
 
@@ -72,18 +78,22 @@ kebab 键、用户层设置，每次闸门调用重读，因此热开关在下�
 ## 用法
 
 ```ts
-import { govern, messageBytes } from '@dsh-cc/input-budget'
+import { govern, messageBytes, createGovernorListener, registerGovernorListener } from '@dsh-cc/input-budget'
 
+// 纯核：整个算法就是其参数的函数。
 const result = govern({ messages, settings, backlog, gateSeq })
 // result.messages  —— 决策批次（observe 模式下即原输入批次，原样返回）
 // result.decision  —— { mode, bytesByClass, trimmed, offeredBacklog, hardOver }
 // result.backlog   —— 传递给下一次调用的延迟队列
 // result.gateSeq   —— 传递给下一次调用的 gateSeq
+
+// 装配：预设行负责挂载，测试宿主也可直接挂载。
+const release = registerGovernorListener(ctx) // prepend 的 agent/pre-step 监听器
 ```
 
 ## 注意事项
 
 - observe 模式是出厂默认，也是当前生产唯一启用的模式；enforce 预算应在翻转前依据账本数据设定 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L137-L137〕。
 - 被延迟的消息只通过 governor 自身的返回值回流，从不经 `agent.inject`，因此不会额外形成 claimed 批次。
-- 两项顺序防御（生产者链 live-fold 测试、后注册 prepend 监听器边界）与全仓类别枚举扫描落在能够注册监听器的装配切片中。
+- 两项顺序防御（生产者链 live-fold 测试、后注册 prepend 监听器边界）与全仓类别枚举扫描分别钉在 `tests/live-fold.spec.ts` 与 `tests/kinds-enumeration.spec.ts`；缺少 pinned harness 检出时枚举硬失败 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L57-L59〕〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L73-L73〕。
 - 持续过载下 advisory 的饥饿被限定而非消除；按类上限是姊妹文档的职责。

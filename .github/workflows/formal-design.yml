@@ -189,6 +189,13 @@ jobs:
       - name: Install workspace dependencies (no harness build required)
         working-directory: dsh-cc
         run: pnpm install --frozen-lockfile
+      # The input-admission-arithmetic conformance adapter imports the real
+      # @dsh-cc/input-budget core, whose bare `@dsh-cc/input-ledger` import
+      # resolves to that package's built lib/. Project references build both
+      # without the full client bundle.
+      - name: Build conformance-adapter dependencies (input-budget chain)
+        working-directory: dsh-cc
+        run: pnpm exec tsc -b packages/context/input-budget --force
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -13,14 +13,18 @@
  * recorded, on the same row fields enforce mode uses.
  *
  * The core is a pure function of its arguments (`govern`), so it is testable
- * without cordis; {@linkcode apply} mounts the listener a preset row runs, and
- * {@linkcode buildGovernorRow} is the seam the ledger emission plugs into.
+ * without cordis; {@linkcode apply} mounts the listener a preset row runs,
+ * {@linkcode buildGovernorRow} is the seam the ledger emission plugs into, and
+ * {@linkcode createGovernorLedgerSink} is that emission: the row goes to the
+ * `@dsh-cc/input-ledger` append sink under `<dshHome>/input-ledger/`, counted
+ * and debug-logged when the ledger is absent, disabled or failing.
  *
  * @module @dsh-cc/input-budget
  */
 
 export * from './classes.ts'
 export * from './core.ts'
+export * from './ledger.ts'
 export * from './listener.ts'
 export * from './pipeline.ts'
 export { apply, name } from './plugin.ts'

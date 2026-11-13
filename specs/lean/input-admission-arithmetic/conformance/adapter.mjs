@@ -1,10 +1,19 @@
-// Conformance adapter for input-admission-arithmetic. Binds the model-local
-// fixture (NOT production code) through Node ESM resolution relative to this
-// module, never the process working directory. Stdout is protocol-only;
-// diagnostics go to stderr.
-import { charged, fits, oversize, withinWindow } from '../../../../packages/plugin/dsh-cc-agents/tests/fixtures/formal-design-lean/input-governance/admission-arithmetic.ts'
+// Conformance adapter for input-admission-arithmetic. Binds the REAL
+// @dsh-cc/input-budget core (packages/context/input-budget/src/core.ts) through
+// Node ESM resolution relative to this module, never the process working
+// directory. The core's own `@dsh-cc/input-ledger` import resolves through the
+// workspace node_modules chain, so a build of that dependency must exist (the
+// formal-design-lean CI job builds it before validating this model). Stdout is
+// protocol-only; diagnostics go to stderr.
+import { charged, fits, oversize } from '../../../../packages/context/input-budget/src/core.ts'
 
 const CLASSES = new Set(['governance', 'task', 'memory', 'advisory', 'passthrough'])
+
+// Doc-7 (injection dedupe) owns the admission-window predicate and has not
+// landed yet; this single comparison is the model's own semantics
+// (`gap < window`, strict), kept local until that package provides the real
+// one. It is NOT part of the budget arithmetic bound to this model.
+const withinWindow = (now, lastAdmitted, window) => now - lastAdmitted < window
 
 const fail = message => { throw new Error(message) }
 

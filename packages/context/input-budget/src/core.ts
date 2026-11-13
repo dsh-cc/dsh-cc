@@ -139,6 +139,15 @@ export function oversize(budget: number, bytes: number): boolean {
 }
 
 /**
+ * Lean `Formal.charged`: only budgeted classes (memory/advisory) are charged;
+ * governance/task/passthrough contribute zero bytes to any class budget —
+ * the arithmetic face of "never touched".
+ */
+export function charged(cls: InputClass, bytes: number): number {
+  return BUDGETED_CLASSES.includes(cls) ? bytes : 0
+}
+
+/**
  * UTF-8 byte size of one message: text blocks only, the same measurement the
  * input ledger records, so a governor row and a ledger row agree byte for byte.
  * Non-text blocks and a non-array `content` contribute nothing.

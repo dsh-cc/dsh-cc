@@ -7,9 +7,10 @@
  * of the failure path.
  *
  * The seam exists so the ledger emission is a pure wiring step: this module
- * builds a complete `GovernorRow` and hands it to the listener's `emit` sink.
- * Until that sink is wired (the ledger slice), rows are simply dropped; the
- * governor still runs, so a missing ledger can never change admission.
+ * builds a complete `GovernorRow` and hands it to the listener's `emit` sink,
+ * which `ledger.ts` binds to the input-ledger append sink. On a host without a
+ * dsh-home (or with the ledger disabled) rows are simply dropped; the governor
+ * still runs, so a missing ledger can never change admission.
  *
  * @module @dsh-cc/input-budget/row
  */

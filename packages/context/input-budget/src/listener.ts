@@ -34,6 +34,7 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { GovernorRow } from '@dsh-cc/input-ledger'
 import type { DeferredEntry, GovernedMessage } from './core.ts'
+import { createGovernorLedgerSink, cwdProjectKeyOf } from './ledger.ts'
 import { runGovernorPipeline, type GovernorStageHook } from './pipeline.ts'
 import { buildGovernorRow } from './row.ts'
 import {
@@ -85,8 +86,13 @@ export interface SessionGovernorState {
 export interface GovernorListenerDeps {
   /** Hot settings read — called once per gate invocation. */
   readSettings(): InputBudgetSettings
-  /** Row sink seam (the input-ledger append, wired by the ledger slice). */
-  emit(row: GovernorRow): void
+  /**
+   * Row sink seam: the input-ledger append (wired by the ledger slice). The
+   * project bucket rides alongside because the row schema carries none — the
+   * bucket is the file path's directory, exactly as the ledger's observers
+   * pass it.
+   */
+  emit(row: GovernorRow, projectKey?: string | undefined): void
   /** Process boot id stamped into every row. */
   gen: string
   /** Debug sink for swallowed failures (must not throw). */
@@ -169,6 +175,7 @@ export function createGovernorListener(deps: GovernorListenerDeps): GovernorList
     decision: EnterDecisionLike<GovernedMessage>,
     settings: InputBudgetSettings,
     sessionId: string,
+    projectKey: string | undefined,
   ): PreStepDecisionLike<GovernedMessage> => {
     const state = stateOfSession(sessionId)
     // Flip boundary (plan §"Observe mode"): an observe → enforce flip starts with
@@ -196,7 +203,7 @@ export function createGovernorListener(deps: GovernorListenerDeps): GovernorList
         turn: intOf(payload?.turn),
         step: intOf(payload?.step),
         decision: result.decision,
-      }))
+      }), projectKey)
     } catch (error: unknown) {
       // The sink is best-effort by contract (a missing ledger must never change
       // admission). It throws only after the state advanced, so it must not be
@@ -220,9 +227,13 @@ export function createGovernorListener(deps: GovernorListenerDeps): GovernorList
       // for a batch that does not exist.
       if (decision?.kind !== 'enter') return decision
       let sessionId: string | undefined
+      let projectKey: string | undefined
       let mode: InputBudgetMode = 'observe'
       try {
         sessionId = sessionIdOf(payload?.agent)
+        // The ledger's file bucket (cwd-derived), resolved from the same agent
+        // face: rows carry none, and a cwd-less header simply yields no bucket.
+        projectKey = cwdProjectKeyOf(payload?.agent)
         const settings = deps.readSettings()
         mode = settings.mode
         // Disabled is a full no-op — no row, no clock tick, no queue change.
@@ -230,7 +241,7 @@ export function createGovernorListener(deps: GovernorListenerDeps): GovernorList
         // An unattributable batch has no session clock to age against: never
         // gate it blind, and never emit a row under a guessed session id.
         if (sessionId === undefined) return decision
-        return governBatch(payload, decision, settings, sessionId)
+        return governBatch(payload, decision, settings, sessionId, projectKey)
       } catch (error: unknown) {
         deps.debug(`input-budget: degraded to passthrough: ${describe(error)}`)
         if (sessionId !== undefined) {
@@ -242,7 +253,7 @@ export function createGovernorListener(deps: GovernorListenerDeps): GovernorList
               step: intOf(payload?.step),
               mode,
               error: true,
-            }))
+            }), projectKey)
           } catch (emitError: unknown) {
             // The sink is best-effort; a failure there must not escape either.
             deps.debug(`input-budget: error row dropped: ${describe(emitError)}`)
@@ -266,8 +277,8 @@ export function createGovernorListener(deps: GovernorListenerDeps): GovernorList
 export interface GovernorListenerOverrides {
   /** Replace the hot settings read (default: the raw user-layer file). */
   readSettings?: () => InputBudgetSettings
-  /** Replace the row sink (default: drop — the ledger slice wires it). */
-  emit?: (row: GovernorRow) => void
+  /** Replace the row sink (default: the input-ledger append sink). */
+  emit?: (row: GovernorRow, projectKey?: string | undefined) => void
   /** Replace the process boot id stamped into rows. */
   gen?: string
   /** Pre-trim pipeline stages (doc 7); empty in this slice. */
@@ -336,9 +347,11 @@ export function registerGovernorListener(
     // No home (a bare test host) means the ship defaults, i.e. observe mode.
     readSettings: overrides.readSettings
       ?? (() => (home === undefined ? DEFAULT_INPUT_BUDGET_SETTINGS : readUserSettingsSync(home))),
-    emit: overrides.emit ?? (() => {
-      // Row sink seam: this slice builds the row, the ledger slice persists it.
-    }),
+    // Row sink: the input-ledger append sink under `<dshHome>/input-ledger/`.
+    // A host with no dsh-home keeps the governor running with rows unpersisted
+    // (the soft dependency of plan §"GovernorRow"), and every sink failure is
+    // contained inside the sink — never into the waterfall.
+    emit: overrides.emit ?? createGovernorLedgerSink({ home, debug }),
     gen: overrides.gen ?? randomUUID(),
     debug,
     hooks: overrides.hooks,
