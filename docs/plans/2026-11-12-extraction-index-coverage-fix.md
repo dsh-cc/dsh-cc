@@ -1,7 +1,7 @@
 # Extraction Write-Back Index Coverage Fix (v2.1)
 
 - Date: 2026-11-12
-- Status: Implemented — PR #405 (open, pending merge); review converged over four rounds (critic, codex, and grok after re-auth at r4)
+- Status: Implemented — PR #405 (merged 2026-11-13); review converged over four rounds (critic, codex, and grok after re-auth at r4)
 - Program: memory integrity (incident-driven)
 - Depends on: nothing hard. The dream path and the optimistic index commit protocol (`commitMemoryWrites`, modeled by `specs/tla/memory-write-lifecycle`) are unchanged.
 

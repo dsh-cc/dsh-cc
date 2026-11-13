@@ -1,7 +1,7 @@
 # Selective System-Prompt Sections
 
 - Date: 2026-11-12
-- Status: Implemented — PR #403 (open, pending merge)
+- Status: Implemented — PR #403 (merged 2026-11-12)
 
 r3 → r4 fold: first-pass formula moved fully to `min-entry-bytes` with UTF-8-safe byte slicing (char-boundary cuts); call-site phrasing corrected to the single real `renderCatalog` call (`catalog.ts:234`) with settings threaded through the shared `render()` path.
 - Program: context-engineering input governance (doc 4 of 8)

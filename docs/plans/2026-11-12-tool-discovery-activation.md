@@ -1,7 +1,7 @@
 # Tool Discovery Activation (extend existing eval → flip)
 
 - Date: 2026-11-12
-- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim). Eval harness (corpus v2 classes, judge-stub gate arm, live runtime arm) implemented in this PR; the sampling sidecar, real-lane adapter, shadow window, and mode flips remain later PRs per § Flip policy.
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim). Eval harness (corpus v2 classes, judge-stub gate arm, live runtime arm) implemented in PR #404 (merged 2026-11-12); the sampling sidecar, real-lane adapter, shadow window, and mode flips remain later PRs per § Flip policy.
 
 r3 → r4 fold: admitted-restriction rationale corrected (judge never sees denied candidates — scope-of-judgment, not TN-padding; micro-F1 excludes true negatives arithmetically).
 - Program: context-engineering input governance (doc 6 of 8)
@@ -85,7 +85,7 @@ Eval may surface prompt/batching bugs (recall program precedent). Fixes land as 
 
 - Unit: metric math over synthetic judge outputs (restricted vs unrestricted micro-F1); zero-denominator semantics (class d exempt from per-class F1 but gated on its own lines); held-out split determinism; fallback-reason mapping (runner timeout → `unavailable`; shared-deadline exhaustion → `incomplete`).
 - Integration: `--mode replay`/`selfcheck` kept as pins; `--mode judge-stub` in CI as the F1 gate arm (deterministic, non-oracle); `--mode live` exercised with a scripted fake lane adapter (deterministic, CI-safe).
-- Flip-surface audit (four surfaces) only in the later mode-flip PR; this PR changes no production default.
+- Flip-surface audit (four surfaces) only in the later mode-flip PR; the design PR and the eval-harness PR #404 change no production default.
 
 ## Risks
 
