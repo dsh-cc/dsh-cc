@@ -48,8 +48,8 @@ export const SKILL_RECOMMENDATION_FEATURE = 'skill-recommendation'
 /** Question-set version sent on the wire (§ "Candidate eligibility"). */
 export const SKILL_RECOMMENDATION_QUESTION_VERSION = 'skill-recommendation-v1'
 
-/** Policy version sent on the wire (§ "Candidate eligibility"). */
-export const SKILL_RECOMMENDATION_POLICY_VERSION = 'skill-recommendation-policy-v1'
+/** Policy version sent on the wire; v2 = the capacity design's coverage policy. */
+export const SKILL_RECOMMENDATION_POLICY_VERSION = 'skill-recommendation-policy-v2'
 
 /**
  * What the pure layer decides. `unavailable` and `cancelled` discard every
@@ -62,9 +62,27 @@ export type RecommendationOutcome =
     readonly kind: 'recommended'
     readonly recommendations: readonly SkillRecommendationEntry[]
     readonly decisionIds: readonly string[]
+    /** Pool items the answered batches judged; `eligible` for a complete run. */
+    readonly judged: number
+    /** The eligible pool size the `judged` count is a fraction of. */
+    readonly eligible: number
   }
   | RecommendationUnavailable
   | { readonly kind: 'cancelled' }
+
+/**
+ * The route's real budgets, folded into the effective planning limits before
+ * `planBatches` (capacity design §4-C2). Optional so unit tests and the replay
+ * eval run without a route; absent means "use the settings values as-is".
+ */
+export interface SkillRecommendationRouteCaps {
+  /** Input budget one request may carry (the identity's `perRequestTokens`). */
+  readonly perRequestTokens: number
+  /** Input budget one question may carry (the identity's `perQuestionTokens`). */
+  readonly perQuestionTokens: number
+  /** Questions one request may carry (the identity's `maxQuestions`). */
+  readonly maxQuestions: number
+}
 
 /** Everything one pure recommendation call needs, minus the runner. */
 export interface RecommendRequest {
@@ -83,6 +101,8 @@ export interface RecommendRequest {
   readonly limits: RecommendationLimits
   /** The decision lane alias to send; resolved by the host. */
   readonly routeAlias: string
+  /** Route budgets folded into the effective limits (capacity design §4-C2). */
+  readonly routeCaps?: SkillRecommendationRouteCaps
   /**
    * The caller's identity/state gate (design § "State machine, ordering, and
    * behavior" step 6; REQ-5 of `specs/tla/decision-gate-coalescing`: "identity
@@ -156,9 +176,26 @@ export async function recommendSkills(
 
   // An empty eligible pool has nothing to judge: a valid empty recommendation,
   // not a failure, and it costs no runner call.
-  if (pool.items.length === 0) return { kind: 'recommended', recommendations: [], decisionIds: [] }
+  if (pool.items.length === 0) {
+    return { kind: 'recommended', recommendations: [], decisionIds: [], judged: 0, eligible: 0 }
+  }
 
-  const plan = planBatches(pool.items, request.task, request.limits, catalogHashOf(pool.items))
+  // Route caps fold into the effective limits BEFORE planning (capacity design
+  // §4-C2): the planner and the runner then run the same arithmetic. A route
+  // that cannot carry two questions (one skill) is refused before any dispatch.
+  let effectiveLimits = request.limits
+  let questionCap = request.limits.maxInputTokens
+  if (request.routeCaps !== undefined) {
+    if (Math.floor(request.routeCaps.maxQuestions / 2) < 1) return unavailable('route-cap')
+    effectiveLimits = {
+      ...request.limits,
+      maxInputTokens: Math.min(request.limits.maxInputTokens, request.routeCaps.perRequestTokens),
+      batchSize: Math.min(request.limits.batchSize, Math.floor(request.routeCaps.maxQuestions / 2)),
+    }
+    questionCap = Math.min(effectiveLimits.maxInputTokens, request.routeCaps.perQuestionTokens)
+  }
+
+  const plan = planBatches(pool.items, request.task, effectiveLimits, catalogHashOf(pool.items), questionCap)
   if (plan.kind === 'unavailable') return plan
 
   const deadline = Date.now() + request.limits.timeoutMs
@@ -168,21 +205,49 @@ export async function recommendSkills(
   const scored: ScoredSkill[] = []
   const decisionIds: string[] = []
 
+  /**
+   * Deadline exhaustion (capacity design §4-C3): the ONLY cause that may publish
+   * a partial. The answered prefix must clear the coverage floor and be
+   * non-empty; below the floor this is exactly the old completeness rule.
+   */
+  const deadlineExhausted = (): RecommendationOutcome => {
+    if (scored.length === 0) return unavailable('timeout')
+    if (scored.length / pool.items.length < request.limits.minCoverage) return unavailable('timeout')
+    return {
+      kind: 'recommended',
+      recommendations: selectRecommendations(scored, request.limits),
+      decisionIds,
+      judged: scored.length,
+      eligible: pool.items.length,
+    }
+  }
+
   try {
     for (const [index, batch] of plan.batches.entries()) {
-      // Only batches still pending can expire; the deadline is shared by all.
-      if (index > 0 && Date.now() >= deadline) return unavailable('timeout')
+      // The CALLER check runs first: caller cancellation outranks deadline
+      // exhaustion in the precedence order (capacity design §4-C3-3).
       if (request.signal.aborted) return { kind: 'cancelled' }
-      if (deadlineController.signal.aborted) return unavailable('timeout')
+      // Only batches still pending can expire; the deadline is shared by all.
+      if (index > 0 && Date.now() >= deadline) return deadlineExhausted()
+      if (deadlineController.signal.aborted) return deadlineExhausted()
 
       // Step 6 / REQ-5: the host's identity gate closes BEFORE the request, so a
-      // changed identity never spends a wire attempt.
+      // changed identity never spends a wire attempt — and a stale identity
+      // discards everything even when the deadline also fired.
       request.revalidate?.()
 
-      const run = await dispatch(runner, request, batch, signal, Math.max(1, deadline - Date.now()))
+      const run = await dispatch(runner, request, effectiveLimits, batch, signal, deadlineController.signal, Math.max(1, deadline - Date.now()))
       // ... and again after the await, before the answer is used at all.
       request.revalidate?.()
+      if (run === DEADLINE_ABORT) return deadlineExhausted()
       if (run.status === 'unavailable') {
+        // Every runner timeout is deadline-derived (dispatch passes the remaining
+        // slice), so it classifies as exhaustion even in the signal race where
+        // `deadlineController.signal.aborted` has not landed yet.
+        if (run.reason === 'timeout') return deadlineExhausted()
+        if (run.reason === 'cancelled'
+          && deadlineController.signal.aborted
+          && !request.signal.aborted) return deadlineExhausted()
         return run.reason === 'cancelled' ? { kind: 'cancelled' } : unavailable(run.reason)
       }
       if (run.decisionId !== undefined) decisionIds.push(run.decisionId)
@@ -201,27 +266,42 @@ export async function recommendSkills(
     kind: 'recommended',
     recommendations: selectRecommendations(scored, request.limits),
     decisionIds,
+    judged: pool.items.length,
+    eligible: pool.items.length,
   }
 }
 
+/** The dispatch sentinel for an abort-class throw with the deadline fired. */
+const DEADLINE_ABORT = Symbol('deadline-abort')
+
 /**
  * Send one batch, turning a thrown transport error into the design's `error`
- * row instead of an exception. A failure that coincides with the caller's
- * cancellation is still `cancelled`, not `error`.
+ * row instead of an exception (capacity design §4-C3-2):
+ * - a failure coinciding with the CALLER's cancellation is `cancelled`;
+ * - an ABORT-CLASS throw with the deadline signal fired is deadline exhaustion
+ *   (the `DEADLINE_ABORT` sentinel);
+ * - any other throw — including a lane error that merely coincides with the
+ *   deadline — is `error`, never a partial.
  * @param runner - the bound runner.
- * @param request - the enclosing call, for the shared scope and limits.
+ * @param request - the enclosing call, for the shared scope and mode.
+ * @param limits - the effective limits (the wire carries the folded cap).
  * @param batch - the batch to judge.
  * @param signal - the combined caller/deadline signal.
+ * @param deadlineSignal - the deadline controller's own signal, so an abort can
+ * be attributed to the deadline half and not the caller half.
  * @param timeoutMs - the remaining slice of the shared deadline.
- * @returns the runner's decision run, or an `error`/`cancelled` sentinel.
+ * @returns the runner's decision run, an `error`/`cancelled` sentinel, or
+ * `DEADLINE_ABORT` for an abort-class throw under the deadline.
  */
 async function dispatch(
   runner: SkillRecommendationRunner,
   request: RecommendRequest,
+  limits: RecommendationLimits,
   batch: RecommendationBatch,
   signal: AbortSignal,
+  deadlineSignal: AbortSignal,
   timeoutMs: number,
-): Promise<SkillDecisionRun> {
+): Promise<SkillDecisionRun | typeof DEADLINE_ABORT> {
   try {
     return await runner.run({
       feature: SKILL_RECOMMENDATION_FEATURE,
@@ -233,11 +313,21 @@ async function dispatch(
       state: batch.state,
       questions: batch.questions,
       timeoutMs,
-      maxInputTokens: request.limits.maxInputTokens,
+      maxInputTokens: limits.maxInputTokens,
       signal,
     })
-  } catch {
+  } catch (error) {
     if (request.signal.aborted) return { status: 'unavailable', reason: 'cancelled' }
+    if (deadlineSignal.aborted && isAbortError(error)) return DEADLINE_ABORT
     return { status: 'unavailable', reason: 'error' }
   }
+}
+
+/**
+ * An abort-class error: the transport aborted the request. A generic lane
+ * error (HTTP 503, malformed body) that merely coincides with the deadline is
+ * NOT abort-class and never yields a partial.
+ */
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')
 }

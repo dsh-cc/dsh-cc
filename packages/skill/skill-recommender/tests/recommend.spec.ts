@@ -265,7 +265,7 @@ describe('empty pool', () => {
     const fake = fakeRunner({})
     const outcome = await recommend(EXAMPLE_TASK, [], fake.runner)
 
-    expect(outcome).toEqual({ kind: 'recommended', recommendations: [], decisionIds: [] })
+    expect(outcome).toEqual({ kind: 'recommended', recommendations: [], decisionIds: [], judged: 0, eligible: 0 })
     expect(fake.calls).toHaveLength(0)
   })
 })
@@ -450,6 +450,6 @@ describe('selection', () => {
     )
 
     // The design's example: high relevance, unmet prerequisites — not recommended.
-    expect(outcome).toEqual({ kind: 'recommended', recommendations: [], decisionIds: ['decision-0'] })
+    expect(outcome).toEqual({ kind: 'recommended', recommendations: [], decisionIds: ['decision-0'], judged: 2, eligible: 2 })
   })
 })

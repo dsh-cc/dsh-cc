@@ -174,4 +174,18 @@ export interface SkillRecommendationResult {
   readonly recommendations: readonly SkillRecommendationEntry[]
   readonly decisionIds: readonly string[]
   readonly advisory: true
+  /**
+   * How much of the eligible pool an answered prefix judged (capacity design
+   * §4-C4): present on `recommended` and `shadow` results, `judged === eligible`
+   * for a complete judgment.
+   */
+  readonly judged?: number
+  /** The eligible pool size the `judged` count is a fraction of. */
+  readonly eligible?: number
+  /**
+   * Why the judgment is unavailable, machine-readable (capacity design §4-C4):
+   * the bounds/runner reasons plus the runtime's closed mapping
+   * (`settings`, `unconfigured`, `stale`, `error`).
+   */
+  readonly reason?: string
 }
