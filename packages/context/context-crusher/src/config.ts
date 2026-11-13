@@ -5,7 +5,7 @@
 
 import z from '@deepseek-ai/schemastery'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
-import type { CrusherConfig, CrusherMode, ResolvedConfig } from './types.ts'
+import type { CrusherConfig, CrusherMode, ReducerGateConfig, ReducerGateMode, ReducerGateRawConfig, ResolvedConfig } from './types.ts'
 
 /**
  * Tools whose output is never crushed. Intentionally over-inclusive
@@ -50,9 +50,111 @@ export const DEFAULTS: ResolvedConfig = deepFreeze({
   deferRequests: 0,
   deferMargin: 1.5,
   deferMaxAgeMs: 1_800_000,
+  reducerDecisionGate: deepFreeze({
+    mode: 'off',
+    timeoutMs: 800,
+    maxInputTokens: 4096,
+    maxSourceTokens: 16_384,
+    maxChunks: 8,
+    maxSkipIndex: 1,
+    maxCompressibility: 0.2,
+    cacheEntries: 128,
+    cacheTtlMs: 60_000,
+    valid: true,
+  } as ReducerGateConfig),
 })
 
 const MODES: readonly CrusherMode[] = ['dry-run', 'on']
+
+const REDUCER_GATE_MODES: readonly ReducerGateMode[] = ['off', 'shadow', 'active']
+
+/** The gate defaults, exactly the design's settings table (S1-12 § "Settings"). */
+export const DEFAULT_REDUCER_GATE: ReducerGateConfig = DEFAULTS.reducerDecisionGate
+
+/**
+ * Tolerantly resolve one raw `reducer-decision-gate` object over a base
+ * resolution (S1-12). Absent input (or an absent key) inherits the base; a
+ * value that violates its row's type or range degrades the gate to OFF for
+ * this resolution (`valid: false`, the violated key falls back to the base
+ * value) — it never throws and is never routed through the throwing legacy
+ * validators. Unknown keys are ignored, so a newer config never breaks an
+ * older build.
+ * @param raw - the raw nested object (any shape; junk is tolerated).
+ * @param base - the resolution to inherit per key.
+ * @returns the camelCase gate settings, with `valid` marking a clean parse.
+ */
+export function resolveGateConfig(raw: unknown, base: ReducerGateConfig = DEFAULT_REDUCER_GATE): ReducerGateConfig {
+  if (raw === undefined) return base
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ...base, valid: false }
+  const section = raw as Record<string, unknown>
+  let valid = base.valid
+  const intIn = (key: string, min: number, max: number, fallback: number): number => {
+    const value = section[key]
+    if (value === undefined) return fallback
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+      valid = false
+      return fallback
+    }
+    return value
+  }
+  const finiteIn = (key: string, min: number, max: number, fallback: number): number => {
+    const value = section[key]
+    if (value === undefined) return fallback
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+      valid = false
+      return fallback
+    }
+    return value
+  }
+  const rawMode = section['mode']
+  let mode = base.mode
+  if (rawMode !== undefined) {
+    if ((REDUCER_GATE_MODES as readonly unknown[]).includes(rawMode)) {
+      mode = rawMode as ReducerGateMode
+    } else {
+      valid = false
+    }
+  }
+  return {
+    mode,
+    timeoutMs: intIn('timeout-ms', 100, 3000, base.timeoutMs),
+    maxInputTokens: intIn('max-input-tokens', 512, 16_384, base.maxInputTokens),
+    maxSourceTokens: intIn('max-source-tokens', 512, 32_768, base.maxSourceTokens),
+    maxChunks: intIn('max-chunks', 1, 16, base.maxChunks),
+    maxSkipIndex: finiteIn('max-skip-index', 0, 4, base.maxSkipIndex),
+    maxCompressibility: finiteIn('max-compressibility', 0, 1, base.maxCompressibility),
+    cacheEntries: intIn('cache-entries', 0, 1024, base.cacheEntries),
+    cacheTtlMs: intIn('cache-ttl-ms', 0, 300_000, base.cacheTtlMs),
+    valid,
+  }
+}
+
+/** The resolved gate back in raw kebab-case form (merge base for the settings reader). */
+export function reducerGateToRaw(gate: ReducerGateConfig): ReducerGateRawConfig {
+  return {
+    mode: gate.mode,
+    'timeout-ms': gate.timeoutMs,
+    'max-input-tokens': gate.maxInputTokens,
+    'max-source-tokens': gate.maxSourceTokens,
+    'max-chunks': gate.maxChunks,
+    'max-skip-index': gate.maxSkipIndex,
+    'max-compressibility': gate.maxCompressibility,
+    'cache-entries': gate.cacheEntries,
+    'cache-ttl-ms': gate.cacheTtlMs,
+  }
+}
+
+/**
+ * Per-key deep merge of the nested gate object (S1-12): the raw scope value
+ * overrides the base resolution KEY BY KEY — unlike the legacy flat settings,
+ * which replace wholesale. A non-object raw value is passed through intact so
+ * the tolerant parser records it as a degradation instead of erasing evidence.
+ */
+export function mergeGateRaw(base: ReducerGateConfig, raw: unknown): ReducerGateRawConfig | unknown {
+  if (raw === undefined) return reducerGateToRaw(base)
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  return { ...reducerGateToRaw(base), ...(raw as Record<string, unknown>) }
+}
 
 /** Row-level deployment-default schema (cordis `static Config`). */
 export const Config: z<CrusherConfig> = z.object({
@@ -72,6 +174,9 @@ export const Config: z<CrusherConfig> = z.object({
   'defer-margin': z.number().min(0),
   'defer-max-age-ms': z.number().step(1).min(1),
   'defer-urgency-tokens': z.number().step(1).min(1),
+  // Tolerant on purpose (S1-12): the nested gate object accepts any shape at
+  // schema time; invalid values degrade at resolution and never throw.
+  'reducer-decision-gate': z.any() as unknown as z<ReducerGateRawConfig>,
 })
 
 /** Settings namespace schema (same shape as the config layer). */
@@ -154,6 +259,7 @@ export function resolveConfig(config: CrusherConfig = {}, options?: { log?: (mes
     ...(config['defer-urgency-tokens'] !== undefined
       ? { deferUrgencyTokens: config['defer-urgency-tokens'] }
       : {}),
+    reducerDecisionGate: resolveGateConfig(config['reducer-decision-gate']),
   })
 }
 
@@ -196,5 +302,9 @@ export function overlaySettings(base: ResolvedConfig, scope: CrusherConfig | und
     ...(scope['defer-urgency-tokens'] !== undefined || base.deferUrgencyTokens !== undefined
       ? { deferUrgencyTokens: scope['defer-urgency-tokens'] ?? base.deferUrgencyTokens }
       : {}),
+    // The nested gate object is the ONLY deep-merged setting (S1-12): the raw
+    // scope overrides the base resolution per key; legacy flat keys keep their
+    // wholesale replacement semantics.
+    reducerDecisionGate: resolveGateConfig(scope['reducer-decision-gate'], base.reducerDecisionGate ?? DEFAULT_REDUCER_GATE),
   }
 }

@@ -63,6 +63,64 @@ export interface CrusherConfig {
    * window source).
    */
   'defer-urgency-tokens'?: number
+  /**
+   * Nested reducer decision-gate settings (S1-12). The ONLY deep-merged
+   * object: unlike the legacy flat keys (which replace wholesale), a partial
+   * object overrides per key at both merge points. Parsed tolerantly — an
+   * invalid value degrades the gate to off for that resolution, never throws.
+   */
+  'reducer-decision-gate'?: ReducerGateRawConfig
+}
+
+/** Reducer decision-gate mode (S1-12): `off` dormant, `shadow` judges without applying, `active` may skip generation. */
+export type ReducerGateMode = 'off' | 'shadow' | 'active'
+
+/**
+ * Raw nested `reducer-decision-gate` object under `cc-context-compression`
+ * (S1-12). Every value is `unknown` on purpose: the object is parsed
+ * TOLERANTLY at resolution — an out-of-range or mistyped value degrades the
+ * gate to off for that resolution and must never throw, so callers may pass
+ * anything here.
+ */
+export interface ReducerGateRawConfig {
+  mode?: unknown
+  'timeout-ms'?: unknown
+  'max-input-tokens'?: unknown
+  'max-source-tokens'?: unknown
+  'max-chunks'?: unknown
+  'max-skip-index'?: unknown
+  'max-compressibility'?: unknown
+  'cache-entries'?: unknown
+  'cache-ttl-ms'?: unknown
+  [key: string]: unknown
+}
+
+/** Resolved reducer decision-gate settings (camelCase; ranges validated tolerantly). */
+export interface ReducerGateConfig {
+  /** Gate mode; `off` by default. `shadow` judges but always continues the original generation. */
+  readonly mode: ReducerGateMode
+  /** Wall-clock budget shared by the whole group judgement (100–3000). */
+  readonly timeoutMs: number
+  /** Per-request input cap including state, questions and headroom (512–16384). */
+  readonly maxInputTokens: number
+  /** Cap on the complete source text (512–32768). */
+  readonly maxSourceTokens: number
+  /** Maximum chunk count for one judgement (1–16). */
+  readonly maxChunks: number
+  /** Skip threshold on the receiptOpportunity score, inclusive (0–4). */
+  readonly maxSkipIndex: number
+  /** Skip threshold on the compressibility noul, inclusive (0–1). */
+  readonly maxCompressibility: number
+  /** Cached judgments retained; `0` disables storage (0–1024). */
+  readonly cacheEntries: number
+  /** Entry lifetime in ms; `0` makes no entry reusable (0–300000). */
+  readonly cacheTtlMs: number
+  /**
+   * `false` when a provided value violated its row: the gate is OFF for that
+   * resolution (the existing reducer continues). Config errors must never be
+   * read as reducer-disabled.
+   */
+  readonly valid: boolean
 }
 
 /** Validated, detached, deeply immutable configuration. */
@@ -84,6 +142,8 @@ export interface ResolvedConfig {
   readonly deferMargin: number
   readonly deferMaxAgeMs: number
   readonly deferUrgencyTokens?: number
+  /** Resolved reducer decision-gate settings (S1-12); default off. */
+  readonly reducerDecisionGate: ReducerGateConfig
 }
 
 /** One append-only savings-ledger row (`savings.jsonl`). */
@@ -106,6 +166,11 @@ export interface LedgerRow {
   readonly applied: boolean
   /** Present only when the original was persisted to the store. */
   readonly hash?: string
+  /**
+   * S1-12 correlation key: the decision id(s) of a decision-gate skip,
+   * comma-joined when a multi-chunk judgment produced several. Additive only.
+   */
+  readonly decisionId?: string
 }
 
 /** Typed retrieval failure for one store lookup. */

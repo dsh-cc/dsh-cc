@@ -8,8 +8,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SettingsNamespace } from '@dsh-cc/settings'
 import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
-import { Config, SettingsSchema } from './config.ts'
-import type { CrusherConfig, ResolvedConfig } from './types.ts'
+import { Config, DEFAULT_REDUCER_GATE, mergeGateRaw, SettingsSchema } from './config.ts'
+import type { CrusherConfig, ReducerGateRawConfig, ResolvedConfig } from './types.ts'
 
 /** The settings namespace carrying the live crusher overlay. */
 export const SETTINGS_NAMESPACE = 'cc-context-compression' as SettingsNamespace
@@ -36,6 +36,14 @@ export function registerSettings(ctx: Context, base: ResolvedConfig): SettingsRe
   })
   return () => {
     const value = read()
-    return value === undefined ? undefined : { ...base, ...value }
+    if (value === undefined) return undefined
+    const merged = { ...base, ...value } as CrusherConfig
+    // S1-12: the nested gate object deep-merges per key (plain spread would
+    // replace it wholesale). Legacy flat keys keep replacement semantics.
+    merged['reducer-decision-gate'] = mergeGateRaw(
+      base.reducerDecisionGate ?? DEFAULT_REDUCER_GATE,
+      value['reducer-decision-gate'],
+    ) as ReducerGateRawConfig
+    return merged
   }
 }

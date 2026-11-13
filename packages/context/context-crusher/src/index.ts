@@ -32,6 +32,13 @@ import { registerSettings } from './settings.ts'
 import { readSecretsSettings, redact, type SecretsSettings } from '@dsh-cc/transcript-secrets'
 import { route } from './router.ts'
 import { reduceToolOutput } from './reducer.ts'
+import type { ReducerGateCallInput } from './reducer.ts'
+import { hostGateRunnerResolver, sessionWatermarkOf } from './reducer-gate-contract.ts'
+import type { ReducerGateBoundRunner, ReducerGateHostFace } from './reducer-gate-contract.ts'
+import { ReducerGateCache } from './reducer-gate-cache.ts'
+import { evaluateReducerGate } from './reducer-gate.ts'
+import type { GateFlightValue } from './reducer-gate.ts'
+import type { DecisionScope } from '@dsh-cc/systemone'
 import { CrusherStore, shortHash } from './store.ts'
 import { SavingsLedger } from './ledger.ts'
 import { buildMarker, CCR_HASH_RE } from './marker.ts'
@@ -40,9 +47,17 @@ import { Deferral } from './defer/pass.ts'
 import type { CrusherConfig, LedgerRow, RetrieveError, ResolvedConfig } from './types.ts'
 
 export { resolveConfig, overlaySettings, DEFAULTS, DEFAULT_PROTECTED_TOOLS, Config } from './config.ts'
+export { DEFAULT_REDUCER_GATE, mergeGateRaw, reducerGateToRaw, resolveGateConfig } from './config.ts'
 export { SETTINGS_NAMESPACE } from './settings.ts'
 export { route } from './router.ts'
 export { REDUCER_COMMAND_TOOLS, invocationCommand, isReducerEligible, reduceToolOutput, truncateView } from './reducer.ts'
+export type { ReducerGateCallInput } from './reducer.ts'
+export { evaluateReducerGate, planGateChunks, REDUCER_GATE_FEATURE, REDUCER_GATE_POLICY_VERSION, REDUCER_GATE_QUESTION_VERSION, REDUCER_GATE_QUESTIONS } from './reducer-gate.ts'
+export type { GateFlightValue, ReducerGateDecision, ReducerGateDeps, ReducerGateGenerativeRoute, ReducerGateInput, ReducerGateReason, ReducerGateRunner } from './reducer-gate.ts'
+export { hostGateRunnerResolver, sameGateRouteIdentity, sessionWatermarkOf } from './reducer-gate-contract.ts'
+export type { ReducerGateBoundRunner, ReducerGateHostFace } from './reducer-gate-contract.ts'
+export { buildReducerGateCacheKey, REDUCER_GATE_CACHE_KEY_VERSION, ReducerGateCache } from './reducer-gate-cache.ts'
+export type { ReducerGateCacheKeyParts, ReducerGateKeyThresholds, ReducerGateRunOutcome } from './reducer-gate-cache.ts'
 export { parseReceipt, renderReceipt, ReceiptSchema } from './receipt.ts'
 export { verifyReceipt } from './verifier.ts'
 export { CrusherStore, shortHash, STORE_MAX_ENTRIES, STORE_TTL_MS } from './store.ts'
@@ -62,7 +77,7 @@ export {
   rebuildResidents,
 } from './defer/residents.ts'
 export type { DeferLedgerRow, ResidentEntry } from './defer/residents.ts'
-export type { CrusherConfig, CrusherMode, ResolvedConfig, LedgerRow, RetrieveError } from './types.ts'
+export type { CrusherConfig, CrusherMode, ReducerGateConfig, ReducerGateMode, ReducerGateRawConfig, ResolvedConfig, LedgerRow, RetrieveError } from './types.ts'
 
 export const RETRIEVE_TOOL_NAME = 'context_retrieve'
 
@@ -107,6 +122,10 @@ export class ContextCrusher extends Service {
   private readonly readSecrets: () => SecretsSettings = () => ({ extraPatterns: [], redactCrusherStore: true })
   /** Deferred-mode orchestration (counting, swap pass, resume, ledger). */
   private readonly deferral: Deferral
+  /** S1-12: the shared coalescing gate cache (one per plugin fiber). */
+  private readonly gateCache: ReducerGateCache<GateFlightValue>
+  /** S1-12: guarded dual-name resolver for the S1-02 decision service. */
+  private readonly gateRunnerFor: (actor: object) => ReducerGateBoundRunner | undefined
 
   constructor(ctx: Context, config: CrusherConfig = {}) {
     super(ctx, 'contextCrusher')
@@ -137,9 +156,26 @@ export class ContextCrusher extends Service {
       home: () => this.home,
       effectiveConfig: () => this.effectiveConfig(),
     })
+    // S1-12: the gate's shared cache and its host runner resolver. The cache
+    // knobs are live settings, so a mid-session change applies to the next call.
+    this.gateCache = new ReducerGateCache<GateFlightValue>({
+      limits: () => {
+        const gate = this.effectiveConfig().reducerDecisionGate
+        return { maxEntries: gate.cacheEntries, ttlMs: gate.cacheTtlMs }
+      },
+      cacheable: (value) => value.kind === 'judged',
+    })
+    this.gateRunnerFor = hostGateRunnerResolver(ctx as unknown as ReducerGateHostFace)
     this.registerListener()
     this.deferral.registerListeners()
     this.registerRetrieveTool()
+    // S1-12 dispose-aborts-flights: on plugin unload every in-flight gate
+    // AbortController aborts, its waiters resolve cancelled, and the cache
+    // clears; cancellation is never a model-quality fault and never starts
+    // the original generation.
+    ctx.effect(() => () => {
+      this.gateCache.dispose()
+    }, 'context-crusher: reducer-gate dispose')
   }
 
   /** Live `cc-secrets` settings for the retrieve note rule (C2). */
@@ -267,6 +303,43 @@ export class ContextCrusher extends Service {
    * eligibility, lane, timeout, verification — passes the ORIGINAL bytes
    * through (fail-soft inside `reduceToolOutput` too).
    */
+  /**
+   * S1-12: the per-call gate closure, present only when the gate mode is
+   * shadow or active over a clean configuration. Scope comes from the bound
+   * runner's `scope()` over the durable watermark `Number(agent.session.seq)`;
+   * the signal is THIS call's `exec.signal`, honored per caller. A missing
+   * service, watermark or binding leaves `scope` undefined, which the gate
+   * treats as an incomplete identity — the reducer continues unchanged.
+   */
+  private gateExecutor(
+    exec: ToolExecution,
+    cfg: ResolvedConfig,
+  ): ((fields: ReducerGateCallInput) => ReturnType<typeof evaluateReducerGate>) | undefined {
+    const gate = cfg.reducerDecisionGate
+    if (!gate.valid || gate.mode === 'off') return undefined
+    return (fields) => {
+      const agent = exec.agent
+      const bound = agent === undefined ? undefined : this.gateRunnerFor(agent)
+      let scope: DecisionScope | undefined
+      if (agent !== undefined && bound !== undefined) {
+        const originSeq = sessionWatermarkOf(agent)
+        if (originSeq !== undefined) {
+          try {
+            scope = bound.scope(originSeq)
+          } catch {
+            scope = undefined
+          }
+        }
+      }
+      return evaluateReducerGate({ ...fields, scope, signal: exec.signal }, {
+        gate,
+        runner: bound,
+        cache: this.gateCache,
+        readGate: () => this.effectiveConfig().reducerDecisionGate,
+      })
+    }
+  }
+
   private async reduceOrPassthrough(
     exec: ToolExecution,
     result: Readonly<ToolExecutionResult>,
@@ -276,12 +349,14 @@ export class ContextCrusher extends Service {
     cfg: ResolvedConfig,
     ledgerRow: (row: Omit<LedgerRow, 'ts' | 'sessionId' | 'tool'>) => Promise<void>,
   ): Promise<PostToolDecision> {
+    const evaluateGate = this.gateExecutor(exec, cfg)
     const replacementText = await reduceToolOutput({
       ctx: this.ctx,
       cfg,
       exec,
       originalText,
       tokensBefore,
+      ...(evaluateGate === undefined ? {} : { evaluateGate }),
       isError: result.isError,
       estimate: (text) => this.estimate(text),
       projectKey: this.projectKey(exec),

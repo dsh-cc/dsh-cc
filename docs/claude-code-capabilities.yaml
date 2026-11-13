@@ -381,6 +381,7 @@ capabilities:
       - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: context-crusher" }
       - { type: test, path: packages/context/context-crusher/tests/composition.spec.ts }
       - { type: test, path: packages/context/context-crusher/tests/composition-reducer.spec.ts }
+      - { type: test, path: packages/context/context-crusher/tests/reducer-gate.spec.ts }
     deviation:
       kind: divergent
       summary: >-
@@ -398,7 +399,14 @@ capabilities:
         reducer-max-input-tokens (30000), reducer-min-savings-ratio (0.5),
         reducer-max-tokens (1024), reducer-timeout-ms (10000), and
         reducer-alias ('haiku'; unrouted or inherited-provider lanes are
-        skipped, never billed to the parent route).
+        skipped, never billed to the parent route). An optional SystemOne 〔src:ws:docs/plans/2026-11-02-systemone-12-reducer-gate.md#L57-L75〕
+        reducer-decision-gate (nested `reducer-decision-gate` object under the
+        same namespace; mode `off`, `shadow` or `active`, default `off`) judges
+        whether a receipt is worth attempting before generation is paid;
+        receipt validity stays with the deterministic verifier 〔src:ws:docs/plans/2026-11-02-systemone-12-reducer-gate.md#L57-L75〕.
+        Knobs: timeout-ms (800), max-input-tokens (4096), max-source-tokens (16384), max-chunks (8), max-skip-index (1), max-compressibility (0.2), cache-entries (128), cache-ttl-ms (60000) 〔src:ws:docs/plans/2026-11-02-systemone-12-reducer-gate.md#L61-L71〕.
+        Fail-open: an invalid value or a missing decision service leaves the
+        gate off and the reducer path unchanged.
 
   engine.coordinator:
     title: Coordinator mode

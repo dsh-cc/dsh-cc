@@ -33,6 +33,7 @@
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/side-query": "workspace:^",
+    "@dsh-cc/systemone": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@dsh-cc/transcript-secrets": "workspace:^"
   },
@@ -64,6 +65,7 @@
     "@dsh-cc/session-cwd": "workspace:^",
     "@dsh-cc/settings": "workspace:^",
     "@dsh-cc/side-query": "workspace:^",
+    "@dsh-cc/systemone": "workspace:^",
     "@dsh-cc/tool-use-summary": "workspace:^",
     "@dsh-cc/tools": "workspace:^",
     "@dsh-cc/transcript-secrets": "workspace:^",

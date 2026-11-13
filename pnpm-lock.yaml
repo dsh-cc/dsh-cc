@@ -822,6 +822,9 @@ importers:
       '@dsh-cc/side-query':
         specifier: workspace:^
         version: link:../../llm-tuning/side-query
+      '@dsh-cc/systemone':
+        specifier: workspace:^
+        version: link:../../llm-tuning/systemone
       '@dsh-cc/tool-use-summary':
         specifier: workspace:^
         version: link:../../compaction/tool-use-summary

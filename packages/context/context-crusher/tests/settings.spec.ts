@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveConfig, overlaySettings, DEFAULTS, DEFAULT_REDUCER_COMMANDS } from '../src/config.ts'
+import { resolveConfig, overlaySettings, DEFAULTS, DEFAULT_REDUCER_COMMANDS, DEFAULT_REDUCER_GATE } from '../src/config.ts'
 import type { CrusherConfig } from '../src/types.ts'
 
 describe('config resolution', () => {
@@ -12,6 +12,8 @@ describe('config resolution', () => {
       reducerMaxInputTokens: 30_000, reducerMinSavingsRatio: 0.5,
       reducerMaxTokens: 1024, reducerTimeoutMs: 10_000, reducerAlias: 'haiku',
       deferRequests: 0, deferMargin: 1.5, deferMaxAgeMs: 1_800_000,
+      // S1-12: the decision gate ships dark (off) with a clean parse.
+      reducerDecisionGate: { ...DEFAULT_REDUCER_GATE },
     })
   })
 
