@@ -668,6 +668,42 @@ capabilities:
         (`cc-lsp-on-write.enabled`, user layer; inert without a serena mount),
         and is diagnostics-only — no navigation surface.
 
+  engine.input-ledger:
+    title: Per-step input ledger (content-free composition rows)
+    category: engine
+    plane: preset
+    upstream:
+      summary: >-
+        Not an upstream CC surface: a dsh-cc extension. Three observe-only
+        listeners (system-prompt/assemble, llm/stream, agent/pre-step) append one content-free metrics row per assembly and per outgoing request to 〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L106-L111〕 $DSH_HOME/input-ledger/<projectKey>/<sessionId>.jsonl 〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L108-L108〕
+        — section- and message-source-level composition, UTF-8 byte sizes and 8-char local hashes, never prompt or message text 〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L84-L111〕〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L146-L150〕.
+        The writers/readers are the shared substrate for the
+        context-engineering input-governance docs (budget governor, injection
+        dedupe, per-class caps) 〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L19-L27〕.
+      refs: []
+    dimensions:
+      recognized: true
+      mounted: true
+      behavioral: divergent
+      ux: partial
+    evidence:
+      - { type: source, path: packages/preset/cc/agent.cordis.yml, anchor: "- id: input-ledger" }
+      - { type: source, path: packages/observability/input-ledger/src/plugin.ts, anchor: "export function apply" }
+      - { type: test, path: packages/observability/input-ledger/tests/integration.spec.ts }
+      - { type: test, path: packages/observability/input-ledger/tests/observers.spec.ts }
+    deviation:
+      kind: divergent
+      summary: >-
+        dsh-cc extension: CC has no per-step composition ledger. Observers are
+        pure — no request rewriting, no runtime behavior effect — and the mount
+        is reference-counted on the root context so the cc + vwa double include
+        registers one listener set 〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L125-L133〕.
+        Settings cc-input-ledger.* (enabled, include-subagents,
+        max-sections-per-row, max-rows-per-file) are hot-read per event, default
+        on 〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L135-L144〕.
+        UX is partial on purpose: rows are read through the package's typed
+        readers and offline tooling; there is no dedicated slash command yet 〔src:ws:docs/plans/2026-11-12-per-step-input-ledger.md#L113-L123〕.
+
   engine.microcompact:
     title: Model-free tool-result microcompaction
     category: engine

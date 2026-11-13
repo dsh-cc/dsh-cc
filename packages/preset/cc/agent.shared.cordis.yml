@@ -809,6 +809,25 @@
 - id: tool-structured-output
   name: '@dsh-cc/tool-structured-output'
 
+# InputLedger: per-step input ledger (plan
+# docs/plans/2026-11-12-per-step-input-ledger.md) — three observe-only
+# listeners (system-prompt/assemble, llm/stream, agent/pre-step) appending one
+# content-free metrics row per assembly and per outgoing request to
+# $DSH_HOME/input-ledger/<projectKey>/<sessionId>.jsonl: section and
+# message-source composition, byte sizes and 8-char local hashes, never prompt
+# text. Publishes no Service (plain plugin, progress-rebuild pattern), so it
+# needs no isolate key and stays OUTSIDE the cc-services group rather than
+# inheriting a realm it never uses. The mount is reference-counted on the ROOT
+# context (src/mount.ts), so the cc + vwa double include of this body registers
+# ONE listener set. DEFAULT ON (cc-input-ledger.enabled). ORDER: the
+# observability neighbourhood beside cache-health, immediately before the
+# slash-command rows — a pure observer with no composition dependency on any
+# earlier row; its llm/stream listener is prepend+global exactly like
+# cache-health's, so physical adjacency keeps the two wire-view observers
+# reviewable together.
+- id: input-ledger
+  name: '@dsh-cc/input-ledger'
+
 # ── CC parity slash commands ───────────────────────────────────────────────
 
 # CacheHealth: passive prompt-cache prefix-stability observer; /cache-health

@@ -11,14 +11,16 @@
  *
  * The sink and readers require no cordis context: docs 5/8 consume them
  * offline. The observers (`system-prompt/assemble`, `llm/stream`,
- * `agent/pre-step`) are registered by {@linkcode mountInputLedger}, which the
- * preset row calls.
+ * `agent/pre-step`) are registered by {@linkcode mountInputLedger}, which this
+ * module's {@linkcode apply} wraps into the plain cordis plugin the preset's
+ * top-level `input-ledger` row mounts.
  *
  * @module @dsh-cc/input-ledger
  */
 
 export * from './mount.ts'
 export * from './observe.ts'
+export { apply, name } from './plugin.ts'
 export * from './readers.ts'
 export * from './rows.ts'
 export * from './settings.ts'
