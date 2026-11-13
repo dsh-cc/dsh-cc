@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/settings",
   "description": "The vendored settings-provider contract plus the two things built on it: idempotent namespace registration (ns) and the Claude Code settings cascade (cascade)",
-  "version": "0.9.5-rc.1",
+  "version": "0.9.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

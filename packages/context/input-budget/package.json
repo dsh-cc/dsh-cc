@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/input-budget",
   "description": "Per-step input budget governor: class-based byte budgets, FIFO trim, a deterministic defer backlog and observe-mode shadow state over the final agent/pre-step enter batch (docs/plans/2026-11-12-per-step-input-budget-governor.md)",
-  "version": "0.9.5-rc.1",
+  "version": "0.9.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",

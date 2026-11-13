@@ -1,7 +1,7 @@
 {
   "name": "@dsh-cc/skill-recommender",
   "description": "Read-only, advisory task-based skill recommendation: scores the visible skill catalog per skill and returns a few names with relevance and prerequisite evidence; default off",
-  "version": "0.9.5-rc.1",
+  "version": "0.9.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dsh-cc/dsh-cc.git",
