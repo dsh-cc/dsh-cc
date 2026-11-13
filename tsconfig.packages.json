@@ -160,6 +160,9 @@
       "path": "./packages/compaction/tool-use-summary"
     },
     {
+      "path": "./packages/compaction/compaction-pinning"
+    },
+    {
       "path": "./packages/observability/cache-health"
     },
     {
