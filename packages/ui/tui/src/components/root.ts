@@ -44,7 +44,7 @@ export type { BuildRootOptions, RootHandle }
  * Build the pi-tui render tree.
  *
  * Children order: title · transcript · queue chips · todo strip · notice ·
- * [approval] · [question] · working line · editor · statusline. The transcript and overlays
+ * plugin bands · [approval] · [question] · working line · editor · statusline. The transcript and overlays
  * rebuild on every driver emit; the editor is persistent so it retains focus
  * and cursor state across renders.
  *
@@ -137,8 +137,21 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 		}
 	}(driver.statusLineIn(terminal.columns), 0, 0)
 
+	// Plugin bands (the `tuiBands` service): display-only lines from other
+	// plugins, re-read on every render so refreshes and resizes apply at once.
+	const bands = opts.bands
+	const bandLines = new class extends Text {
+		override render(width: number): string[] {
+			this.setText(bands === undefined ? '' : bands.lines(width, driver.currentSessionId || undefined)
+				.map(line => line.tone === undefined ? line.text : theme[line.tone](line.text))
+				.join('\n'))
+			return super.render(width)
+		}
+	}('', 0, 0)
+	const unsubscribeBands = bands?.subscribe(() => tui.requestRender())
+
 	// Ordered chrome shared by the inline mount and the fullscreen exit replay.
-	const chrome: Component[] = [title, transcript, queueLine, todoLine, noticeLine, overlays, workingLine, workflowRow.line, editor, statusline]
+	const chrome: Component[] = [title, transcript, queueLine, todoLine, noticeLine, bandLines, overlays, workingLine, workflowRow.line, editor, statusline]
 
 	if (tui instanceof TuiAltScreen) {
 		// Fullscreen (alternate screen): transcript scrolls inside the primary
@@ -156,6 +169,7 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 		dock.addChild(queueLine, { shrink: 1, minSize: 0 })
 		dock.addChild(todoLine, { shrink: 1, minSize: 0 })
 		dock.addChild(noticeLine, { shrink: 1, minSize: 0 })
+		dock.addChild(bandLines, { shrink: 1, minSize: 0 })
 		dock.addChild(overlays, { shrink: 1, minSize: 0 })
 		dock.addChild(workingLine, { shrink: 1, minSize: 0 })
 		dock.addChild(workflowRow.line, { shrink: 1, minSize: 0 })
@@ -406,6 +420,7 @@ export function buildRoot(driver: Driver, opts: BuildRootOptions = {}): RootHand
 			workflowRow.dispose()
 			removeInputListener()
 			unsubscribe()
+			unsubscribeBands?.()
 		},
 		stopForExit() {
 			if (!(tui instanceof TuiAltScreen)) {

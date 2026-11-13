@@ -7,7 +7,22 @@
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import type { ThemeOverrides } from './components/theme.ts'
+import { TuiBands } from './bands.ts'
 import { resolveDshProfile } from './profile.ts'
+
+export { TuiBands, MAX_BAND_LINES } from './bands.ts'
+export type { BandDefinition, BandLine, BandRenderContext, BandTone } from './bands.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /**
+     * Plugin bands: one or two display-only lines above the composer. Provided
+     * by the TUI when it mounts; inject it optionally (`ctx.inject(['tuiBands'],
+     * ...)`) so the same plugin also loads in profiles without the TUI.
+     */
+    tuiBands: TuiBands
+  }
+}
 
 export const name = 'dsh-cc-tui'
 export const inject = ['agents']
@@ -95,7 +110,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     throw new Error('dsh-cc-tui requires an interactive terminal (stdout must be a TTY).')
   }
   ctx.provide('dshProfile', resolveDshProfile())
+  const bands = new TuiBands((id, error) => {
+    ctx.logger?.warn?.(`tuiBands: band ${id} failed to render: ${error instanceof Error ? error.message : String(error)}`)
+  })
+  ctx.provide('tuiBands', bands)
   process.env.NODE_ENV ??= 'production'
   const { mountTui } = await import('./plugin.ts')
-  await mountTui(ctx, { ...config, uiMode: resolveUiMode(config) })
+  await mountTui(ctx, { ...config, uiMode: resolveUiMode(config) }, bands)
 }

@@ -7,6 +7,7 @@
 
 import type { Editor, Terminal, TUI, TuiMode } from '@dsh-cc/pi-tui'
 import type { ThemeOverrides } from './theme.ts'
+import type { TuiBands } from '../bands.ts'
 
 export interface BuildRootOptions {
 	terminal?: Terminal
@@ -27,6 +28,11 @@ export interface BuildRootOptions {
 	 * the historical fixed palette.
 	 */
 	theme?: ThemeOverrides
+	/**
+	 * Plugin bands (the `tuiBands` service): display-only lines drawn between the
+	 * notice line and the overlays, re-read on every render.
+	 */
+	bands?: TuiBands
 }
 
 export interface RootHandle {

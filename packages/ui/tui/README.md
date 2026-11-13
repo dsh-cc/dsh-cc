@@ -160,3 +160,40 @@ applied after every bundle):
 
 The roles drive the editor border and autocomplete, transcript rows, diff
 cards, overlay boxes, fenced-code highlighting, and the `!` shell-mode border.
+
+## Plugin bands
+
+Other cordis plugins can show one or two lines of live status above the
+composer through the `tuiBands` service the TUI provides when it mounts. A band
+is display-only: it takes no keys and cannot take focus, so interaction stays
+with slash commands (a band can point at one, e.g. `📥 2 waiting · /inbox`).
+
+```ts
+export function apply(ctx: Context) {
+  // Optional inject: the same plugin still loads in profiles without the TUI.
+  ctx.inject(['tuiBands'], (ctx) => {
+    ctx.effect(() => ctx.tuiBands.register({
+      id: 'my-plugin/inbox',
+      tone: 'accent',                       // muted | accent | success | warning | error
+      render: ({ sessionId }) => {
+        const waiting = countFor(sessionId)   // the session the TUI shows now
+        return waiting > 0 ? `📥 ${waiting} waiting · /inbox` : undefined
+      },
+    }))
+    const timer = setInterval(() => ctx.tuiBands.refresh(), 3000)
+    ctx.effect(() => () => clearInterval(timer))
+  })
+}
+```
+
+- `render({ width, sessionId })` runs on every frame: keep it cheap and
+  synchronous, and return `undefined` (or an empty string or array) to hide
+  the band. `sessionId` is the session the TUI shows now, so a band can be
+  per-session.
+- Each band shows at most two lines; each line is cut to the terminal width
+  and newlines inside a line become spaces.
+- Bands draw in ascending `order` (default 0) between the notice line and the
+  overlays, in both regular and fullscreen mode.
+- A band whose `render` throws is skipped for that frame and reported once to
+  the log; the TUI keeps running.
+- `register` returns a disposer; ids must be unique among live bands.
