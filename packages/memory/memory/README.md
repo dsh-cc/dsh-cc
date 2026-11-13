@@ -11,11 +11,11 @@ providerless host mounts memory read-only).
 ## What this package provides
 
 - **Memdir format** — a memory home (default the harness home's `memory/`)
-  holding an always-loaded `MEMORY.md` entrypoint (capped at 200 lines / 25 KB)
-  per layer, each a one-line index of `.md` topic files. Each topic file
-  carries `name`, `description`, and `type` (`user` / `feedback` / `project` /
-  `reference`) frontmatter plus a Markdown body. The parser is independently
-  exported.
+  holding a per-layer `MEMORY.md` index (capped at 200 lines / 25 KB, kept on
+  disk and never injected verbatim), each a one-line index of `.md` topic files.
+  Each topic file carries `name`, `description`, and `type` (`user` / `feedback`
+  / `project` / `reference`) frontmatter plus a Markdown body. The parser is
+  independently exported.
 - **Per-workspace isolation with a global layer** — memories are scoped to the
   git repository (Claude Code auto-memory identity): `canonicalMemoryRoot`
   collapses linked worktrees and subdirectories onto the main checkout, then
@@ -27,19 +27,20 @@ providerless host mounts memory read-only).
   useful everywhere are saved with `scope: "global"`. Session transcripts
   still group by raw cwd (`sessions/--<cwd-slug>--`); memory no longer
   matches that grouping for worktree sessions.
-- **`memory` system-prompt section** — save-channel guidance, each layer's
-  entrypoint content (truncated), a scope-tagged combined index of topic
-  files, and grep search guidance. The section ALWAYS renders (a memoryless
-  layer shows a placeholder) so the save guidance never disappears. One global
-  registration serves every agent: the text callback renders the assembling
-  agent's own workspace layer (the agent arrives via the assemble scope).
-  Delegated children (`delegationDepth > 0`) render an empty string so the
-  section drops out of the child prompt — matching Claude Code, auto-memory is
-  not shared with non-fork subagents; the parent prompt must pass any facts the
-  child needs. Directory scans run in the background through `ctx.fs`; rendered
-  per-layer fragments are cached and `system-prompt/change` fires only when a
-  fragment actually changed; a turn-end listener re-scans so host-side writes
-  surface without a restart.
+- **`memory` system-prompt section** — save-channel guidance plus ONE
+  scope-tagged topic catalog over every layer, ordered by the maintained
+  `MEMORY.md` pointer order and then by filename, with grep search guidance.
+  The section ALWAYS renders (a memoryless agent shows a placeholder) so the
+  save guidance never disappears. One global registration serves every agent:
+  the text callback renders the assembling agent's own workspace layer (the
+  agent arrives via the assemble scope). Delegated children
+  (`delegationDepth > 0`) render an empty string so the section drops out of the
+  child prompt — matching Claude Code, auto-memory is not shared with non-fork
+  subagents; the parent prompt must pass any facts the child needs. Directory
+  scans run in the background through `ctx.fs`; each directory's catalog
+  fingerprint is cached and `system-prompt/change` fires only when a fingerprint
+  actually changed; a turn-end listener re-scans so host-side writes surface
+  without a restart.
 - **`memory_save` tool** — the ONLY working save channel. Memory directories
   live outside every session workspace, so direct `write`/`edit` calls
   against them are fenced by the fs sandbox and always fail; the section says
@@ -190,41 +191,65 @@ nothing, and a mode without the plugin only ever falls back.
 { "cc-systemone-memory-recall": { "mode": "shadow" } }
 ```
 
-## Memory section budget (`cc-memory-section`, on by default)
+## Memory catalog budget (`cc-memory-section`, on by default)
 
-The section's **combined topic index** is the one surface no other cap reaches.
-Per-layer `MEMORY.md` fragments are already capped by
-`truncateEntrypointContent` (200 lines / 25 KB per layer), so this namespace
-caps the index block only: the section header, the per-layer fragments and the
-"Searching past context" guidance block always render **byte-identical** to the
-uncapped form. The budget lives in its own settings namespace, `cc-memory-section`
-(registered through `registerNamespaceSafe`; keys are kebab-case there), and is
-re-read on **every** render — a settings write applies to the next assembly,
-including the first-assembly readiness re-render and every
-`system-prompt/change` re-render. A host without a settings service keeps
-exactly these defaults.
+The section renders ONE scope-tagged catalog of memory topics — there is no
+per-layer `MEMORY.md` block any more (it duplicated the same list and truncated
+along a second axis). The catalog is the only variable part of the section: the
+header, the save guidance and the "Searching past context" block are fixed. The
+budget lives in its own settings namespace, `cc-memory-section` (registered
+through `registerNamespaceSafe`; keys are kebab-case there), and is re-read on
+**every** render — a settings write applies to the next assembly, including the
+first-assembly readiness re-render and every `system-prompt/change` re-render
+(a settings write itself emits no `system-prompt/change`). A host without a
+settings service keeps exactly these defaults.
 
 | Key | Default | Range and meaning |
 |---|---|---|
-| `truncate` | `true` | explicit on/off for the index cap. `false` renders the index **uncapped** — it never removes the section (the restore-previous-behavior valve) |
-| `max-bytes` | `8192` (**provisional**) | 1024-65536; UTF-8 byte ceiling for the whole index block (`## Memory index` header + entries). Provisional until the assemble ledger reports section-byte distributions; values are rejected, never clamped, and a rejected update keeps the previous valid snapshot |
+| `truncate` | `true` | explicit on/off for the catalog cap. `false` renders the catalog **complete** — it never removes the section (the restore-previous-behavior valve) |
+| `max-bytes` | `24576` | 1024-65536; UTF-8 byte ceiling for the whole catalog block (`## Memory index` header + entries + ellipsis line). Values are rejected, never clamped, and a rejected update keeps the previous valid snapshot |
+| `description-max-bytes` | `160` | `0`, or 8-1024; per-entry description ceiling in UTF-8 bytes. `0` disables trimming. Values in 1-7 are rejected: a ceiling below the ellipsis is noise, not a cap |
 
-Truncation semantics (all sizes are UTF-8 bytes, measured like
-`truncateEntrypointContent`):
+Ordering, stated as what it is: entries the `MEMORY.md` index lists come first,
+in that file's own order (an exact, case-sensitive filename match; a pointer
+that names no topic, or names one in another scope, falls through), interleaved
+round-robin across the scopes workspace → team → global; every remaining topic
+follows, each scope sorted by filename. Maintained order is a presentation
+policy, not an importance score, and round-robin is ordering fairness — it does
+not guarantee that every scope stays visible once entries start being dropped.
 
-1. When the index block exceeds `max-bytes`, whole entries are dropped from the
-   bottom of the **alphabetical** list — never a partial line, so a multi-byte
-   (e.g. CJK) description can never be cut mid-character. The retained prefix
-   keeps the alphabetical order the uncapped render produced. Omission is not
-   relevance-based: alphabetical ≠ relevance.
-2. The block ends with
-   `… (N more memory topics; grep the memory directory for older entries)`,
+Trimming and truncation semantics (all sizes are UTF-8 bytes):
+
+1. Each description longer than `description-max-bytes` is cut on a character
+   boundary and ends with `…`, which is budgeted inside the ceiling — a
+   multi-byte (e.g. CJK) character or an emoji is never split. Trimming happens
+   before fitting, so it can only increase the number of entries that fit.
+2. When the catalog still exceeds `max-bytes`, whole entries are dropped from
+   the **bottom** of the interleaved order — never a partial line. What survives
+   is an early prefix: every scope's first maintained entries stay longest, and
+   later entries of every scope can be dropped. Omission is not
+   relevance-based.
+3. The block ends with
+   `… (N more memory topics; grep the memory directory)`,
    where **N counts entries**, not lines.
-3. **Floor rule:** when not even one entry fits beside that line, the block
+4. **Floor rule:** when not even one entry fits beside that line, the block
    renders the `## Memory index` header plus the ellipsis line with **no
    entries** — the section keeps its retrieval guidance and loses only
    enumeration. The budget is a cap above the floor, never below it, which is
    why `max-bytes` below 1024 is rejected.
+
+The catalog enumerates PARSED topic files in frontmatter form. It does not inject
+`MEMORY.md` text, so curator prose in that file, and pointer lines whose target
+has no parseable topic file, are not in the prompt. Both remain on disk:
+`MEMORY.md` is readable directly and the search guidance greps the directories.
+
+### Upgrading from the index-plus-fragments section
+
+`max-bytes` now caps the whole catalog rather than one 8 KB index block, and the
+per-layer fragments are gone. If you had pinned `"max-bytes": 8192`, that value
+now renders a much smaller catalog than the fragments used to provide — raise it
+(the default `24576` is the measured replacement) or set
+`"description-max-bytes": 0` to spend the same bytes on fewer, fuller entries.
 
 Recall is unaffected: it scans the memory directory itself, not this index.
 
@@ -252,9 +277,18 @@ service is mounted.
 - `renderMemorySection(globalDir, workspaceDir, ...)` /
   `renderTeamMemorySection(...)` / `renderLayers(layers, budget?)` /
   `saveGuidance(workspaceDir, globalDir)` — the section text builders.
-  `renderLayers` takes an OPTIONAL `CombinedIndexBudget` (`{ truncate?, maxBytes? }`);
-  omitting it keeps the uncapped render, and `renderMemorySection` /
-  `renderTeamMemorySection` never cap (they pass no budget).
+  `renderLayers` takes an OPTIONAL `CombinedIndexBudget`
+  (`{ truncate?, maxBytes?, descriptionMaxBytes? }`). Omitting the whole object,
+  and `renderMemorySection` / `renderTeamMemorySection`, render **uncapped and
+  untrimmed**; a partially specified object resolves each omitted field
+  independently (`truncate` ⇒ `true`, `maxBytes` ⇒ the settings default,
+  `descriptionMaxBytes` ⇒ `0`, i.e. no trimming).
+- `renderCatalog(layers, options)` / `fitCatalog(entries, maxBytes)` /
+  `trimDescription(text, maxBytes)` / `renderLayerFingerprint(state)` /
+  `compareFilename(a, b)` / `ellipsisLine(n)` — the catalog primitives: the
+  render, the byte fitter, the UTF-8-safe description trimmer, the per-directory
+  `system-prompt/change` fingerprint, the total filename comparator, and the
+  omission line.
 - `MemorySection` — background-refresh cache holder for the section (one
   registration, per-agent workspace layers).
 - `registerMemorySaveTool(ctx, home, section)` / `MEMORY_SAVE_TOOL` /
