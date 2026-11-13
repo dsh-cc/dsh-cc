@@ -4,7 +4,7 @@
  * camelCase.
  *
  * Design: `docs/plans/2026-11-02-systemone-06-skill-recommendation.md`
- * § "Settings and tool contract" (the twelve-row table of keys, types, ranges
+ * § "Settings and tool contract" (the thirteen-row table of keys, types, ranges
  * and defaults) and § "State machine, ordering, and behavior" step 1 (`mode`
  * gates the whole judgment; an invalid section means "do not call the runner").
  *
@@ -63,15 +63,21 @@ export interface RecommendationSettings extends RecommendationLimits {
   readonly cacheEntries: number
   /** Entry lifetime in milliseconds; `0` makes no entry reusable. */
   readonly cacheTtlMs: number
+  /**
+   * Minimum fraction of the eligible pool an answered prefix must cover for a
+   * deadline-partial judgment to publish; `1` (the default) is the original
+   * completeness rule (capacity design §4-C3).
+   */
+  readonly minCoverage: number
 }
 
 /** The table's defaults, exactly: a dark launch with the round-one thresholds. */
 export const DEFAULT_RECOMMENDATION_SETTINGS: RecommendationSettings = {
   mode: 'off',
-  timeoutMs: 1500,
-  maxInputTokens: 4096,
-  maxCandidates: 64,
-  batchSize: 8,
+  timeoutMs: 5000,
+  maxInputTokens: 8192,
+  maxCandidates: 128,
+  batchSize: 16,
   maxTaskChars: 2048,
   maxMetadataChars: 2048,
   minRelevanceIndex: 3,
@@ -79,6 +85,7 @@ export const DEFAULT_RECOMMENDATION_SETTINGS: RecommendationSettings = {
   maxRecommendations: 3,
   cacheEntries: 128,
   cacheTtlMs: 60000,
+  minCoverage: 1,
 }
 
 /** One rejected raw value, in the user's own kebab-case key vocabulary. */
@@ -120,6 +127,7 @@ const RAW_KEYS = {
   maxRecommendations: 'max-recommendations',
   cacheEntries: 'cache-entries',
   cacheTtlMs: 'cache-ttl-ms',
+  minCoverage: 'min-coverage',
 } as const satisfies Record<keyof RecommendationSettings, string>
 
 /** Read an absent value as its default; collect anything else that breaks the row. */
@@ -197,10 +205,10 @@ export function parseRecommendationSettings(raw: unknown): RecommendationSetting
   const settings: RecommendationSettings = {
     mode,
     // `timeout-ms` is the ceiling for the whole judgment, all batches included.
-    timeoutMs: readInt(section, 'timeoutMs', 100, 5000, defaults.timeoutMs, problems),
+    timeoutMs: readInt(section, 'timeoutMs', 100, 10000, defaults.timeoutMs, problems),
     maxInputTokens: readInt(section, 'maxInputTokens', 512, 16384, defaults.maxInputTokens, problems),
-    maxCandidates: readInt(section, 'maxCandidates', 1, 128, defaults.maxCandidates, problems),
-    batchSize: readInt(section, 'batchSize', 1, 16, defaults.batchSize, problems),
+    maxCandidates: readInt(section, 'maxCandidates', 1, 256, defaults.maxCandidates, problems),
+    batchSize: readInt(section, 'batchSize', 1, 32, defaults.batchSize, problems),
     maxTaskChars: readInt(section, 'maxTaskChars', 64, 8192, defaults.maxTaskChars, problems),
     maxMetadataChars: readInt(section, 'maxMetadataChars', 128, 8192, defaults.maxMetadataChars, problems),
     minRelevanceIndex: readNumber(section, 'minRelevanceIndex', 0, 4, defaults.minRelevanceIndex, problems),
@@ -209,6 +217,8 @@ export function parseRecommendationSettings(raw: unknown): RecommendationSetting
     // `cache-entries: 0` disables storage; `cache-ttl-ms: 0` makes no entry reusable.
     cacheEntries: readInt(section, 'cacheEntries', 0, 1024, defaults.cacheEntries, problems),
     cacheTtlMs: readInt(section, 'cacheTtlMs', 0, 300000, defaults.cacheTtlMs, problems),
+    // Deadline-partial coverage floor (capacity design §4-C3); `1` by default.
+    minCoverage: readNumber(section, 'minCoverage', 0, 1, defaults.minCoverage, problems),
   }
   if (problems.length > 0) return { ok: false, problems }
   return { ok: true, settings }
@@ -293,10 +303,10 @@ const opt = <T>(t: z<T>): z<T | undefined> => z.union([t, z.const(undefined)]) a
  */
 const RecommendationSettingsObject = z.object({
   mode: z.union([z.const('off'), z.const('shadow'), z.const('active')]).default(DEFAULT_RECOMMENDATION_SETTINGS.mode),
-  'timeout-ms': z.number().min(100).max(5000).default(DEFAULT_RECOMMENDATION_SETTINGS.timeoutMs),
+  'timeout-ms': z.number().min(100).max(10000).default(DEFAULT_RECOMMENDATION_SETTINGS.timeoutMs),
   'max-input-tokens': z.number().min(512).max(16384).default(DEFAULT_RECOMMENDATION_SETTINGS.maxInputTokens),
-  'max-candidates': z.number().min(1).max(128).default(DEFAULT_RECOMMENDATION_SETTINGS.maxCandidates),
-  'batch-size': z.number().min(1).max(16).default(DEFAULT_RECOMMENDATION_SETTINGS.batchSize),
+  'max-candidates': z.number().min(1).max(256).default(DEFAULT_RECOMMENDATION_SETTINGS.maxCandidates),
+  'batch-size': z.number().min(1).max(32).default(DEFAULT_RECOMMENDATION_SETTINGS.batchSize),
   'max-task-chars': z.number().min(64).max(8192).default(DEFAULT_RECOMMENDATION_SETTINGS.maxTaskChars),
   'max-metadata-chars': z.number().min(128).max(8192).default(DEFAULT_RECOMMENDATION_SETTINGS.maxMetadataChars),
   'min-relevance-index': z.number().min(0).max(4).default(DEFAULT_RECOMMENDATION_SETTINGS.minRelevanceIndex),
@@ -304,6 +314,7 @@ const RecommendationSettingsObject = z.object({
   'max-recommendations': z.number().min(1).max(10).default(DEFAULT_RECOMMENDATION_SETTINGS.maxRecommendations),
   'cache-entries': z.number().min(0).max(1024).default(DEFAULT_RECOMMENDATION_SETTINGS.cacheEntries),
   'cache-ttl-ms': z.number().min(0).max(300000).default(DEFAULT_RECOMMENDATION_SETTINGS.cacheTtlMs),
+  'min-coverage': z.number().min(0).max(1).default(DEFAULT_RECOMMENDATION_SETTINGS.minCoverage),
 })
 
 /**

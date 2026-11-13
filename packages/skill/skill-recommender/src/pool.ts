@@ -20,6 +20,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { estimateDecisionInputTokens } from '@dsh-cc/systemone'
 import type {
   SkillDescriptor,
   SkillRecommendationAnswerMap,
@@ -30,9 +31,6 @@ import type {
 /** The score question ranges over the expected value of these indices. */
 const SCORE_INDEX_MIN = 0
 const SCORE_INDEX_MAX = 4
-
-/** Request-cost headroom over the raw estimate (§ "max-input-tokens"). */
-const REQUEST_HEADROOM = 1.1
 
 /**
  * The judgment-shaping limits, camelCase, one field per relevant row of the
@@ -60,6 +58,12 @@ export interface RecommendationLimits {
   readonly minPrerequisitesMet: number
   /** Upper bound on returned recommendations. */
   readonly maxRecommendations: number
+  /**
+   * Minimum fraction of the eligible pool an answered prefix must cover for a
+   * deadline-partial judgment to publish; `1` is the original completeness
+   * rule (capacity design §4-C3).
+   */
+  readonly minCoverage: number
 }
 
 /** One eligible skill with its locally assigned pool id. */
@@ -78,7 +82,7 @@ export interface SkillPoolItem {
  * too long from a catalog that is too large; `input-tokens` is the per-request
  * context check of step 3.
  */
-export type RecommendationBoundsReason = 'task-bounds' | 'metadata-bounds' | 'pool-bounds' | 'input-tokens'
+export type RecommendationBoundsReason = 'task-bounds' | 'metadata-bounds' | 'pool-bounds' | 'input-tokens' | 'route-cap'
 
 /** Every reason the recommendation is unavailable, bounds included. */
 export type RecommendationUnavailableReason = SkillUnavailableReason | RecommendationBoundsReason
@@ -139,32 +143,6 @@ const RELEVANCE_CRITERIA: readonly string[] = [
 /** One whole-outcome unavailable result. */
 function unavailable(reason: RecommendationUnavailableReason): RecommendationUnavailable {
   return { kind: 'unavailable', reason }
-}
-
-/**
- * Deterministic token estimate used by the per-request budget check: one token
- * per three characters, rounded up, mirroring `@dsh-cc/tool-search`'s discovery
- * estimate. Deliberately crude — a stable estimate that both the request budget
- * and the offline replay can reproduce exactly.
- * @param text - the text to estimate.
- * @returns the estimated token count.
- */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 3)
-}
-
-/**
- * The documented per-request cost: serialized state plus questions, plus 10%
- * headroom. Omitting the headroom would let a request sit exactly on the cap,
- * where the provider's tokenizer, not this estimate, decides.
- * @param state - the batch state that would be sent.
- * @param questions - the questions that would be sent.
- * @returns the estimated request cost in tokens.
- */
-export function requestCost(state: unknown, questions: unknown): number {
-  const stateTokens = estimateTokens(JSON.stringify(state))
-  const questionTokens = estimateTokens(JSON.stringify(questions))
-  return Math.ceil((stateTokens + questionTokens) * REQUEST_HEADROOM)
 }
 
 /** Total deterministic digest: `sha256:` over the JSON of the value. */
@@ -301,15 +279,20 @@ export function buildQuestions(
  * Plan the batches and check each one against the request budget (§ "State
  * machine, ordering, and behavior" step 3).
  *
- * The pool is cut into `batchSize` slices in id order; each slice's serialized
- * state plus its questions must fit `maxInputTokens`. A slice that does not fit
- * is NOT trimmed and NOT subdivided: no smaller whole judgment is invented
- * here, so the outcome is unavailable as a whole while the original catalog
- * stays available.
+ * Greedy token packing (capacity design §4-C1): batches are extended item by
+ * item in id order while they satisfy BOTH token caps and the count cap, cut
+ * before the item that would break one, and the restart singleton is validated
+ * immediately — the emit invariant. A single item that cannot fit either cap
+ * makes the outcome unavailable as a whole while the original catalog stays
+ * available. Whenever every fixed `batchSize` slice fits both caps, the packing
+ * reproduces the old fixed slicing byte for byte (cost is monotone in the
+ * slice), so this is a strict generalization.
  * @param items - the eligible pool.
  * @param task - the task the request would carry; folded into the cost.
  * @param limits - the batch size and the request budget.
  * @param catalogHash - the pool digest carried in the state.
+ * @param questionCap - the per-question token cap (defaults to the request
+ * budget; the runtime passes the route-folded value — capacity design §4-C2).
  * @returns the batches in id order, or the unavailable sentinel.
  */
 export function planBatches(
@@ -317,16 +300,42 @@ export function planBatches(
   task: string,
   limits: RecommendationLimits,
   catalogHash: string,
+  questionCap: number = limits.maxInputTokens,
 ): BatchPlan {
-  const size = Math.max(1, Math.floor(limits.batchSize))
-  const batches: RecommendationBatch[] = []
-  for (let start = 0; start < items.length; start += size) {
-    const slice = items.slice(start, start + size)
-    const questions = buildQuestions(slice)
-    const state: RecommendationBatchState = { task, skills: slice, catalogHash }
-    if (requestCost(state, questions) > limits.maxInputTokens) return unavailable('input-tokens')
-    batches.push({ items: slice, questions, state })
+  const batchCap = Math.max(1, Math.floor(limits.batchSize))
+  /** The emit invariant in BOTH dimensions: an admitted batch fits the request
+   * cap, every question fits the question cap (the estimator bills the whole
+   * batch state per question), and the count fits the batch cap. */
+  const tryAdmit = (batch: readonly SkillPoolItem[]): RecommendationBatch | undefined => {
+    if (batch.length > batchCap) return undefined
+    const questions = buildQuestions(batch)
+    const state: RecommendationBatchState = { task, skills: batch, catalogHash }
+    const estimate = estimateDecisionInputTokens(state, questions)
+    if (estimate.requestTokens > limits.maxInputTokens) return undefined
+    for (const id of Object.keys(questions)) {
+      const tokens = estimate.questionTokens[id]
+      if (tokens !== undefined && tokens > questionCap) return undefined
+    }
+    return { items: batch, questions, state }
   }
+  const batches: RecommendationBatch[] = []
+  let current: RecommendationBatch | undefined
+  for (const item of items) {
+    const candidate = current === undefined ? [item] : [...current.items, item]
+    const admitted = tryAdmit(candidate)
+    if (admitted !== undefined) {
+      current = admitted
+      continue
+    }
+    if (current !== undefined) {
+      batches.push(current)
+      current = undefined
+    }
+    const singleton = tryAdmit([item])
+    if (singleton === undefined) return unavailable('input-tokens')
+    current = singleton
+  }
+  if (current !== undefined) batches.push(current)
   return { kind: 'batches', batches }
 }
 

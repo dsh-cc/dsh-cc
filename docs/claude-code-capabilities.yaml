@@ -3001,9 +3001,10 @@ capabilities:
         mandatory-skill rules untouched. Judgments require the optional
         decision runtime (`ctx.systemoneDecisions`, or the root-realm
         `ccSystemoneDecisions` bridge) and are `unavailable` without it, so the
-        recommendation never degrades the catalog path on its own; only names
-        and two numbers leave the tool, and no body, skill file, task or
-        candidate metadata is read or persisted.
+        recommendation never degrades the catalog path on its own; only
+        names, two numbers per name and the judged/eligible counts leave the
+        tool, and no body, skill file, task or candidate metadata is read or
+        persisted.
 
   skills.system:
     title: Skills system

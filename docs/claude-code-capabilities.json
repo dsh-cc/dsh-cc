@@ -5000,7 +5000,7 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "dsh-cc extension with no Claude Code counterpart: an advisory recommendation consumer rather than an execution path. The default cc/vwa compositions mount the row, but `mode: off` is the default and leaves the catalog, `/skills`, explicit slash invocation and mandatory-skill rules untouched. Judgments require the optional decision runtime (`ctx.systemoneDecisions`, or the root-realm `ccSystemoneDecisions` bridge) and are `unavailable` without it, so the recommendation never degrades the catalog path on its own; only names and two numbers leave the tool, and no body, skill file, task or candidate metadata is read or persisted."
+        "summary": "dsh-cc extension with no Claude Code counterpart: an advisory recommendation consumer rather than an execution path. The default cc/vwa compositions mount the row, but `mode: off` is the default and leaves the catalog, `/skills`, explicit slash invocation and mandatory-skill rules untouched. Judgments require the optional decision runtime (`ctx.systemoneDecisions`, or the root-realm `ccSystemoneDecisions` bridge) and are `unavailable` without it, so the recommendation never degrades the catalog path on its own; only names, two numbers per name and the judged/eligible counts leave the tool, and no body, skill file, task or candidate metadata is read or persisted."
       }
     },
     "skills.system": {

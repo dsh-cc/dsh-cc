@@ -159,6 +159,7 @@ export function thresholdsOf(settings: RecommendationSettings): RecommendationTh
     minRelevanceIndex: settings.minRelevanceIndex,
     minPrerequisitesMet: settings.minPrerequisitesMet,
     maxRecommendations: settings.maxRecommendations,
+    minCoverage: settings.minCoverage,
   }
 }
 

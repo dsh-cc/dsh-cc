@@ -59,12 +59,9 @@ const OFF: SkillRecommendationResult = {
   advisory: true,
 }
 
-/** Every failure row of the design's table collapses onto this result. */
-const UNAVAILABLE: SkillRecommendationResult = {
-  status: 'unavailable',
-  recommendations: [],
-  decisionIds: [],
-  advisory: true,
+/** Every failure row collapses onto this result, now carrying its reason. */
+function unavailable(reason: string): SkillRecommendationResult {
+  return { status: 'unavailable', recommendations: [], decisionIds: [], advisory: true, reason }
 }
 
 /** The caller (or the plugin unload) left: nothing is published or loaded. */
@@ -171,31 +168,31 @@ export function createRecommendationRuntime(deps: RecommendationRuntimeDeps): Re
       try {
         // Step 1: settings, then the mode gate — `off` costs zero host reads.
         const settings = deps.readSettings()
-        if (settings === undefined) return UNAVAILABLE
+        if (settings === undefined) return unavailable('settings')
         if (settings.mode === 'off') return OFF
-        if (input.actor === undefined) return UNAVAILABLE
+        if (input.actor === undefined) return unavailable('unconfigured')
 
         const runner = resolveRunner(input.actor)
-        if (runner === undefined) return UNAVAILABLE
+        if (runner === undefined) return unavailable('unconfigured')
         // The watermark is the persisted session seq, never `events.length`.
         const originSeq = sessionWatermarkOf(input.actor)
-        if (originSeq === undefined) return UNAVAILABLE
+        if (originSeq === undefined) return unavailable('unconfigured')
 
         // Step 2: snapshot the catalog, then eligibility and bounds. An empty
         // pool is a valid empty recommendation, not a failure, and costs no
         // runner call.
         const descriptors = await deps.listCandidates(input.actor)
-        if (descriptors === undefined) return UNAVAILABLE
+        if (descriptors === undefined) return unavailable('unconfigured')
         const pool = buildEligiblePool(descriptors, input.task, settings)
-        if (pool.kind === 'unavailable') return UNAVAILABLE
+        if (pool.kind === 'unavailable') return unavailable(pool.reason)
         if (pool.items.length === 0) {
-          return { status: 'recommended', recommendations: [], decisionIds: [], advisory: true }
+          return { status: 'recommended', recommendations: [], decisionIds: [], advisory: true, judged: 0, eligible: 0 }
         }
 
         // Step 3: the keyless identity. No route ⇒ no model call.
         const scope = runner.scope(originSeq)
         const route = runner.identifyRoute(SKILL_RECOMMENDATION_LANE_ALIAS, scope)
-        if (route === undefined) return UNAVAILABLE
+        if (route === undefined) return unavailable('unconfigured')
         const catalogHash = catalogHashOfDescriptors(descriptors)
         const snapshot = { settings, scope, route, originSeq }
 
@@ -226,6 +223,13 @@ export function createRecommendationRuntime(deps: RecommendationRuntimeDeps): Re
             candidates: descriptors,
             limits: settings,
             routeAlias: SKILL_RECOMMENDATION_LANE_ALIAS,
+            // Capacity design §4-C2: the route's real budgets fold into the
+            // effective planning limits.
+            routeCaps: {
+              perRequestTokens: route.perRequestTokens,
+              perQuestionTokens: route.perQuestionTokens,
+              maxQuestions: route.maxQuestions,
+            },
             revalidate: () => assertFresh(snapshot, runner),
           }, runner),
           input.signal,
@@ -237,33 +241,43 @@ export function createRecommendationRuntime(deps: RecommendationRuntimeDeps): Re
         if (value.kind === 'cancelled') return CANCELLED
         // An unavailable runner decision removes every batch, high scores
         // included; there is nothing to publish, so skip the publish gate.
-        if (value.kind === 'unavailable') return UNAVAILABLE
+        if (value.kind === 'unavailable') return unavailable(value.reason)
 
         // Step 6: re-read the catalog before publishing. The catalog read is
         // the last await, so the identity/mode check runs again after it, and a
         // changed hash returns unavailable WITHOUT asking the model again.
         const settled = await deps.listCandidates(input.actor)
-        if (settled === undefined) return UNAVAILABLE
-        if (catalogHashOfDescriptors(settled) !== catalogHash) return UNAVAILABLE
+        if (settled === undefined) return unavailable('unconfigured')
+        if (catalogHashOfDescriptors(settled) !== catalogHash) return unavailable('stale')
         assertFresh(snapshot, runner)
 
         const decisionIds = [...value.decisionIds]
         // Step 7: shadow keeps the numbers for the audit trail only; the model
-        // sees the original catalog. `active` publishes the selected set.
+        // sees the original catalog. `active` publishes the selected set. Both
+        // carry the judged/eligible counts (capacity design §4-C4).
         if (settings.mode === 'shadow') {
-          return { status: 'shadow', recommendations: [], decisionIds, advisory: true }
+          return {
+            status: 'shadow',
+            recommendations: [],
+            decisionIds,
+            advisory: true,
+            judged: value.judged,
+            eligible: value.eligible,
+          }
         }
         return {
           status: 'recommended',
           recommendations: [...value.recommendations],
           decisionIds,
           advisory: true,
+          judged: value.judged,
+          eligible: value.eligible,
         }
       } catch (error) {
         // A stale identity is a normal discarded judgment, not a fault.
-        if (error instanceof StaleJudgmentSignal) return UNAVAILABLE
+        if (error instanceof StaleJudgmentSignal) return unavailable('stale')
         reportFailure(`skill-recommendation: judgment failed — ${error instanceof Error ? error.message : String(error)}`)
-        return UNAVAILABLE
+        return unavailable('error')
       }
     },
 

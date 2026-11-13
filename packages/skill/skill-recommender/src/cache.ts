@@ -87,6 +87,8 @@ export interface RecommendationThresholds {
   readonly minPrerequisitesMet: number
   /** Upper bound on returned recommendations. */
   readonly maxRecommendations: number
+  /** Deadline-partial coverage floor; `1` is the original completeness rule. */
+  readonly minCoverage: number
 }
 
 /**
@@ -158,6 +160,7 @@ export function buildRecommendationCacheKey(parts: RecommendationCacheKeyParts):
     thresholds.minRelevanceIndex,
     thresholds.minPrerequisitesMet,
     thresholds.maxRecommendations,
+    thresholds.minCoverage,
   ])
 }
 
@@ -219,7 +222,13 @@ export interface RecommendationCacheOptions<T> {
  */
 function defaultCacheable(value: unknown): boolean {
   if (value === null || typeof value !== 'object' || !('kind' in value)) return true
-  return (value as { readonly kind?: unknown }).kind === 'recommended'
+  const candidate = value as { readonly kind?: unknown; readonly judged?: unknown; readonly eligible?: unknown }
+  if (candidate.kind !== 'recommended') return false
+  // Capacity design §4-C3-6: a deadline-partial outcome is NEVER cached — REQ-3
+  // ("partial results never enter the cache") and the timing-dependence of a
+  // partial both demand a fresh judgment on the next call.
+  return candidate.judged === undefined || candidate.eligible === undefined
+    || candidate.judged === candidate.eligible
 }
 
 /**

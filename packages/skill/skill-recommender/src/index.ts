@@ -71,6 +71,11 @@ interface RecommendSkillOutput {
   recommendations: Array<{ name: string; relevance: number; prerequisitesMet: number }>
   decisionIds: string[]
   advisory: boolean
+  /** Capacity design §4-C4: judged/eligible counts on recommended and shadow. */
+  judged?: number
+  eligible?: number
+  /** Capacity design §4-C4: the machine-readable refusal reason. */
+  reason?: string
 }
 
 /**
@@ -160,14 +165,16 @@ export function renderRecommendationText(value: RecommendSkillOutput): string {
       return `Skill recommendation is unavailable for this task. The full catalog is still available and nothing was `
         + `loaded on your behalf. ${advisory}`
     case 'recommended': {
+      const coverage = value.judged !== undefined && value.eligible !== undefined && value.eligible > 0
+        ? ` (judged ${value.judged} of ${value.eligible} visible skills)` : ''
       if (value.recommendations.length === 0) {
-        return `No visible skill met the relevance and prerequisite thresholds for this task. The full catalog is `
-          + `still available. ${advisory}`
+        return `No visible skill met the relevance and prerequisite thresholds for this task${coverage}. The full `
+          + `catalog is still available. ${advisory}`
       }
       const listed = value.recommendations
         .map(entry => `${entry.name} (relevance ${entry.relevance.toFixed(1)}, prerequisites ${entry.prerequisitesMet.toFixed(2)})`)
         .join(', ')
-      return `Advisory skill recommendations for this task: ${listed}. These are suggestions only: load a skill through `
+      return `Advisory skill recommendations for this task${coverage}: ${listed}. These are suggestions only: load a skill through `
         + `the normal skill tool, which still resolves the name and applies the original invocation rules. ${advisory}`
     }
   }
@@ -218,6 +225,9 @@ function toolDefinition(runtime: RecommendationRuntime) {
           },
           decisionIds: { type: 'array', required: true, items: { type: 'string' } },
           advisory: { type: 'boolean', required: true },
+          judged: { type: 'integer' },
+          eligible: { type: 'integer' },
+          reason: { type: 'string' },
         },
       },
       render: (_args, value) => [{ type: 'text', text: renderRecommendationText(value) }],
@@ -241,6 +251,9 @@ function toolDefinition(runtime: RecommendationRuntime) {
         })),
         decisionIds: [...result.decisionIds],
         advisory: true,
+        ...result.judged !== undefined ? { judged: result.judged } : {},
+        ...result.eligible !== undefined ? { eligible: result.eligible } : {},
+        ...result.reason !== undefined ? { reason: result.reason } : {},
       }
     },
     presentCall: (args): ToolCallView =>
