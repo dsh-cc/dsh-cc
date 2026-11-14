@@ -2,9 +2,9 @@
 
 **English** | [简体中文](README.zh.md)
 
-## Coding and document workflows on DeepSeek Harness
+## Coding and document workflows on DeepSeek Harness 〔src:ws:AGENTS.md#L1-L6〕
 
-`dsh-cc` adds Claude Code workflows to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). You select the models, tools, permissions, and agent configuration.
+`dsh-cc` adds Claude Code workflows to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 〔src:ws:AGENTS.md#L1-L6〕. You select the models, tools, permissions, and agent configuration 〔src:ws:AGENTS.md#L1-L6〕.
 
 - Reuse `.claude/agents`, `SKILL.md`, `CLAUDE.md`, hooks, slash commands, and saved sessions.
 - Map model aliases to the provider and model that your deployment has.
@@ -12,11 +12,11 @@
 - Use `context-crusher` and `context_retrieve` for reversible tool-output compression.
 - Add evidence checks for documents with the optional `vwa-writing` skill.
 
-`dsh-cc` is a plugin stack for DeepSeek Harness. It is not Claude Code or a wrapper for Claude Code.
+`dsh-cc` is a plugin stack for DeepSeek Harness 〔src:ws:docs/release.md#L12-L16〕. It is not Claude Code or a wrapper for Claude Code 〔src:ws:docs/release.md#L12-L16〕.
 
 ## Quick start
 
-Install DeepSeek Harness and the launcher.
+Install DeepSeek Harness and the launcher 〔src:ws:packages/launcher/tui/README.md#L5-L11〕.
 
 ```sh
 npm install -g @deepseek-ai/dsh @dsh-cc/cli
@@ -74,20 +74,20 @@ Each release has one dsh version for CI verification. The launcher also uses tha
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
-| `main` (unreleased, after v0.9.5) | 0.2.2-rc.1 |
-| v0.9.4 – v0.9.5 | 0.2.2-rc.1 |
-| v0.9.3 | 0.2.1-rc.5 |
-| v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
-| v0.8.2 | 0.1.7-rc.2 |
-| v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
-| v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
-| v0.5.0 | 0.1.1-rc.2 (no launcher version gate) |
+| `main` (unreleased, after v0.9.5) 〔src:ws:docs/dev.md#L168-L168〕 | 0.2.2-rc.1 |
+| v0.9.4 – v0.9.5 〔src:ws:docs/dev.md#L168-L168〕 | 0.2.2-rc.1 |
+| v0.9.3 | 〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md#L1-L5〕 0.2.1-rc.5 |
+| v0.8.3-rc 〔src:ws:docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md#L1-L5〕.1 – v0.9.3-rc 〔src:ws:docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md#L1-L5〕.4 | 〔src:ws:docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md#L1-L5〕 0.2.0-rc.2 |
+| v0.8.2 | 〔src:ws:docs/plans/2026-09-29-harness-0.1.7-rc.2-migration.md#L1-L5〕 0.1.7-rc.2 |
+| v0.6.3 – v0.8.1 | 〔src:ws:docs/plans/2026-09-12-harness-0.1.5-rc1-compatibility.md#L1-L5〕 0.1.5-rc.1 |
+| v0.6.0 – v0.6.2 | 〔src:ws:docs/plans/2026-09-08-harness-0.1.2-rc1-compat.md#L1-L5〕 0.1.2-rc.1 |
+| v0.5.0 | 〔src:ws:docs/release.md#L156-L156〕 0.1.1-rc.2 (no launcher version gate) |
 
 There is no maximum version limit. A newer dsh version can be untested. Upgrade dsh first when a dsh-cc release raises its minimum.
 
 The two packages have different release schedules. Their `@latest` versions are not always a verified pair.
 
-Sessions written by the 0.2.1 line record job and working-directory events that pre-0.2.1 readers refuse, so a dsh downgrade after using this release cannot resume those sessions. Finish or export the sessions you need before downgrading.
+Sessions written by the 0.2.1 line record job and working-directory events that pre-0.2.1 readers refuse, so a dsh downgrade after using this release cannot resume those sessions 〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md#L68-L68〕. Finish or export the sessions you need before downgrading.
 
 Maintainers: keep this table consistent with `DSH_HARNESS_REF` in `.github/workflows/presubmit.yml` and `MIN_DSH_VERSION` in `packages/launcher/tui/bootstrap.mjs`.
 
@@ -105,8 +105,8 @@ The bundles are sufficient for the quick start. The `dsh-cc` marketplace has fiv
   - The public skills accept Chinese and English articles in three genres.
   - A run keeps a brief, a plan, reviews, and a preservation check on disk.
 - **`dsh-cc-shunt`** sends bulk reads and code generation again and again to worker subagents. Configure `haiku` for lower model cost.
-- **`cc-codex-bridge`** lets you run one specified Codex command form through its PreToolUse hook.
-- **`cc-grok-bridge`** lets you run one specified Grok command form through its PreToolUse hook.
+- **`cc-codex-bridge`** lets you run one specified Codex command form through its PreToolUse hook 〔src:ws:packages/plugin/cc-codex-bridge/README.md#L1-L5〕.
+- **`cc-grok-bridge`** lets you run one specified Grok command form through its PreToolUse hook 〔src:ws:packages/plugin/cc-grok-bridge/README.md#L1-L5〕.
 
 Use the scoped subagent names, for example, `dsh-cc-agents:critic`. The bridge hooks do not get approval for each permitted command invocation.
 
@@ -202,7 +202,7 @@ See the [plugin guide](packages/plugin/dsh-cc-agents/README.md#vwa-writing) and 
 | Select models by task | Configured provider/model aliases |
 | Divide large tasks | Subagents, background jobs, and saved sessions |
 | Control changes | Permissions, approval rules, worktrees, and workspace boundaries |
-| Find tools when needed | ToolSearch and MCP discovery |
+| Find tools when needed | ToolSearch and MCP discovery 〔src:ws:packages/core/tool-search/README.md#L1-L5〕 |
 | Change interfaces | Terminal and web profiles |
 | Review document evidence | Optional VWA runtime and vwa-writing skill |
 
@@ -210,7 +210,7 @@ This project uses dsh-cc for development. Its model routes are user configuratio
 
 ## Users
 
-- Developers that use DeepSeek Harness for coding.
+- Developers that use DeepSeek Harness for coding 〔src:ws:AGENTS.md#L1-L6〕.
 - Teams that reuse `.claude/` agents, skills, hooks, and project memory.
 - Users that select different models for different tasks.
 - Plugin authors that extend an agent runtime.
@@ -266,7 +266,7 @@ When memory-index pressure increases, a background consolidation process runs au
 
 ### MCP
 
-The MCP client has tools, resources, prompts, and OAuth 2.1 authentication. Use `/mcp` to inspect and manage connections.
+The MCP client has tools, resources, prompts, and OAuth 2.1 authentication 〔src:ws:packages/mcp/mcp-client/README.md#L1-L6〕. Use `/mcp` to inspect and manage connections.
 
 #### Optional Serena code intelligence
 
@@ -345,7 +345,7 @@ The TUI also has task lists, approvals, queued prompts, transcript export, usage
 
 ### Provider setup
 
-Use `/provider list` to inspect routes. Use `/provider add <preset-id>` to add Moonshot, Z.AI/Zhipu, DeepSeek, or a custom endpoint.
+Use `/provider list` to inspect routes. Use `/provider add <preset-id>` to add Moonshot, Z.AI/Zhipu, DeepSeek, or a custom endpoint 〔src:ws:packages/ui/tui/README.md#L42-L42〕.
 
 The provider panel can change keys, refresh model lists, select defaults, and remove routes.
 
@@ -389,9 +389,9 @@ Aliases are configuration, not fixed vendor assignments. A missing built-in alia
 
 ## Product boundaries
 
-Claude Code is a separate product. dsh-cc adds Claude-compatible workflows to the DeepSeek Harness runtime.
+Claude Code is a separate product. dsh-cc adds Claude-compatible workflows to the DeepSeek Harness runtime 〔src:ws:docs/release.md#L12-L16〕.
 
-A model router changes model routes. This stack also adds UI, commands, tools, memory, subagents, hooks, permissions, sessions, and worktrees.
+A model router changes model routes. This stack also adds UI, commands, tools, memory, subagents, hooks, permissions, sessions, and worktrees 〔src:ws:docs/release.md#L12-L16〕.
 
 Most features use external plugins. Some packages contain upstream source copies because the necessary extension points are internal.
 
@@ -525,7 +525,7 @@ dsh web
 
 After a development sync, `dsh-cc --version` shows `-dev+<commit>[.dirty]`. A launcher update through npm returns the profile to published bundles.
 
-Run the production boot check before delivery. It uses a temporary DSH_HOME and a pseudo-TTY, with no model calls.
+Run the production boot check before delivery. It uses a temporary DSH_HOME and a pseudo-TTY, with no model calls 〔src:ws:docs/dev.md#L17-L23〕.
 
 ```sh
 pnpm smoke:profile-boot
@@ -551,4 +551,4 @@ Give reproduction steps, `/doctor --json` output, fixes with tests, extension pr
 
 ## License
 
-[Apache-2.0](LICENSE)
+[Apache-2.0](LICENSE) 〔src:ws:README.md#L551-L554〕
