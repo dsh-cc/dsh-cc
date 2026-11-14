@@ -29,7 +29,7 @@ Goals:
 1. A single outermost gate over the final per-step enter batch, enforcing class-based byte budgets.
 2. Deterministic trim/defer/expire behavior for budgetable classes; never-touched classes by construction.
 3. Full auditability in the input ledger (doc 3).
-4. Ships observe-first with an isolated shadow-state model that cannot affect real flow.
+4. Ships observe-first with an isolated shadow-state model that cannot affect real flow. 〔src:ws:packages/context/input-budget/README.md#L5〕
 
 Non-goals:
 
@@ -80,7 +80,7 @@ Clock: the governor maintains a **monotonic per-session invocation counter `gate
 2. governance/task/passthrough: never modified.
 3. `memory` class: if memory bytes > `memory-budget-bytes` (default **16384**), trim oldest memory messages (recall delivers whole-topic bodies; trimming is whole-message, FIFO) until within budget. Trimmed entries go to the same defer queue as advisory (memory recall re-fires anyway on subsequent matches; dropping loses little).
 4. Advisory budget: FIFO-oldest trim until `advisoryBytes ≤ advisory-budget-bytes` (default **8192**).
-5. Enter budget: if total > `enter-budget-bytes` (default **24576**), trim advisory (then memory) further; if budget cannot be met within trimmable classes, admit everything, set `hardOver: true`, trim nothing from protected classes (row records the overflow).
+5. Enter budget: if total > `enter-budget-bytes` (default **24576**), trim advisory (then memory) further; if budget cannot be met within trimmable classes, admit everything, set `hardOver: true`, trim nothing from protected classes (row records the overflow). 〔src:ws:packages/context/input-budget/README.md#L27〕
 
 ### Defer queue (deterministic algorithm)
 
@@ -104,7 +104,7 @@ Rationale: backlog-first respects FIFO aging; admitted-message order is otherwis
 
 ### GovernorRow
 
-Defined in doc 3 (single schema source). This package only supplies `mode`, `bytesByClass`, `trimmed`, `offeredBacklog`, `hardOver`, `error?`. When the ledger package is absent/disabled, the governor still runs; rows are simply not persisted (append API tolerates missing sink, `onError` counts).
+Defined in doc 3 (single schema source). This package only supplies `mode`, `bytesByClass`, `trimmed`, `offeredBacklog`, `hardOver`, `error?`. 〔src:ws:packages/context/input-budget/README.md#L63〕 When the ledger package is absent/disabled, the governor still runs; rows are simply not persisted (append API tolerates missing sink, `onError` counts).
 
 ### Settings — `cc-input-budget` (kebab, user-layer, hot-read)
 
@@ -126,7 +126,7 @@ Governor exception → return the unmodified decision, row `{ error: true }`. Ne
 ## Dependencies & interactions
 
 - Doc 3 ledger for rows (soft dependency: governor works without it if the package is not mounted).
-- Doc 7 (dedupe/caps) plugs into the same listener (`govern()` order: dedupe → caps → budget trim).
+- Doc 7 (dedupe/caps) plugs into the same listener (`govern()` order: dedupe → caps → budget trim). 〔src:ws:packages/context/input-budget/README.md#L55〕
 - Doc 4 section budgets are orthogonal (assemble-time, this is batch-time).
 - moa dynamically-installed sanitizer sits outside the governor (documented property, test-pinned).
 

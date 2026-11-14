@@ -53,16 +53,16 @@ New package `packages/compaction/compaction-pinning` (`@dsh-cc/compaction-pinnin
 
 ### Capture
 
-One `session/event` listener (`{ global: true }`). For every `'user/message'` event: if `event.data.source?.kind ∈ pinnedSourceKinds`, store the **entire message object verbatim** (`{ seq, message, ts }`) into a per-session ring. Ring caps: `maxPinned` entries (default 16), `maxPinnedBytes` (default 16384) FIFO-evict oldest. 〔src:ws:packages/compaction/compaction-pinning/src/index.ts#L195-L230〕〔src:ws:packages/compaction/compaction-pinning/src/ring.ts#L1-L40〕 Verbatim capture (whole `UserMessage`, content blocks + source metadata intact) also answers r1 MAJOR #10: restoration cannot discard structure it never destructured. Ring entries are dropped on `session/disposed` along with the session entry (TTL-honest; §Risks).
+One `session/event` listener (`{ global: true }`). For every `'user/message'` event: if `event.data.source?.kind ∈ pinnedSourceKinds`, store the **entire message object verbatim** (`{ seq, message, ts }`) into a per-session ring. Ring caps: `maxPinned` entries (default 16), `maxPinnedBytes` (default 16384) FIFO-evict oldest 〔src:ws:packages/compaction/compaction-pinning/README.md#L9〕. Verbatim capture (whole `UserMessage`, content blocks + source metadata intact) also answers r1 MAJOR #10: restoration cannot discard structure it never destructured. Ring entries are dropped on `session/disposed` along with the session entry (TTL-honest; §Risks).
 
 ### Detect
 
-- On `compaction/summary` at the firehose: if the event carries `shadowedSeqs`, compute `restorable = shadowedSeqs ∩ ring.keys()`; if empty, no-op; else schedule restores keyed by `compactionId`. 〔src:ws:packages/compaction/compaction-pinning/src/detect.ts#L14-L30〕 The summary is **provisional scheduling evidence, not completion evidence**: the engine appends `compaction/summary` *before* the checkpoint commit (`compaction/compaction-basic/src/region.ts:470-510` in the pinned harness copy), so a failed commit append leaves a logged summary with `shadowedSeqs` and no actual shadowing (delta-round fold, all three seats — r2's "summary is success-only, belt redundant" was wrong).
-- `compaction/end` is therefore **load-bearing**: an end event carrying `error` (emitted on the failed-commit path at `region.ts:237-245`) **cancels** any pending schedule for that `compactionId`. Schedules become restore-eligible only when either (a) a successful end arrives, 〔src:ws:packages/compaction/compaction-pinning/src/schedule.ts#L1-L40〕 or (b) the conservative rule applies (implementation fold, matching the verified model's `RequireCheckpoint` convention): the schedule has existed for ≥ 1 turn with no end seen for that id **and** the checkpoint commit itself was witnessed — a later `user/message` whose `sourceEventSeqs` cites the summary's seq. The commit witness is required by the model's red probe (`strict-blind-rule-b` restores never-shadowed pins under the bare-turn shape); the drain rule in §Restore uses only eligible schedules.
+- On `compaction/summary` at the firehose: if the event carries `shadowedSeqs`, compute `restorable = shadowedSeqs ∩ ring.keys()`; if empty, no-op; else schedule restores keyed by `compactionId`. 〔src:ws:packages/compaction/compaction-pinning/README.md#L10〕 The summary is **provisional scheduling evidence, not completion evidence**: the engine appends `compaction/summary` *before* the checkpoint commit (`compaction/compaction-basic/src/region.ts:470-510` in the pinned harness copy), so a failed commit append leaves a logged summary with `shadowedSeqs` and no actual shadowing (delta-round fold, all three seats — r2's "summary is success-only, belt redundant" was wrong).
+- `compaction/end` is therefore **load-bearing**: an end event carrying `error` (emitted on the failed-commit path at `region.ts:237-245`) **cancels** any pending schedule for that `compactionId`. Schedules become restore-eligible only when either (a) a successful end arrives, 〔src:ws:packages/compaction/compaction-pinning/README.md#L10〕 or (b) the conservative rule applies (implementation fold, matching the verified model's `RequireCheckpoint` convention): the schedule has existed for ≥ 1 turn with no end seen for that id **and** the checkpoint commit itself was witnessed — a later `user/message` whose `sourceEventSeqs` cites the summary's seq. The commit witness is required by the model's red probe (`strict-blind-rule-b` restores never-shadowed pins under the bare-turn shape); the drain rule in §Restore uses only eligible schedules.
 
 ### Restore
 
-Actual appends never happen inside the firehose callback (reenter). Schedules drain from an `agent/pre-step` listener (`{ prepend: true }`, delegate-first): for each pending entry FIFO by original seq, `session.append('user/message', message, { surfaceOp: 'append' })` with the **verbatim stored message object**. 〔src:ws:packages/compaction/compaction-pinning/src/restore.ts#L1-L30〕 Restored messages re-enter the capture ring naturally via publication (new seq, same kind) → loop-safe: re-shadowed pins restore again, one batch per compaction.
+Actual appends never happen inside the firehose callback (reenter). Schedules drain from an `agent/pre-step` listener (`{ prepend: true }`, delegate-first): for each pending entry FIFO by original seq, `session.append('user/message', message, { surfaceOp: 'append' })` with the **verbatim stored message object**. 〔src:ws:packages/compaction/compaction-pinning/README.md#L11〕 Restored messages re-enter the capture ring naturally via publication (new seq, same kind) → loop-safe: re-shadowed pins restore again, one batch per compaction.
 
 Restore ordering among themselves: ascending original seq. Each restore is its own append (no batching into one message, so source boundaries survive).
 
@@ -83,7 +83,7 @@ The in-request cases cannot be closed from dsh-cc: session/event callbacks canno
 
 ### Kind defaults
 
-`pinnedSourceKinds: ['turn-rules', 'edit-recovery-hint']` — the durable behavioral-constraint producers. 〔src:ws:packages/compaction/compaction-pinning/src/settings.ts#L40-L70〕 `turn-rules` re-fires are fine; exact-duplicate restores over a live copy cannot occur (restores only come from actually shadowed seqs).
+`pinnedSourceKinds: ['turn-rules', 'edit-recovery-hint']` — the durable behavioral-constraint producers. 〔src:ws:packages/compaction/compaction-pinning/README.md#L21〕 `turn-rules` re-fires are fine; exact-duplicate restores over a live copy cannot occur (restores only come from actually shadowed seqs).
 
 ### Settings — `cc-compaction-pinning` (kebab, user-layer, hot-read)
 
@@ -94,13 +94,13 @@ The in-request cases cannot be closed from dsh-cc: session/event callbacks canno
 | `max-pinned` | int | 16 | 1..64 |
 | `max-pinned-bytes` | int | 16384 | 1024..262144 |
 
-Four-surface defaults live in `src/settings.ts` (`DEFAULT_*` constants are the single source). 〔src:ws:packages/compaction/compaction-pinning/src/settings.ts#L50-L95〕
+Four-surface defaults live in `src/settings.ts` (`DEFAULT_*` constants are the single source). 〔src:ws:packages/compaction/compaction-pinning/README.md#L21-L23〕
 
 Four-surface default discipline + "no settings file → capture/restore run" wiring test.
 
 ### Failure semantics
 
-Capture/store errors: drop entry, debug log. Drain-time append failure (session disposed mid-queue): drop entry. Handlers never throw across the firehose boundary. `dropped`, `restored`, `evicted` counts kept in-process and exposed via a `getPinningHealth()` export for tests (no user notices). 〔src:ws:packages/compaction/compaction-pinning/src/health.ts#L1-L40〕
+Capture/store errors: drop entry, debug log. Drain-time append failure (session disposed mid-queue): drop entry. Handlers never throw across the firehose boundary. `dropped`, `restored`, `evicted` counts kept in-process and exposed via a `getPinningHealth()` export for tests (no user notices). 〔src:ws:packages/compaction/compaction-pinning/README.md#L37〕
 
 ## Registration / repo checklist additions
 
@@ -109,7 +109,7 @@ Package skeleton + README pair; preset row in `agent.shared.cordis.yml` (compact
 ## Verification
 
 - Unit: capture ring (verbatim object identity, FIFO eviction, caps); detection (provisional summary schedules; end-error cancellation of schedules — the belt is load-bearing, regression-pinned); restore (verbatim object reaches `deriveMessages()`, order by seq, `{surfaceOp:'append'}` form validated by the real session validator in the integration rig); capture read shape `event.data.source` exercised against real published events — the r1 shape bug is pinned by a regression test.
-- Integration (real `JsonlSessionPersistence` + harness `BasicCompactionEngine`, temp rig): session with one pinned turn-rules message + noise → pressure auto-compaction inside a pre-step; assert the pin is present in `deriveMessages()` **when that same pre-step completes** 〔src:ws:packages/compaction/compaction-pinning/tests/integration.spec.ts#L254-L314〕 (same-step restore, matching the timing table — the drain runs on the pinning listener's post-`next()` continuation), exactly once, verbatim, checkpoint intact; second compaction restores again. Separate cases for manual `/compact` and for cost-gate idle compaction, plus **overflow and model-switch retry-path cases** asserting (a) the retried request can lack the pin (accepted one-request gap) and (b) the next pre-step restores it (codex delta fold: r2 claimed coverage without these cases).
+- Integration (real `JsonlSessionPersistence` + harness `BasicCompactionEngine`, temp rig): session with one pinned turn-rules message + noise → pressure auto-compaction inside a pre-step; assert the pin is present in `deriveMessages()` **when that same pre-step completes** (same-step restore, matching the timing table — the drain runs on the pinning listener's post-`next()` continuation), exactly once, verbatim, checkpoint intact; second compaction restores again. Separate cases for manual `/compact` and for cost-gate idle compaction, plus **overflow and model-switch retry-path cases** asserting (a) the retried request can lack the pin (accepted one-request gap) and (b) the next pre-step restores it (codex delta fold: r2 claimed coverage without these cases).
 - Acceptance: two-week dogfood with turn-rules + post-edit-verify defaults; grep transcripts for restored pins after compactions; spot-audit post-compaction rule-following vs before.
 
 ## Risks
