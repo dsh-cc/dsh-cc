@@ -1,7 +1,7 @@
 # Per-step Input Budget Governor
 
 - Date: 2026-11-12
-- Status: Implemented — stacked PR over #409 (input-ledger); formal design verified (TLA input-admission-governance, Lean input-admission-arithmetic, bridge acceptanceReady).
+- Status: Implemented — PR #410 (merged 2026-11-13), stacked over the already-merged #409 (input-ledger); formal design verified (TLA input-admission-governance, Lean input-admission-arithmetic, bridge acceptanceReady).
 
 r3 → r4 fold: observe mode drops the `wouldTrim`/`wouldDefer` pseudo-fields (decisions live in the shared `trimmed` array under `mode: 'observe'`); `cc-shell-glue` moved advisory → **passthrough in v1 as an algorithmic rule** (pre-delivery latch makes enforced drops silent one-shot misses; doc 7 keeps it observe-only, cross-doc consistent); kind-enumeration test re-specified as a repo scan including harness-side kinds (explicit passthrough).
 - Program: context-engineering input governance (doc 1 of 8)
