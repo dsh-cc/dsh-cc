@@ -110,4 +110,4 @@ It covers complementary multi-skill tasks, Chinese task phrasing against English
 - **Advisory only.** The result cannot widen invocation eligibility, cannot replace a mandatory rule, and is not a proxy for a skill load.
 - **Metadata-driven.** A skill with a thin description and no when-to-use is still judged, but the judgment has less to work with; no undeclared capability is ever assumed.
 - **Optional dependency.** Without the decision runtime the tool is inert (`unavailable`), so this package never degrades the catalog path on its own.
-- **Not in the default preset.** Nothing enables the tool or a non-off mode implicitly; both are explicit operator actions.
+- **Mounted in the default preset as a dark row.** The `cc` and `vwa` presets mount it with `mode` set to `off`; nothing enables the tool or a non-off mode without an explicit settings change.

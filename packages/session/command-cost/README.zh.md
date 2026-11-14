@@ -29,7 +29,7 @@
 
 所有价格都放在插件 `Config`（写在 `cordis.yml` 里），插件本身没有任何硬编码。价格为每百万 token 的 USD 计价。列按三个层级匹配：先精确匹配模型 id（第一行优先），再按 `/` 后缀匹配带路由前缀的运行时 id（最长行优先；等长时取第一行），最后是 `'*'` 通配列。
 
-CC preset（`@dsh-cc/preset-cc`）默认内置了一张覆盖常见 DeepSeek、GLM、Kimi 模型的官方公示牌价起始表（采集日期与来源见其 `agent.cordis.yml` 的 `command-cost` 行注释）。部署的实际计费常常与牌价不同——不一致时请整体覆盖 `modelTable`。起始表刻意**不含** `'*'` 通配列：未匹配模型会显示 "no price configured" 标记，而不是误导性的零成本。
+CC preset（`@dsh-cc/preset-cc`）默认内置了一张覆盖常见 DeepSeek、GLM、Kimi 模型的官方公示牌价起始表（采集日期与来源见 `packages/preset/cc/agent.shared.cordis.yml` 的 `command-cost` 行注释）。部署的实际计费常常与牌价不同——不一致时请整体覆盖 `modelTable`。起始表刻意**不含** `'*'` 通配列：未匹配模型会显示 "no price configured" 标记，而不是误导性的零成本。
 
 下列价格仅为演示数值，不代表厂商当前报价。请替换为实际部署采用的价格。
 

@@ -7,6 +7,15 @@ CC 对齐的动态 `workflow` 工具。它替换 cc 预设中的 harness 薄适�
 内联 `export const meta = { name, description }` 块、保存的文件（按 `name`）、
 或任意 `scriptPath`——第一次调用即可启动，整合结果以恰好一次的完成投递送达。
 
+## 配置
+
+`Config`（`src/index.ts:38-48`）有两个键：
+
+| 键 | 默认值 | 含义 |
+|---|---|---|
+| `toolName` | `'workflow'` | 注册的模型侧工具名（`src/index.ts:105`）。 |
+| `maxResultChars` | `50000` | 整合投递的字符上限；更长的 JSON 值会被截断并附加提示（`src/index.ts:106`）。 |
+
 ## 行为
 
 - **内联 meta 提取。** 脚本开头的 `export const meta = { name, description }`

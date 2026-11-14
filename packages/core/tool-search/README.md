@@ -35,7 +35,7 @@ The design rides the repo's effect conventions:
 
 ## Semantic tool discovery (S1-05)
 
-Lexical ranking cannot see a query that shares no literal token with a tool's metadata — a Chinese question against English metadata, or a paraphrase of the same request. The optional discovery layer puts an independent relevance judgment in front of the existing activation path: every admitted deferred candidate is scored against the query through the System One decision runtime (the optional `ctx.systemoneDecisions` service that the `decision-usage` plugin provides), and only candidates whose judged relevance **and** direct fit both clear their thresholds become activations. Tool names, schemas, and return messages still come from deterministic code; the model answers only "is this candidate relevant", with one question pair per candidate, so one candidate's metadata cannot contaminate another's judgment.
+Lexical ranking cannot see a query that shares no literal token with a tool's metadata — a Chinese question against English metadata, or a paraphrase of the same request. The optional discovery layer puts an independent relevance judgment in front of the existing activation path: every admitted deferred candidate is scored against the query through the System One decision runtime (the optional `ctx.systemoneDecisions` service that the `decision-usage` plugin provides, or the root-realm bridge `ccSystemoneDecisions` that `@dsh-cc/decision-usage` publishes for consumers mounted outside the decision group), and only candidates whose judged relevance **and** direct fit both clear their thresholds become activations. Tool names, schemas, and return messages still come from deterministic code; the model answers only "is this candidate relevant", with one question pair per candidate, so one candidate's metadata cannot contaminate another's judgment.
 
 The layer is **off by default** and never rewrites the lexical path on its own:
 
@@ -78,6 +78,8 @@ The `judge-stub` thresholds are pre-registered in the design doc (§ Scoring) an
 **Corpus schema v2** (`scripts/lib/eval-corpus.mjs`): `{ schemaVersion: 2, corpusVersion, description?, cases[] }`. `corpusVersion` is an integer bumped whenever the cases change, and every report pins it. Each case carries a `class` — the gating dimension, one of `direct-fit`, `lexical-trap` (lexical overlap / wrong-server traps), `multi-intent`, `negative-only` (`expectedNames: []`), `keyword-stuffing` (metadata keyword-stuffing) — plus optional `alsoClasses` for declared multi-label membership, which is how the corpus reaches ≥ 12 memberships per class without an exclusive split. The legacy `subset: chinese|synonym|none|restricted` filter and its floors are kept. A query may not equal a candidate's `name`: an exact-name query short-circuits the judge before it is ever called, so such a case could not measure judge quality.
 
 **Splits.** `--split tune|held-out|full` (default `tune`). Ordering the cases by the hash of their id cuts the corpus 2/3 tune / 1/3 held-out; only `tune` is ever gated, `held-out` is reserved for the one-time flip evaluation, and `full` is for inspection.
+
+**Corpus.** `--corpus <path>` points the evaluator at another local corpus file; the default is `packages/core/tool-search/tests/fixtures/discovery-corpus.json`, and an unreadable file fails with exit status 2.
 
 Run either way:
 

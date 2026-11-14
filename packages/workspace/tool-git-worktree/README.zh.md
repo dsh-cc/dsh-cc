@@ -36,6 +36,8 @@
 遵循 `worktree` 设置节（`baseRef: 'fresh' | 'head'`，默认 `fresh`）：
 `fresh` 使用缓存的 `origin/HEAD`（reflog 超过 24 小时时做一次限 5 秒的
 fetch 刷新），`head` 使用字面 `HEAD`。任何探测失败都会退回本地 `HEAD`。
+同一设置节还带 `cleanupPeriodDays`（默认 30，单位为天）：launcher 启动时的
+清扫会移除超过该窗口的干净、未加锁 worktree。
 
 ## 安全
 

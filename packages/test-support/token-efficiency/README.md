@@ -26,8 +26,8 @@ Raw session logs are never committed; the redactor (`src/redactor.ts`) produces 
 `pnpm check:token-efficiency` runs `check` with package defaults; the bin itself is tsx-run (`pnpm exec tsx packages/test-support/token-efficiency/src/bin.ts <subcommand> …`):
 
 - `sanitize <session.jsonl|.zstd|-> [--out <path>]` — raw log → canonical sanitized JSONL (Phase-0 dogfooding). `--out` requires exactly one input; otherwise stdout.
-- `run [--gate <path>] [--corpus <dir>] [--write-baseline <path>]` — folds every replay task's fixture; prints one line per task vector (tokens, cost, counters) and the footer. `--write-baseline` writes `{foldedAt, ref: $TOKEN_EFFICIENCY_BASELINE_REF ?? 'unpinned', vectors}`.
-- `check [--gate <path>] [--corpus <dir>]` — gate + baseline load, candidate fold, per-task verdicts, per-task usage-coverage lines, footer. Exit 1 on parse failure, capability regression, definition change, counter-expectation miss, or missing candidate/baseline vector; exit 2 on usage error.
+- `run [--gate <path>] [--corpus <dir>] [--mock-corpus <dir>] [--write-baseline <path>]` — folds every replay task's fixture; prints one line per task vector (tokens, cost, counters) and the footer. `--write-baseline` writes `{foldedAt, ref: $TOKEN_EFFICIENCY_BASELINE_REF ?? 'unpinned', vectors}`.
+- `check [--gate <path>] [--corpus <dir>] [--mock-corpus <dir>]` — gate + baseline load, candidate fold, per-task verdicts, per-task usage-coverage lines, footer. Exit 1 on parse failure, capability regression, definition change, counter-expectation miss, or missing candidate/baseline vector; exit 2 on usage error.
 
 Non-replay (mock-script) tasks run through the mock-tier runner described below; only live-tier runs stay manual.
 

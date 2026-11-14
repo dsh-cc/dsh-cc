@@ -37,7 +37,7 @@
   `evidence.register`（来源快照与摘录，引文由运行时读取）、
   `evidence.search_log`（1–50 条检索记录，本身不执行检索）、
   `argument.update`（原子全图变更联合）、`argument.review`
-  （按阶段的后台语义评审）、`argument.report`（确定性 Markdown/JSON，可写入 `docs/vwa-reports/<projectId>/`，不调用模型）。
+  （按阶段的后台语义评审）、`argument.report`（在 `src/report-tool.ts` 中注册：确定性 Markdown/JSON，可写入 `docs/vwa-reports/<projectId>/`，不调用模型）。
 - **命令**（`src/commands.ts`）：封闭语法的 `/vwa
   <init|status|import|sign|adjudicate|repair>` 命令 —— 仅限人类来源
   （D21）、裁决必须给出非空理由且从不改写模型的原始记录、存储修复采用

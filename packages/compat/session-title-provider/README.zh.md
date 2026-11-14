@@ -18,7 +18,7 @@ CC 宿主面 first-prompt 会话标题提供方：镜像原生 `session-title-fi
 
 cc-shell 通过在其 bundle patch（`cordis.patch.yml`）中禁用原生 `session-title-llm` 行并插入本行（`session-title-llm-cc`）来挂载该宿主面行，默认框架策略为 `targetWords: 5`、`targetCjkCharacters: 10`、`maxInputBytes: 4096`、`maxOutputTokens: 64`、`timeoutMs: 60000`。
 
-插件注入 `sessionTitle`、`llm` 与 `sessions`；它以 `automatic: 'first-prompt'` 注册一个提供方，标题自会话的第一条人类消息生成。标题的接受、记录与折叠由宿主 session-title 服务持有——本包只负责路由盖印与消息选取（第一条人类消息）。
+插件注入 `sessionTitle`、`llm` 与 `sessions`；它以 `automatic: 'first-prompt'` 注册一个提供方，标题自会话的第一条人类消息生成。标题的接受、记录与折叠由宿主 session-title 服务持有——本包只负责路由盖印与消息选取（第一条人类消息）。生成成功后，提供方还会通过 `@dsh-cc/memory`（硬依赖）的 `writeTitleSidecar` 尽力写入一份标题 sidecar，按会话 cwd 与会话 id 定位，使 `/resume` 列表跳过昂贵的冷标题读取。
 
 ## 已知限制与暂缓事项
 

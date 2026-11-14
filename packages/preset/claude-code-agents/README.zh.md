@@ -1,4 +1,4 @@
-# dsh-claude-code-agents
+# @dsh-cc/claude-code-agents
 
 [English](README.md) | 中文
 
@@ -6,7 +6,7 @@
 
 ## 作用
 
-- **三层，高者优先。** bundled 层随包内置工具 agent（`explore` 与 `dsh-cc-guide`，均钉死 `model: haiku` 并带 Read/Glob/Grep 白名单），经 `discoverBundledAgents()` 提供。project 层是从项目根向上遍历找到的最近的 `.claude/agents` 目录；user 层是作者自己的 `~/.claude/agents`。定义以其文件 basename 为键，各层按级别遮蔽——bundled < user < project——同名本地文件总是覆盖其 bundled 同名者。
+- **三层，高者优先。** bundled 层随包内置工具 agent（`explore` 与 `dsh-cc-guide`，均钉死 `model: haiku`），经 `discoverBundledAgents()` 提供：`dsh-cc-guide` 带 Read/Glob/Grep 白名单，`explore` 带 Read/Glob/Grep 以及三个 serena 工具 `mcp__serena__find_symbol`、`mcp__serena__find_referencing_symbols` 与 `mcp__serena__get_symbols_overview`。project 层是从项目根向上遍历找到的最近的 `.claude/agents` 目录；user 层是作者自己的 `~/.claude/agents`。定义以其文件 basename 为键，各层按级别遮蔽——bundled < user < project——同名本地文件总是覆盖其 bundled 同名者。
 - **两种格式。** `.md` 文件的 YAML frontmatter 提供字段，其 markdown 正文（或 `prompt` frontmatter 覆写）提供系统提示。`.json` 文件是单个对象，其 `prompt` 字段即系统提示。
 - **响亮失败。** 每个坏掉的已知 frontmatter 值都会在加载期带着文件路径与字段名抛错，因此坏 agent 会被修复而非静默降级。未知字段被忽略，因此针对更新版本 Claude Code 编写的定义可移植到受支持子集。
 - **字段翻译。** `description` 成为 when-to-use 指南；`tools`/`disallowedTools` 编译为单个有效的 `allow`/`deny` 工具约束，其名称求交集（同时出现在两个列表中的名称被禁用）；`model`（含归一化的 `inherit` 哨兵）、`effort`、`permissionMode`、`maxTurns`、`initialPrompt`、`background`、`memory`、`skills`、`mcpServers`、`hooks` 与 `isolation` 全部透传——且 `background` 不再是死字段：Task 工具会兑现它（在 `run_in_background` 缺省时转后台）；`isolation: worktree` 也被 Task 工具消费（child 运行在 per-child git worktree 中——见 `@dsh-cc/subagent-task` 的隔离工作树一节）。
@@ -22,9 +22,11 @@
 - `resolveToolRestriction(tools, disallowedTools): ToolRestriction | undefined` 与 `normalizeModel(model): string | undefined` 纯约束合并与模型归一化辅助函数，导出以供复用与测试。
 - `applyActorContract(persona, candidates, patterns): string` 对 persona 应用 `<!-- actor-contract:start -->`/`end` 标记门控：标记行总是被移除，两标记之间的内容仅当某个候选模型 id 匹配某个 pattern 时保留——否则内容一并剔除，且周边文本被干净地折叠。无标记的输入原样返回（逐字节相同）。
 - `matchesModelPattern(value, pattern): boolean` 与 `matchesAnyModelPattern(values, patterns): boolean` 门控背后的模型匹配器：大小写不敏感、整串匹配，`*` 是唯一通配符，pattern 中其余正则元字符均按字面处理。
+- `gateCandidates(model, resolved): string[]` 与 `DEFAULT_ACTOR_CONTRACT_MODELS` 门控的 spawn 期候选模型 id（解析后的路由 id 在前，原始 frontmatter token 与之不同时一并加入；`inherit` 模型不产出候选，因此门控保持关闭），以及派发期的默认 pattern 列表 `['glm-*']`。
+- `classifyEphemeral(definition): boolean` 对一次性（ephemeral）通道的静态分类：设置了 `ephemeral` frontmatter 字段时以它为准；否则当且仅当白名单中每一项都是只读工具（Read、Glob、Grep、`read_image` 与三个 serena 工具）时视为 ephemeral。任何疑问都归为 persistent。
 
 `AgentDefinition` 携带 `agentType`（文件 basename）、`whenToUse`、`systemPrompt`、`source`（`user` | `project` | `bundled`）、`baseDir`、`filename`，以及翻译后的可选字段。`toolRestriction` 值在结构上与 [`dsh-tools`](../../core/tools/README.md) 的 `ToolRestriction` 完全一致，因此消费方可以原样将其交给有作用域的 `ctx.tools.restrict()`。
 
 ## 设计
 
-该 loader 刻意与集成解耦。它产出类型化定义并将消费——作用域工具约束、请求改写、权限选择——交给调用方，因此模型侧各部分无需拖入 harness 运行时即可复用。这与 `agent-presets` 的理念（该上游包已在 harness 0.1.7 退役）一致：自包含词表喂给显式消费方，而不是在 loader 内部隐藏默认步骤。
+该 loader 刻意与集成解耦。它产出类型化定义并将消费——作用域工具约束、请求改写、权限选择——交给调用方，因此模型侧各部分无需拖入 harness 运行时即可复用。这与 `agent-presets` 的理念（该上游包已在 harness 0.1.7 退役）一致：自包含词表喂给显式消费方，而不是在 loader 内部隐藏默认步骤 〔src:ws:docs/plans/2026-09-29-harness-0.1.7-rc.2-migration.md#L97-L100〕。

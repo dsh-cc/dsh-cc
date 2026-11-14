@@ -18,7 +18,7 @@ An unconfigured builtin alias also inherits, so mounting this plugin with no `ha
 
 cc-shell mounts this host-plane row by disabling the stock `session-title-llm` plugin and inserting this one into its bundle patch (`cordis.patch.yml`, row `session-title-llm-cc`) with the default framing policy (`targetWords: 5`, `targetCjkCharacters: 10`, `maxInputBytes: 4096`, `maxOutputTokens: 64`, `timeoutMs: 60000`).
 
-The plugin injects `sessionTitle`, `llm`, and `sessions`; it registers one provider with `automatic: 'first-prompt'`, so titles generate from the first human prompt of a session. Generated titles are accepted, logged, and folded by the host session-title service — this package owns only route stamping and message selection (the first human message).
+The plugin injects `sessionTitle`, `llm`, and `sessions`; it registers one provider with `automatic: 'first-prompt'`, so titles generate from the first human prompt of a session. Generated titles are accepted, logged, and folded by the host session-title service — this package owns only route stamping and message selection (the first human message). After a successful generation the provider also writes a best-effort title sidecar through `writeTitleSidecar` from `@dsh-cc/memory` (a hard dependency), located by the session cwd and session id, so the `/resume` listing skips the expensive cold title read.
 
 ## Known Limitations and Deferred Work
 

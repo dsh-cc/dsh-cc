@@ -34,7 +34,7 @@
 export const Config = z.object({})
 ```
 
-每次 `apply(ctx, config)` 都会把 `NotebookEdit` 工具注册进 `ctx.tools`，并注册其 `fs/observed` 监听器。需要已加载的 `ctx.tools` 与活跃的 `ctx.fs` 后端（例如 `@deepseek-ai/dsh-fs-local`）；在 `inject: ['tools', 'fs']` 满足之前，插件保持等待状态。
+每次 `apply(ctx)` 都会把 `NotebookEdit` 工具注册进 `ctx.tools`，并注册其 `fs/observed` 监听器。需要已加载的 `ctx.tools` 与活跃的 `ctx.fs` 后端（例如 `@deepseek-ai/dsh-fs-local`）；在 `inject: ['tools', 'fs']` 满足之前，插件保持等待状态。
 
 ## 安装 / 注册
 

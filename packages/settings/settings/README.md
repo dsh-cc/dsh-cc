@@ -16,9 +16,11 @@ both existed only to build on the provider, and nothing else could consume one
 without the other. They are now one package with three entry points; the
 subpath names are the only thing consumers had to change.
 
-`@dsh-cc/settings/cascade` also carries the two narrower entries consumers
+`@dsh-cc/settings/cascade` also carries the three narrower entries consumers
 import instead of the whole cascade: `./cascade/local-root` (which settings
-directory a project resolves to) and `./cascade/permissions`.
+directory a project resolves to), `./cascade/permissions`, and
+`./cascade/worktree` (the Claude Code-compatible `worktree` section:
+`baseRef` and `cleanupPeriodDays`).
 
 ## Provenance: a fork, not a vendored copy
 

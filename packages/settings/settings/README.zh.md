@@ -12,7 +12,7 @@
 
 这三者原本是三个包（`settings-provider`、`settings-ns`、`settings-cascade`），依赖链严格线性——ns 与 cascade 都只是为了建在 provider 之上，外部不可能只消费其中一个而不带另一个。现在合成一个包、三个入口；消费方唯一需要改的是子路径名。
 
-`@dsh-cc/settings/cascade` 另带两个更窄的入口，供不需要整条级联的消费方使用：`./cascade/local-root`（项目解析到哪个设置目录）与 `./cascade/permissions`。
+`@dsh-cc/settings/cascade` 另带三个更窄的入口，供不需要整条级联的消费方使用：`./cascade/local-root`（项目解析到哪个设置目录）、`./cascade/permissions` 与 `./cascade/worktree`（Claude Code 兼容的 `worktree` 设置节：`baseRef` 与 `cleanupPeriodDays`）。
 
 ## 来历：这是一份 fork，不是 vendored 副本
 

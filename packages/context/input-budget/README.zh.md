@@ -50,6 +50,10 @@
 
 行经 `createGovernorLedgerSink()` 落地：每次闸门调用一条无内容 `GovernorRow`，追加到 `$DSH_HOME/input-ledger/<projectKey>/<sessionId>.jsonl`，与账本自身观察者使用同一 sink 与路径约定（project 桶为 `sha256(realpath(cwd))` 的前 16 个十六进制字符；因 `@dsh-cc/input-ledger` 不导出该函数，此处保有一份一致的本地副本） 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L105-L107〕。该依赖按设计是软依赖：没有 dsh-home、没有会话 cwd，或 `cc-input-ledger.enabled: false` 时 governor 照常运行，行只是不落盘；追加失败被吞掉、记入调试日志并计入 `getGovernorLedgerHealth().droppedRows`——绝不抛入瀑布，也绝不在热路径上等待 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L122-L131〕。governor 自身抛错时返回未改动的决策并记录 `{ error: true }` 行，因此失败的闸门绝不会半应用一个批次 〔src:ws:docs/plans/2026-11-12-per-step-input-budget-governor.md#L122-L124〕。
 
+## Governor 管线
+
+导出的管线接缝只固定阶段顺序 `dedupe → caps → trim`。`runGovernorPipeline(input, hooks?)` 让某个阶段的每个 `GovernorStageHook` 都在前一阶段产出的批次上运行，再把结果交给 trim 阶段，也就是 `govern()` 本身。hook 看到的是监听器收到的批次，即所有内层 `agent/pre-step` 监听器跑完之后的 claimed enter 批次，并返回下一阶段将要评估的批次。`GovernorStage` 命名三个阶段，`GOVERNOR_STAGES` 以运行时值承载冻结的顺序。此处目前不含任何去重或上限逻辑，因此两个 pre-trim 阶段默认接收空 hook 列表，管线就等于 trim 本身。hook 失败会传播给监听器，监听器返回未改动的决策并记录 `{ error: true }`，因此失败的阶段绝不会半应用一个批次。
+
 ## 算术（钉住已验证模型）
 
 `available(budget, used) = budget - used`（饱和减法）、`fits(budget, used, bytes) = bytes <= available(...)`、`oversize(budget, bytes) = budget < bytes`——与 `specs/lean/input-admission-arithmetic/Model.lean` 中的 `Formal.fits` / `Formal.oversize` 完全一致。受保护类别永不计量，这就是"永不触碰"的算术面。

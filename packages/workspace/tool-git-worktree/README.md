@@ -37,7 +37,9 @@ base the worktree branches from follows the `worktree` settings section
 (`baseRef: 'fresh' | 'head'`, default `fresh`): `fresh` uses the cached
 `origin/HEAD` (refreshed with one fetch, capped at 5s, when its reflog is
 older than 24h), `head` uses the literal current `HEAD`. Any probe failure
-degrades to local `HEAD`.
+degrades to local `HEAD`. The same section carries `cleanupPeriodDays`
+(default 30), the sweep window in days: the launcher's boot-time sweep removes
+clean, unlocked worktrees older than that window.
 
 ## Safety
 

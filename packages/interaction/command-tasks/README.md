@@ -8,7 +8,7 @@ Human-facing `/tasks` command: list the caller-visible background jobs and their
 
 | Input | Result |
 |---|---|
-| `/tasks` | List each caller-visible job's id (`<kind>-N`), kind, lifecycle status, start time, and producer label. An empty visible set renders a friendly placeholder. |
+| `/tasks` | List each caller-visible job's id (`<kind>-N`), kind, lifecycle status, start time, and producer label. An empty visible set renders a friendly placeholder. When the optional root-realm `ccAgents` snapshot reports more than zero background agents for this session, the output also ends with a footer line `<n> background agents — /agents for details`. |
 
 The command injects `commands` and `jobs`, so a composition that runs background jobs is required. No form consumes model tokens.
 
@@ -22,6 +22,8 @@ The producer injects `commands` and `jobs`. A custom app mounts the job registry
 - id: command-tasks
   name: '@dsh-cc/command-tasks'
 ```
+
+The footer cross-link reads the optional root-realm `ccAgents` snapshot, the same read-only surface `/agents` consumes. It is not injected. A composition without that service, or a snapshot call that throws, renders the job list with no footer.
 
 ## Model Experience
 

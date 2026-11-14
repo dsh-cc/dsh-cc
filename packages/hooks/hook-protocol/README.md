@@ -8,7 +8,7 @@ Codex deliberately reimplements a *subset* of the Claude Code hook protocol — 
 
 ## What's shared (here) vs. per-dialect (the bridges)
 
-| Concern | Here (`dsh-hook-protocol`) | The bridge (`dsh-hooks-claude-code` / `-codex`) |
+| Concern | Here (`@dsh-cc/hook-protocol`) | The bridge (`@dsh-cc/hooks-claude-code` / `-codex`) |
 |---|---|---|
 | Matcher validation + test | `matcherDiagnostic(pattern, mode)` for parse-time diagnostics; `matchesMatcher(pattern, query, mode)` for contained runtime matching | picks its `mode` (`claude` = literal-or-regex, `codex` = always regex) and rejects a config group carrying a diagnostic |
 | Run a **command** hook | `runHook(bash, hook, opts, now)` — stdin payload + env via `ctx.shell`, decode | builds the per-event stdin **payload** + the dialect's **env** |
@@ -18,6 +18,8 @@ Codex deliberately reimplements a *subset* of the Claude Code hook protocol — 
 | Merge N hooks | `mergeHookOutputs(outputs)` → most-restrictive `MergedHookOutcome` | — |
 | Durable record | `appendHookInvoked` / `appendHookResult` (`hook/*` session events; the result's `decision`/`stderrSummary` derive from the `HookOutput` here) | calls them around each invocation |
 | Detached-run quiescence | `createDetachedRuns()` — track fire-and-forget run chains; `drain()` aborts, then awaits them | passes `signal` to each detached `runHook`, registers `drain` as its effect disposer |
+| Hook-issue diagnostics | `hookDiagnosticsWriter(path)` / `readHookDiagnostics(path)` (`src/diagnostics.ts`): a JSONL `HookIssue` log that skips torn lines and compacts past 256 KB | records the issues it observes; `/doctor` reads the file back |
+| Reference default timeouts | `DEFAULT_HOOK_TIMEOUT_MS` (command hooks) and `DEFAULT_HTTP_HOOK_TIMEOUT_MS` (`src/http.ts`), both 10 minutes; a hook's `timeoutSec` overrides | owns its configurable `defaultTimeoutMs`, which defaults to the lib value |
 
 ## Primitives
 

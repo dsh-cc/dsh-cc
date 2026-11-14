@@ -53,6 +53,8 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
 | `url` | http | 是 | MCP 服务器 URL |
 | `headers` | http | 否 | 额外标头（例如认证 token） |
 | `oauth` | http | 否 | OAuth 流程选项（见下文） |
+| `oauth.clientName` | http | 否 | 稳定的 OAuth 客户端名称；当前被接受但无实际作用（绝不会上报给授权服务器） |
+| `oauth.credentialPrefix` | http | 否 | 存放 OAuth 状态的凭据引用前缀（默认 `MCP_OAUTH_<serverName>`）；provider 由此派生 `_TOKENS`、`_CLIENT`、`_VERIFIER` 与 `_DISCOVERY` 引用 |
 | `toolCallTimeoutMs` | 两者 | 否 | 每次 `callTool` 调用的超时（默认 60000） |
 | `failOnStartupError` | 两者 | 否 | 初始连接或工具同步失败时拒绝插件激活（默认 `false`） |
 | `deferStartupConnect` | 两者 | 否 | 激活时不等初始连接与工具同步完成，改为后台连接（默认 `false`）；与 `failOnStartupError: true` 同用时无效 |

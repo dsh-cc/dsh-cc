@@ -64,7 +64,7 @@ A `.mcp.json` `mcpServers` map values are the Claude Code server definitions:
 
 Each accepted server translates to one `@dsh-cc/mcp-client` `Config`:
 
-- The server **name** becomes `serverName`, the public namespace for the model-facing tool names (`mcp__<serverName>__*`).
+- The server **name** becomes `serverName`, the public namespace for the model-facing tool names (`mcp__<serverName>__*`). It is normalized to the mcp-client tool-prefix contract `[A-Za-z0-9_-]{1,32}`: runs of other characters collapse to `-`, leading and trailing `-` are trimmed, the result is capped at 32 chars, and a name with no valid character becomes `-`. Policy hooks still see the original name.
 - `command`-based definitions map to the `stdio` transport.
 - `http` / `streamable-http` definitions map to the `streamable-http` transport.
 - `sse` definitions map to the `sse` transport.
@@ -100,4 +100,9 @@ Malformed configuration throws at load — a non-object body, a missing or non-m
 - `normalizeServerEntry(entry)` — one raw entry → its transport half (`McpTransport`: transport fields only; no `serverName`, no env expansion), validating required fields. `serverName` is added later by `buildRegistrations`.
 - `applyEnv(config, env?)` — expand `${...}` substitutions in one normalized config.
 - `expandEnv(value, env)` — expand one string's substitutions.
-- `buildRegistrations(body, { env?, policy? })` — full pipeline to mcp-client registrations.
+- `normalizeServerName(name)` collapses a Claude Code server name into the mcp-client `[A-Za-z0-9_-]{1,32}` tool-prefix contract: invalid runs become `-`, edges are trimmed, the result is capped at 32 chars, and an all-invalid name becomes `-`.
+- `resolveDefaultMcpPaths({ env?, cwd?, home? })` classifies the default config paths into the dsh-native, Claude Code, and migration-target buckets. It is pure when all three inputs are given.
+- `readMcpServerNames(path)` returns the raw declared names of one config file and never throws: `{ kind: 'absent' }`, `{ kind: 'invalid', error }`, or `{ kind: 'ok', names }`.
+- `claudeOnlyServers(paths)` reports, per Claude Code file, the declared names that no dsh-native file declares.
+- `migrateMcpServers({ sources, target })` is the package's only file-writing surface. It copies raw server entries into the target with an atomic write, existing target names win, and a `.bak` backup is made only when an existing target is overwritten.
+- `buildRegistrations(body, { env?, policy?, deferStartupConnect? })` runs the full pipeline to mcp-client registrations. With `deferStartupConnect: true` the emitted configs also set `failOnStartupError: false`, so the two flags never contradict each other.

@@ -25,13 +25,10 @@ the scripts below or the package scripts.
   with the user adjudication into `annotations/gold-annotations.json`,
   `recall` prints detector recall (human-verifiable sentences the detector
   found) so a silent under-detector cannot inflate coverage.
-- `src/sampling.ts` — receipt-row sampling harness per §8: dogfood 20%
-  (min 5, ceil) then post-acceptance 5%; `K = 20` expected atomic facts
-  (SAFE convention, arXiv 2403.18802 — a metric parameter, never a
-  sampling ratio); labels `supported | partially | unsupported |
-  irrelevant`; `F1@K` computation; the judge-lane budget table (numbers
-  are first-budget estimates, recalibrated by dogfood). Judge calls are
-  NOT wired at P2 (§4.4) — interfaces and schemas only.
+- `src/annotation.ts`: the annotation lane's implementation, re-exported by
+  `src/index.ts:1-8`. It covers gold-set loading, sentence splitting with the
+  frozen four-family detector, the dual-annotation merge into
+  `vwa-eval/gold-annotations@1`, and detector recall.
 - `scripts/baseline.mjs` — P0(3) coverage baseline: runs the extractor
   over the gold set and writes `baselines/<date>-P0-coverage-baseline.json`
   (detected-claim counts per family, documents with claims, candidate
@@ -54,6 +51,10 @@ the scripts below or the package scripts.
 
 ## Tests
 
-`pnpm vitest run packages/evaluation/vwa-eval` — selector determinism and
-`--check` round-trip, sha256 against live files, sampling math (ceil/min
-rules, budget pins, a hand-computed F1@K), sentence-export shape, and the humanities scorer metrics (`tests/scorer.spec.ts`).
+`pnpm vitest run packages/evaluation/vwa-eval` covers two suites.
+`tests/gold-set.spec.ts` checks the 30 sorted gold-set entries, the pinned
+sha256 of every snapshot file, and that `--check` ignores live repo docs.
+`tests/scorer.spec.ts` covers the frozen humanities scorer primitives, claim
+metrics with split/merge credit, major-fault recall and clean-sample false
+positives, support macro-F1, the deterministic bootstrap CIs, and the
+committed humanities manifest round-trip.

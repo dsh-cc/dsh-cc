@@ -1,7 +1,7 @@
 # cc-codex-bridge
 
 dsh-cc 官方插件：一条**免审批的 Codex 救援通道**。安装后，dsh-cc 会话可以运行唯一一种
-规范、锁死的 Codex 救援调用 —— `node <launcher> [--last] <prompt>` —— 无需人工审批：
+规范、锁死的 Codex 救援调用 —— `node <launcher> [--last] -- <prompt>` —— 无需人工审批：
 PreToolUse 钩子只对这一种命令形态自动放行。
 
 核心思路是**状态搬迁，而非放宽沙箱**：Codex 以关闭内部沙箱的方式运行（嵌套沙箱无法

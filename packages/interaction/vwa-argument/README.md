@@ -47,7 +47,8 @@ mounts) and semantic review is inert.
   `evidence.register` (source snapshot + excerpts, runtime-read quotes),
   `evidence.search_log` (1–50 search-log entries, no searching performed),
   `argument.update` (atomic full-graph mutation union), `argument.review`
-  (background semantic review over a stage), and `argument.report` (deterministic Markdown/JSON, optional write under `docs/vwa-reports/<projectId>/`; no model calls).
+  (background semantic review over a stage), and `argument.report`
+  (registered in `src/report-tool.ts`: deterministic Markdown/JSON, optional write under `docs/vwa-reports/<projectId>/`; no model calls).
 - **Command** (`src/commands.ts`): the closed-grammar `/vwa
   <init|status|import|sign|adjudicate|repair>` command — human-only source
   (D21), non-empty-reason adjudication that never rewrites the model's

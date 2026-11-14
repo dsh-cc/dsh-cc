@@ -74,7 +74,8 @@ dsh web
 
 | dsh-cc 版本 | 已验证的 dsh |
 | --- | --- |
-| `main`（未发布，v0.9.3 之后） | 0.2.2-rc.1 |
+| `main`（未发布，v0.9.5 之后） | 0.2.2-rc.1 |
+| v0.9.4 – v0.9.5 | 0.2.2-rc.1 |
 | v0.9.3 | 0.2.1-rc.5 |
 | v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |
@@ -470,9 +471,9 @@ packages/
   subagent/       coordinator, task tool, handoff store, resume pins
   compaction/     compaction tiers, cost gate, tool-use summaries
   session/        session commands (cost, export, stats, learn) and forensics
-  context/        reversible tool-output compression (context-crusher) and post-compact progress rebuild
-  llm-tuning/     reasoning-fold and side-query
-  observability/  cache-health observer, config snapshot sidecar, shared sidecar IO
+  context/        reversible tool-output compression (context-crusher), input budget, post-compact progress rebuild
+  llm-tuning/     reasoning-fold, side-query, and the System One decision runtime
+  observability/  cache-health observer, config snapshot sidecar, shared sidecar IO, input ledger, decision usage, version info
   plugin/         first-party plugins of the in-repo marketplace
   test-support/   shared test fixtures and eval harnesses (not published)
   evaluation/     VWA evaluation harness and gold set (not published)

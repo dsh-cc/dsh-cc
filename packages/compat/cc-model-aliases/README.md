@@ -71,7 +71,8 @@ modelAliases:
 // settings namespace "model-aliases"
 {
   "fable":  { "provider": "anthropic", "model": "claude-fable-5" },
-  "sonnet": null     // null = delete the same-named config-default alias
+  "sonnet": null,            // null = delete the same-named config-default alias
+  "warnOnInherit": true      // control key (boolean, default true): warn when an unconfigured alias inherits
 }
 ```
 
@@ -219,6 +220,23 @@ cc-shell (and the routes service), so in CC mode the fix is always active.
 - `ConfigAliasesSchema` / `SettingsAliasesSchema` (and their record forms) —
   schemastery schemas for the config layer (no `null`) and settings layer
   (`null` allowed), plus `AliasTarget` / `ResolvedRoute` types.
+- `createModelInspector(getAliases, { warn })` builds an inspection closure
+  returning `AliasInspection` (`{ kind, route?, via?, hop? }`), so a caller can
+  report how a `model` was classified without resolving it again.
+- `splitLevelSuffix(ref)` splits a trailing `$<level>` reasoning-effort suffix
+  (`opus$high`) off a model reference; a malformed suffix passes the whole ref
+  through verbatim.
+- `resolveAlias(ctx, alias?)` / `resolveDetailedAlias(ctx, alias?)` resolve
+  through the mounted `ccModelRoutes` service, falling back to a resolver built
+  from the `model-aliases` settings overlay when the service is absent.
+- `MODEL_ALIASES_NAMESPACE` is the `'model-aliases'` settings namespace constant.
+- `isSystemOneTarget(target)` is true when an alias target names a System One
+  model or carries the System One protocol marker.
+- `CC_ALIASES` / `LANE_ALIASES` are the two builtin name lists
+  (`fable`/`opus`/`sonnet`/`haiku` and the six dsh-cc lanes), for callers that
+  need the names without the map.
+- Subpath exports `@dsh-cc/model-aliases/types`, `/schema`, and `/resolver`
+  expose the types, the schemas, and the pure resolver without the plugin entry.
 
 ## dsh-cc lanes
 

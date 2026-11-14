@@ -2,13 +2,15 @@
 
 [English](README.md) | 中文
 
-可安全回放、不依赖模型的微压缩（microcompact）服务（`ctx.microcompactor`）。它会原样保留最近的 `retainResults` 个 `tool/result` 表层节点，并将更早的节点替换为确定性的占位摘要；若原始结果引用了 spill 文件的 locator，占位摘要会重新嵌入该 locator——全程不发起模型调用，也不做摘要。
+可安全回放、不依赖模型的微压缩（microcompact）服务（`ctx.microcompactor`）。它会原样保留最近的 `retainResults` 个 `tool/result` 表层节点，并将更早的节点替换为确定性的占位摘要；若原始结果引用了 spill 文件的 locator，占位摘要会重新嵌入该 locator。该 pass 不发起模型调用，也不做摘要；它能替换的唯一内容是另一个包此前为同一工具调用记录的 tool-use-summary 摘要。
 
 这是 [`dsh-compaction-basic`](../compaction-basic-cc/README.md) 的具体配套服务，不是压缩（compaction）后端。它在摘要之前合成运行，使摘要器读到已经过窗口收缩的表层。两个包仍可各自独立组合。
 
 ## 服务 API
 
-`microcompactSession(session)` 会扫描当前表层的一个稳定快照。最近的 `retainResults` 个工具结果被原样保留；每个更早的、尚未成为占位符的结果，都会被一个新追加的 `tool/result` 替换，其携带 `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`。替换会展开完整原始数据，只更改 `content`，保留 `turn`、`step`、`callId`、错误字段、`meta` 以及以后新增的数据字段。原始事件仍可用于持久化、回放和精确日志检查。
+`microcompactSession(session, tus?)` 会扫描当前表层的一个稳定快照。`tus` 是可选的 `ReadonlyMap<ToolCallId, SummaryRow>`，承载本会话的 tool-use-summary 行；自动 pass 会从 TUS 账本加载它。最近的 `retainResults` 个工具结果被原样保留；每个更早的、尚未成为占位符的结果，都会被一个新追加的 `tool/result` 替换，其携带 `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`。替换会展开完整原始数据，只更改 `content`，保留 `turn`、`step`、`callId`、错误字段、`meta` 以及以后新增的数据字段。原始事件仍可用于持久化、回放和精确日志检查。
+
+当存在一条 `status: 'ok'` 且带摘要的行对应节点的 `callId`，且 `cc-tool-use-summary.upgradeMicroPlaceholders` 设置开启时，TUS 升级路径生效：占位符改为携带带框架的摘要，而不再是生成的文本（spill locator 仍随后出现）。没有对应行时，逐字节输出旧版占位摘要。消息体已是 context-crusher 桩的节点永不替换，因为它的 `context_retrieve` locator 必须存活。peer 依赖 `@dsh-cc/tool-use-summary` 提供行类型、摘要框架与设置读取器。
 
 每次替换都紧接着一条 `compaction/prune` 影子价格事件（通过注入的 token meter 为被遮蔽节点定价），后面还跟一条 `compaction/microcompact` 决策记录，记录被遮蔽的 `originalSeq`、`replacementSeq`、共享的 `callId` 以及重新嵌入的 `spillLocator`。这些共同保证决策可从日志重建。
 

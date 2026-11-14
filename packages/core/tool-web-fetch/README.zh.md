@@ -21,6 +21,18 @@ CC 风格的 `web_fetch` 替代工具，带可选 `prompt` 参数。当 CC prese
 （`'compaction' | 'session-title'`）。摘要模型请求工具或未产出文本时，调用以
 `isError` 工具结果失败。
 
+## 配置
+
+`Config`（`src/index.ts:32-60`）有四个可选键，均在 `apply` 时生效
+（`src/index.ts:81-87`）：
+
+| 键 | 默认值 | 含义 |
+|---|---|---|
+| `fetchTimeoutMs` | `30000` | 协作式工具调用超时预算（毫秒），作为工具的 `timeoutMs` 附加。 |
+| `fetchMaxOutputChars` | `200000` | 完整渲染后的 `web_fetch` 输出字符上限。 |
+| `maxSummaryTokens` | `2048` | 一次性摘要调用的 token 预算。 |
+| `maxSummaryInputChars` | `32000` | 送入摘要调用前转换的文档字符上限。 |
+
 ## Provider 要求
 
 CC 部署使用 dsh-base 自带的 stock `@deepseek-ai/dsh-web-fetch-http` 执行器

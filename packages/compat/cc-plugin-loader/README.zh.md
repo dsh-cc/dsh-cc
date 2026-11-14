@@ -49,7 +49,7 @@ JSON 读失败与缺失的 `installPath` 会跳过而不是抛错。项目/local
 
 | 组件 | 来源 | Seam（探测） | 翻译 |
 |---|---|---|---|
-| `commands` | 清单内联/source，或默认 `commands/*.md` | `commands` | 通过 `register` 注册每个斜杠命令；handler 返回命令内容 |
+| `commands` | 清单内联/source，或默认 `commands/*.md` | `commands` | 通过 `register` 注册每个斜杠命令；handler 把 `$ARGUMENTS` 代入正文，让生成的用户消息先经过 `@dsh-cc/moa` 的 `routeBeforeAdmission`（硬依赖），再作为用户提示派发到发起调用的 agent |
 | `agents` | `agents/` 目录或清单路径 | `subagents` | 通过 `loadAgentsDir` 加载 `AgentDefinition`，再通过 `registerProvider` 注册为命名 provider——以插件名做命名空间（`namespacePrefix: manifest.name`），因此 `provider.name` 是 scoped id `plugin:agent`，而 `provider.definition.agentType` 保持裸名；provider 还会暴露其 `definition`，供 Task 工具实时枚举。**不带** `namespacePrefix` 挂载则保持裸名——这些 agent 随后**对 Task 工具不可见**（一种向后兼容的逃生舱口，不是受支持的派发模式） |
 | `skills` | `skills/` 目录或清单路径 | `skills` | 通过 `discoverCcSkills` 发现 `SKILL.md`、解析 frontmatter，再通过 `register` 注册为运行时技能；技能名取其目录名，目录名不是合法注册名时（例如清单以 `"skills": ["./"]` 把带版本号的插件根目录列为技能根）回退到 frontmatter 的 `name`，见 `src/skills.ts:resolveSkillName` |
 | `hooks` | `hooks/hooks.json` 或内联 | `hooks`（guest）| 通过 `mergePluginHooks` 注入按事件组织的 hook 映射 |
@@ -57,6 +57,16 @@ JSON 读失败与缺失的 `installPath` 会跳过而不是抛错。项目/local
 | `settings` | 清单记录 | `settings`（guest）| 过滤到 allowlist（当前是 `agent`）后通过 `set` 写入 |
 
 `hooks` 与 `mcp` seam 在本包内没有 harness 自有的服务；希望挂载这些组件的部署应提供 guest seam，否则它们会被报告为 `skipped`。dsh 的宿主接线现已提供 `mcp` seam：cc-shell glue 内置提供 `mcp` seam（`cc-shell/src/mcpSeam.ts`，即 `cc-mcp-seam` 子插件），因此在发布的部署中插件的 `mcpServers` 会真正挂载（见 docs/plans/2026-09-07-plugin-mcp-seam.md）。`hooks` 仍依赖宿主提供。
+
+### 设置命名空间：`actor-contract`
+
+挂载时加载器安装 `actor-contract` 设置段，供 actor-contract 闸门使用：该模型模式列表决定被标记的 actor-contract 块能否保留进 subagent 的 persona。模式在派发时实时读取，因此修改设置在下一次派发即生效。
+
+| 键 | 类型 | 默认 | 含义 |
+|---|---|---|---|
+| `models` | string[] | `['glm-*']`（`DEFAULT_ACTOR_CONTRACT_MODELS`） | 大小写不敏感的 glob（`*` 是唯一通配符），与某次派发的候选 model id 匹配；只有匹配的派发才保留该块。显式 `[]` 仍是真实数组，并关闭闸门。 |
+
+该设置段（以及从 `@dsh-cc/claude-code-agents` 再导出的 `gateCandidates` / `DEFAULT_ACTOR_CONTRACT_MODELS`）经 `installSectionSafe` 安装，因此与 `@dsh-cc/subagent-task` 共同挂载是安全的，任意挂载顺序都能生效。此处不提供任何 cordis 服务：`ccActorContractGate` 归 task 包所有。
 
 ## Cursor 方言
 

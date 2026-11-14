@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The **shared System One client + token-budget helpers**: a native, never-throws transport client for the System One decision-model endpoint (`{baseURL}/v1/systemone`) with bounded HTTP 429 retry, plus a script-aware token-budget estimator used to pre-truncate lane payloads. Extracted from `@dsh-cc/permission-rules` (design: docs/plans/2026-10-09-moa-tiered-cascade-routing.md §3.6) so any harness feature that wires a System One lane — permission-rules today, `@dsh-cc/moa` next — consumes one implementation. Pure modules: no runtime dependencies beyond node stdlib.
+The **shared System One client + token-budget helpers**: a native, never-throws transport client for the System One decision-model endpoint (`{baseURL}/v1/systemone`) with bounded HTTP 429 retry, plus a script-aware token-budget estimator used to pre-truncate lane payloads. Extracted from `@dsh-cc/permission-rules` (design: `docs/plans/2026-10-09-moa-tiered-cascade-routing.md` §3.6) so any harness feature that wires a System One lane — permission-rules today, `@dsh-cc/moa` next — consumes one implementation〔src:ws:docs/plans/2026-10-09-moa-tiered-cascade-routing.md#L105-L107〕. Pure modules: no runtime dependencies beyond node stdlib.
 
 ## API
 
@@ -43,16 +43,44 @@ export function capMiddleToTokenBudget(text: string, budgetTokens: number, marke
 export const S1_ENVELOPE_TOKENS: number
 export const S1_MARGIN_TOKENS: number
 export const MIN_STATE_TOKENS: number
+
+// decision lane: re-exported through index.ts (decision.ts also re-exports decision-types.ts)
+export const DECISION_LANE_ALIAS: string
+export function createDecisionRunner(deps: DecisionRunnerDeps): DecisionRunner
+
+// decision-types.ts: pure contract types of the decision runner
+export type DecisionFeature
+export interface DecisionRunner
+export interface BoundDecisionRunner
+export interface DecisionBudgetPermit
+export interface DecisionLedgerRow
+
+// model-windows.ts: measured per-model decision context windows
+export const DEFAULT_GAUGE_CONTEXT_WINDOW: number
+export const GAUGE_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>>
+export function normalizeGaugeModelId(model: string): string
+
+// decision-hash.ts: deterministic input hashing and token estimates
+export function canonicalJson(value: unknown): string
+export function inputHashForDecision(input: DecisionHashInput): string
+export function estimateDecisionInputTokens(
+  state: unknown, questions: Record<string, SystemOneQuestion>,
+): DecisionInputTokenEstimate
+
+// client.ts: observer seam and its fixed rejection reason
+export const SYSTEMONE_OBSERVER_REJECTED_REASON: string
+export interface SystemOneAttemptObserver
+export interface SystemOneRetryClock
 ```
 
 ## Contract validation
 
 `systemoneDecide` enforces a strict two-sided contract (design:
-docs/plans/2026-11-02-systemone-01-contract-validation.md). Requests are
+`docs/plans/2026-11-02-systemone-01-contract-validation.md`) 〔src:ws:docs/plans/2026-11-02-systemone-01-contract-validation.md#L1-L30〕. Requests are
 pre-checked before any network work — question IDs, option counts, criteria
-shapes, JSON-serializable state (cycles, BigInt, non-finite numbers and
-undefined/function/symbol values are rejected), model and timeout bounds —
-and a failed pre-check returns `malformed` with zero fetch calls. Responses
+shapes, JSON-serializable state (cycles, BigInt, non-finite numbers and undefined/function/symbol values are rejected) 〔src:ws:docs/plans/2026-11-02-systemone-01-contract-validation.md#L83-L83〕.
+Model and timeout bounds are checked too, and a failed pre-check returns
+`malformed` with zero fetch calls. Responses
 must answer exactly the requested question set with type-matching answers:
 choice probabilities cover the criteria exactly, each finite in `[0,1]`,
 sum within `options * 1e-4` of 1 (2x the worst-case 4-decimal rounding drift,
@@ -76,5 +104,5 @@ import { systemoneDecide, estimateSystemOneTokens, capMiddleToTokenBudget } from
 
 const state = capMiddleToTokenBudget(JSON.stringify(bigState), 2048)
 const result = await systemoneDecide({ baseURL, model: 'systemone-model', state, questions, timeoutMs: 5000 })
-if (!result.ok) return /* degrade: 'timeout' | 'error' */
+if (!result.ok) return /* degrade: 'timeout' | 'cancelled' | 'error' | 'malformed' */
 ```

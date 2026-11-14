@@ -49,7 +49,7 @@ Each component is peer-style: the loader probes the host seam via `ctx.get(...)`
 
 | Component | Source | Seam (probed) | Translation |
 |---|---|---|---|
-| `commands` | manifest inline/source, or default `commands/*.md` | `commands` | registers each slash command via `register`; the handler returns the command content |
+| `commands` | manifest inline/source, or default `commands/*.md` | `commands` | registers each slash command via `register`; the handler substitutes `$ARGUMENTS` into the body, passes the resulting user message through `@dsh-cc/moa`'s `routeBeforeAdmission` (a hard dependency), then dispatches it as a user prompt on the invoking agent |
 | `agents` | `agents/` dir or manifest paths | `subagents` | loads `AgentDefinition`s via `loadAgentsDir` and registers each as a named provider via `registerProvider` — namespaced under the plugin name (`namespacePrefix: manifest.name`), so `provider.name` is the scoped id `plugin:agent` while `provider.definition.agentType` stays bare; the provider also exposes its `definition` for the Task tool's live enumeration. Mounting **without** a `namespacePrefix` keeps bare names — such agents are then **undiscoverable to the Task tool** (a back-compat escape hatch, not a supported dispatch mode) |
 | `skills` | `skills/` dir or manifest paths | `skills` | discovers `SKILL.md` via `discoverCcSkills`, parses frontmatter, and registers each as a runtime skill via `register`; the skill name is its directory name, falling back to the frontmatter `name` when the directory name is not a valid registry name (e.g. a versioned plugin root listed as `"skills": ["./"]`), `src/skills.ts:resolveSkillName` |
 | `hooks` | `hooks/hooks.json` or inline | `hooks` (guest) | injects the per-event hook map via `mergePluginHooks` |
@@ -57,6 +57,16 @@ Each component is peer-style: the loader probes the host seam via `ctx.get(...)`
 | `settings` | manifest record | `settings` (guest) | filters to the allowlist (currently `agent`) and writes via `set` |
 
 The `hooks` and `mcp` seams have no harness-owned service in this package itself; a deployment that wants those components provides a guest seam or they are reported skipped. The dsh host wiring now supplies the `mcp` seam: the cc-shell glue provides a built-in `mcp` seam (`cc-shell/src/mcpSeam.ts`, the `cc-mcp-seam` child plugin), so plugin `mcpServers` mount for real in shipped deployments (see docs/plans/2026-09-07-plugin-mcp-seam.md). `hooks` remains host-depended.
+
+### Settings namespace: `actor-contract`
+
+At mount the loader installs the `actor-contract` settings section for the actor-contract gate: the model-pattern list that decides whether a marked actor-contract block survives into a subagent persona. The patterns are read live at spawn time, so a settings edit applies on the next spawn.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `models` | string[] | `['glm-*']` (`DEFAULT_ACTOR_CONTRACT_MODELS`) | Case-insensitive globs (`*` the only wildcard) matched against a spawn's candidate model ids; the block survives only for a matching spawn. An explicit `[]` stays a real array and closes the gate. |
+
+The section (and `gateCandidates` / `DEFAULT_ACTOR_CONTRACT_MODELS`, re-exported from `@dsh-cc/claude-code-agents`) is `installSectionSafe`-installed, so co-mounting with `@dsh-cc/subagent-task` is safe and either mount order wins. No cordis service is provided here: the task package owns `ccActorContractGate`.
 
 ## Cursor dialect
 

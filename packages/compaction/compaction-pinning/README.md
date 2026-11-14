@@ -7,7 +7,7 @@ Governed-message pinning across compaction. Behavioral-governance messages — t
 ## How it works
 
 - **Capture:** one observation-only `session/event` listener. For every `user/message` whose `source.kind` is one of the configured kinds, the WHOLE message object (content blocks plus source metadata, by reference, never cloned or destructured) is stored in that session's ring together with its seq and timestamp. The ring is FIFO-bounded by entry count and by estimated message bytes; the oldest entries are evicted first.
-- **Restore:** the compaction's summary names the shadowed seqs; the pins among them are re-appended verbatim after the checkpoint commits, oldest first, each as its own append so source boundaries survive. Restored messages re-enter the ring naturally under a new seq, which makes re-shadowing self-healing rather than a loop.
+- **Restore:** the compaction's summary names the shadowed seqs, and that summary is provisional evidence only, because the engine appends `compaction/summary` before the checkpoint commit. A per-`compactionId` restore schedule therefore has to settle before it drains, and only settled pins are re-appended verbatim, oldest first, each as its own append so source boundaries survive. Rule (a): a successful `compaction/end` for that id proves the checkpoint committed, so the pins drain in the same pass. Rule (b): with no `compaction/end` of any kind, a schedule becomes eligible once it has aged at least one turn and the checkpoint commit was actually witnessed by the replacement `user/message` citing the summary's seq; that witness gate keeps a summary-only phantom from being restored over a live original. An `end` carrying `error` cancels the schedule outright, and a schedule that never becomes eligible is garbage-collected after two turns. Restored messages re-enter the ring naturally under a new seq, which makes re-shadowing self-healing rather than a loop.
 - **Bounded:** two caps (entries and bytes) and a fixed kind list keep capture cheap and the restoration batch small. Nothing is appended from inside the event observer — restores drain from the agent's pre-step seam.
 - **Defaults:** on, with the two durable behavioral-constraint kinds. Turning the feature off stops capture and restore; a ring is never retroactively rebuilt.
 
@@ -30,6 +30,11 @@ Hot-read: the value is re-read on every message, so a settings edit applies imme
   }
 }
 ```
+
+## API
+
+- `createScheduleStore()` returns the per-session restore-schedule store (`arm`, `get`, `succeed`, `cancel`, `commit`, `isEligible`, `eligible`, `pending`, `drop`, `gcDead`, `clear`). `raiseTurn(state, turn)` raises the monotonic rule-(b) turn clock, and `RULE_B_TURNS` / `SCHEDULE_GC_TURNS` export the two windows.
+- `getPinningHealth()` / `bumpPinningHealth(key, by?)` / `resetPinningHealth()` expose process-wide counters `captured`, `restored`, `evicted`, `dropped`. They exist for tests: no user-facing notice, no ledger, no durable record.
 
 ## Known gaps
 

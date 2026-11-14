@@ -64,8 +64,10 @@ hook **本身**会在 agent 的会话工作区中运行：对 agent scope 点，
 | `StopFailure` | `agent/error`（emit） | 只观测；将错误映射到 CC 错误码词汇（`rate_limit`、`authentication_failed`、`billing_error`、`invalid_request`、`server_error`、`max_output_tokens`，否则 `unknown`） |
 | `TaskCreated` | `ctx.jobs` 变更 diff（emit） | 桥接对 `list()` 快照做 diff，对每个新出现的 job id 触发一次（无主或变更 owner scope 的 job） |
 | `TeammateIdle` | `agent/status` → `idle`（emit） | 只观测；仅对被视为 subagent 的 agent 触发（根 agent 的 idle 不触发） |
-| `Setup` | `agent/created` `source:'startup'`（emit） | **部分的一键近似**：仅对全新（seeded）会话触发，payload 为 `source:'init'`；resume/clear/compact 源不触发 |
+| `Setup` | `agent/created` `source:'startup'`（emit） | **首轮运行的部分近似**：仅对全新（seeded）会话触发，payload 为 `source:'init'`；resume/clear/compact 源不触发 |
 | `SessionResume` | `agent/created` `source:'resume'`（emit） | 只观测；仅在 `resume` 源触发 —— `clear`／`compact` 在 dsh 无 emit 点，`UserPromptCancel` 在 dsh 无 seam（均暂缓） |
+| `WorktreeCreate` | `hookRun` invoke seam（worktree 工具、subagent 隔离） | 运行配置的 hook，返回折叠结果与原始输出，调用方可用 exit 0 的 stdout 路径取代默认创建 |
+| `WorktreeRemove` | `hookRun` invoke seam（worktree 工具、TUI `/quit` 清理） | 运行配置的 hook；hook 失败时该 worktree 被保留（由调用方保留） |
 
 以上 emit 点都以分离方式运行：没有扩展点会等待这些 hook；`PermissionRequest` 是其中唯一的拦截点，并同步返回其决策。每条运行链都会被跟踪；对桥接执行 dispose（资源释放）时，会中止仍在运行的 hook 进程，并在 dispose 完成前排空 continuation（`createDetachedRuns`，位于 `dsh-hook-protocol`）。
 
@@ -125,3 +127,4 @@ hook 不返回上下文时没有成本。Hook 文本取决于数据，会被记�
 - **通用 payload 与输出字段只支持部分功能：** 已映射事件会省略 Claude Code 原本会提供的 `prompt_id`、`transcript_path`、`permission_mode` 和 `effort`。`systemMessage` 会作为持久的暗色 notice 行呈现 —— 相比 CC 的仅用户可见消息存在降级：notice 行对模型可见（会进入会话历史），但其 plugin source 保证它们不会出现在用户行中、也不会重置 stop-block 计数器；空／纯空白消息会渲染 `(<point> hook message)` 回退标签。`{"continue": false}` 会通过 `agent.cancel({kind:'hook'})` 停止运行 —— 任何排队或 steering 输入都会被丢弃（在停止 notice 中注明）；在脱离 emit 点上（无运行中的轮次），停止只是记录日志的 no-op。不会应用 `suppressOutput` 和 `terminalSequence`；`stopReason` 仅出现在停止 notice 中。
 - **Handler 与配置只支持部分功能：** 运行 shell 形式 command handler，并运行 `http` handler（带 `allowedHttpHookUrls` + 拦截 header `allowedEnvVars`）。`prompt`／`agent` handler 仅在 `enablePromptHooks`／`enableAgentHooks` 开启时运行（否则跳过并警告）；未知 handler `type` 被跳过并警告。不遵循 `args`、`async`、`asyncRewake`、`shell`、`if`、`once` 和 `statusMessage` 等 command handler 选项；`prompt`／`agent` 的 `model` 覆盖经 `ccModelRoutes` alias 服务解析后映射到 fork 的 `agentOptions`（未写 `model` → 默认走 `resolve('haiku')` 低价车道；不可解析 → 继承父路由），每 hook `timeout` 不会应用到 fork。在 cc preset 中，本插件行位于 `cc-services` isolate group 内，fork 的模型解析才能看见 `ccModelRoutes`。匹配 handler 串行运行且不去重，而 Claude Code 会并行运行并对相同 handler 去重。一个进程级 `configPath` 会在加载时解析一次；尚未实现 Claude Code 的分层项目、用户、插件与策略发现和实时重新加载（`TODO(per-session-hook-config)`）。
 - **Hook 诊断：** `timeout`、`exit-code`、`parse-failure`、`spawn-failure`、`stop-cap`、`config` 等类别的 hook 问题会以 JSON 行追加到 `<dsh home>/hooks/diagnostics.jsonl`，写入诊断日志，但尚未在 `/doctor` 中呈现。该文件是尽力而为的共享日志：跨进程并发追加可能交错，所有文件系统错误都会被吞掉（诊断绝不破坏 hook 运行），读取方会跳过残缺／非法行，日志超过 256 KB 时会压缩并保留最新 100 条有效记录。
+- **为 `/doctor` 提供加载状态：** `apply` 会在插件自身 context 上提供 `hookBridgeStatus`（`src/status.ts`）：经 `path.resolve` 的配置路径、已解析事件及其 group 与 hook 数量、被跳过的行、已加载的 `command` 字符串（`/doctor` 在其中扫描 `serena-hooks` 等二进制）、两个 enable 开关，以及解析失败时的加载错误。

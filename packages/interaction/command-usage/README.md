@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Shared help-argument support for slash commands: every wrapped command answers a trailing `help`, `-h`, or `--help` argument with deterministic plain-text help rendered from its own metadata — no model turn, no coupling to the command runtime.
+Shared help-argument support for slash commands: a wrapped command answers `help`, `-h`, or `--help` given as its first argument with deterministic plain-text help rendered from its own metadata. Any other argument, including a help word in a later position, reaches the handler unchanged. No model turn, no coupling to the command runtime.
 
 ## Usage
 
@@ -17,8 +17,8 @@ const command = helpable({
 }, { subcommands, notes })
 ```
 
-- `isHelpRequest(rawInput)` — whether the trailing argument is a help request.
+- `isHelpRequest(rawInput)` — whether the first token of the raw input is a help request; tokens after the first are not inspected.
 - `formatCommandHelp(spec)` — render the canonical plain-text help layout.
-- `helpable(def, extras?)` — wrap a command definition; help requests return formatted help, everything else delegates untouched.
+- `helpable(def, extras?)` — wrap a command definition; a help request as the first argument returns formatted help, everything else delegates untouched.
 
 The original definition is never mutated.

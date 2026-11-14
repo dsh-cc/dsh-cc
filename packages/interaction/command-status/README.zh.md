@@ -8,7 +8,7 @@
 
 | 输入 | 结果 |
 |---|---|
-| `/status` | 显示当前 `provider/model`（来自最新 `request/header`）、生效的权限 preset（挂载了权限服务时）、会话 id 与工作目录。在当前组合中来源缺失的条目行会被省略，而不是显示为空。 |
+| `/status` | 显示当前 `provider/model`（来自最新 `request/header`）、生效的权限 preset（挂载了权限服务时）、会话 id 与工作目录。模型行与 preset 行在当前组合中来源缺失时会被省略。`Directory:` 行始终渲染：会话 header 没有 cwd 时回退到进程工作目录。 |
 
 模型行读取会话的持久 `request/header` 日志；preset 行在存在时读取 `ctx.permissionPresets`。两种来源都缺失的组合只会省略对应行。运行 `/status` 不消耗模型 token。
 

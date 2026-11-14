@@ -22,11 +22,9 @@
   标注者 A/B 文件与用户裁决合并为 `annotations/gold-annotations.json`，
   `recall` 打印检测器召回（人标可验证句中被检测到的比例），防止静默的
   低检测率虚增覆盖率。
-- `src/sampling.ts` — §8 的回执行抽样：dogfood 20%（min 5，向上取整），
-  验收后 5%；`K = 20` 期望原子事实（SAFE 惯例，arXiv 2403.18802——是
-  指标参数，绝不是抽样比例）；标签 `supported | partially | unsupported |
-  irrelevant`；`F1@K` 计算；评审通道预算表（数字为首次预算估计，由
-  dogfood 重新校准）。P2 不接评审模型调用（§4.4）——仅接口与 schema。
+- `src/annotation.ts`：标注通道的实现，由 `src/index.ts:1-8` 重新导出。
+  它覆盖金标集加载、使用冻结四族检测器的分句、合并为
+  `vwa-eval/gold-annotations@1` 的双标注合并，以及检测器召回。
 - `scripts/baseline.mjs` — P0(3) 覆盖率基线：对金标集跑抽取器，写入
   `baselines/<date>-P0-coverage-baseline.json`（各族检测命中数、含断言
   的文档数、候选覆盖率分母）。按 §8 在一周 dogfood 后重新校准。
@@ -45,6 +43,9 @@
 
 ## 测试
 
-`pnpm vitest run packages/evaluation/vwa-eval` — 选择器确定性与
-`--check` 往返、对活文件的 sha256、抽样数学（ceil/min 规则、预算钉住、
-手工 F1@K）、句子导出形状，以及 humanities scorer 指标（`tests/scorer.spec.ts`）。
+`pnpm vitest run packages/evaluation/vwa-eval` 覆盖两个测试套件。
+`tests/gold-set.spec.ts` 校验 30 条已排序的金标集条目、每个快照文件被钉定的
+sha256，以及 `--check` 不读取仓库实时文档。`tests/scorer.spec.ts` 覆盖冻结的
+humanities scorer 原语、含拆分/合并计分的 claim 指标、重大缺陷召回与 clean
+样本误报率、support macro-F1、确定性 bootstrap 置信区间，以及已提交的
+humanities manifest 往返。

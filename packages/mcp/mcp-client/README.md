@@ -53,6 +53,8 @@ The model sees `mcp__github__create_issue`, `mcp__web__search`, … — the same
 | `url` | http | yes | MCP server URL |
 | `headers` | http | no | Extra headers (e.g. auth tokens) |
 | `oauth` | http | no | OAuth flow options (see below) |
+| `oauth.clientName` | http | no | Stable OAuth client name; accepted but currently inert (it is never reported to the authorization server) |
+| `oauth.credentialPrefix` | http | no | Credential-reference prefix for stored OAuth state (default `MCP_OAUTH_<serverName>`); the provider derives `_TOKENS`, `_CLIENT`, `_VERIFIER`, and `_DISCOVERY` refs from it |
 | `toolCallTimeoutMs` | both | no | Timeout per `callTool` invocation (default 60000) |
 | `failOnStartupError` | both | no | Reject plugin activation when initial connection or tool synchronization fails (default `false`) |
 | `deferStartupConnect` | both | no | Return from activation before the initial connection and tool sync finish, connecting in the background (default `false`); has no effect with `failOnStartupError: true` |

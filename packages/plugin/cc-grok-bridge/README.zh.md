@@ -21,7 +21,7 @@ PreToolUse 钩子只对这一种命令形态自动放行。
 
 ### 共享 lane 库
 
-`scripts/lib/{lexer,argv,canonical}.mjs` 由仓库根的 `scripts/lib/bridge-lane/` **生成**（唯一的作者源，与另一桥共享）；`scripts/lib/lane.mjs` 是本插件自己的手写配置，也是唯一的 per-lane 输入。改生成文件会丢——请改作者源后运行 `node scripts/generate-bridge-lane-lib.mjs`。pre-commit 与 presubmit 的 `--check` 在副本漂移时失败。`home.mjs` **不共享**：两 lane 清理临时 home 的方式不同。
+`scripts/lib/{lexer,argv,canonical}.mjs` 由仓库根的 `scripts/lib/bridge-lane/` **生成**（唯一的作者源，与 `cc-codex-bridge` 共享）；`scripts/lib/lane.mjs` 是本插件自己的手写配置，也是唯一的 per-lane 输入。改生成文件会丢——请改作者源后运行 `node scripts/generate-bridge-lane-lib.mjs`。pre-commit 与 presubmit 的 `--check` 在副本漂移时失败。`home.mjs` **不共享**：两 lane 清理临时 home 的方式不同。
 
 ## 使用方法
 
