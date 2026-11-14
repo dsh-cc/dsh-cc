@@ -29,4 +29,4 @@ Load Claude Code's `.claude/agents/*.md` and `*.json` sub-agent definitions as d
 
 ## Design
 
-The loader is deliberately integration-free. It produces typed definitions and leaves consumption — a scoped tool restriction, a request rewrite, a permission selection — to the caller, so the model-facing parts stay reusable without dragging in the harness runtime. This mirrors `agent-presets`'s philosophy (that upstream package was retired at harness 0.1.7) of a self-contained vocabulary feeding an explicit consumer, rather than hiding a defaulting step inside the loader 〔src:ws:docs/plans/2026-09-29-harness-0.1.7-rc.2-migration.md#L97-L100〕.
+The loader is deliberately integration-free. It produces typed definitions and leaves consumption — a scoped tool restriction, a request rewrite, a permission selection — to the caller, so the model-facing parts stay reusable without dragging in the harness runtime. This mirrors `agent-presets`'s philosophy (that upstream package was retired at harness 0.1.7) of a self-contained vocabulary feeding an explicit consumer, rather than hiding a defaulting step inside the loader.

@@ -2,7 +2,7 @@
 
 English | [中文](README.md)
 
-**共享的 System One 客户端 + token 预算助手**：针对 System One 决策模型端点（`{baseURL}/v1/systemone`）的原生、绝不抛异常的传输客户端，内建有限次数的 HTTP 429 重试；外加基于脚本感知的 token 预算估算器，用于预截断通道负载。自 `@dsh-cc/permission-rules` 抽出（设计文档：`docs/plans/2026-10-09-moa-tiered-cascade-routing.md` §3.6），使任何接入 System One 通道的 harness 特性——今天是 permission-rules，接下来是 `@dsh-cc/moa`——共用同一实现〔src:ws:docs/plans/2026-10-09-moa-tiered-cascade-routing.md#L105-L107〕。纯模块：除 node 标准库外无运行时依赖。
+**共享的 System One 客户端 + token 预算助手**：针对 System One 决策模型端点（`{baseURL}/v1/systemone`）的原生、绝不抛异常的传输客户端，内建有限次数的 HTTP 429 重试；外加基于脚本感知的 token 预算估算器，用于预截断通道负载。自 `@dsh-cc/permission-rules` 抽出（设计文档：`docs/plans/2026-10-09-moa-tiered-cascade-routing.md` §3.6），使任何接入 System One 通道的 harness 特性——今天是 permission-rules，接下来是 `@dsh-cc/moa`——共用同一实现。纯模块：除 node 标准库外无运行时依赖。
 
 ## API
 
@@ -76,9 +76,9 @@ export interface SystemOneRetryClock
 ## 契约校验
 
 `systemoneDecide` 执行严格的双向契约（设计文档：
-`docs/plans/2026-11-02-systemone-01-contract-validation.md`）〔src:ws:docs/plans/2026-11-02-systemone-01-contract-validation.md#L1-L30〕。请求在任何网络
+`docs/plans/2026-11-02-systemone-01-contract-validation.md`）。请求在任何网络
 动作之前先做预检——问题 ID、选项数量、criteria 形状、JSON 可序列化的
-state（拒绝环、BigInt、非有限数及 undefined/函数/symbol 值）〔src:ws:docs/plans/2026-11-02-systemone-01-contract-validation.md#L83-L83〕。
+state（拒绝环、BigInt、非有限数及 undefined/函数/symbol 值）。
 model 与 timeout 边界同样预检，预检失败以 `malformed` 返回且 fetch 次数为零。响应必须
 精确回答所请求的问题集且类型匹配：choice 的 probabilities 键集与
 criteria 完全一致、每个值在 `[0,1]` 内有限、总和在 1 的 `选项数 * 1e-4`

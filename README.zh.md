@@ -2,9 +2,9 @@
 
 [English](README.md) | **简体中文**
 
-## 在 DeepSeek Harness 上使用编程与文档工作流 〔src:ws:AGENTS.md#L1-L6〕
+## 在 DeepSeek Harness 上使用编程与文档工作流
 
-`dsh-cc` 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加 Claude Code 风格的工作流 〔src:ws:AGENTS.md#L1-L6〕。模型、工具、权限和 agent 配置由你选择。
+`dsh-cc` 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 增加 Claude Code 风格的工作流。模型、工具、权限和 agent 配置由你选择。
 
 - 复用 `.claude/agents`、`SKILL.md`、`CLAUDE.md`、hooks、斜杠命令和已保存的会话。
 - 将模型别名映射到当前部署可用的 provider 和模型。
@@ -12,11 +12,11 @@
 - 使用 `context-crusher` 与 `context_retrieve` 进行可逆的工具输出压缩。
 - 通过可选的 `vwa-writing` skill 为文档增加证据检查。
 
-`dsh-cc` 是 DeepSeek Harness 的插件栈，不是 Claude Code，也不是 Claude Code 的封装 〔src:ws:docs/release.md#L12-L16〕。
+`dsh-cc` 是 DeepSeek Harness 的插件栈，不是 Claude Code，也不是 Claude Code 的封装。
 
 ## 快速开始
 
-安装 DeepSeek Harness 和启动器 〔src:ws:packages/launcher/tui/README.md#L5-L11〕。
+安装 DeepSeek Harness 和启动器。
 
 ```sh
 npm install -g @deepseek-ai/dsh @dsh-cc/cli
@@ -74,20 +74,20 @@ dsh web
 
 | dsh-cc 版本 | 已验证的 dsh |
 | --- | --- |
-| `main`（未发布，v0.9.5 之后） 〔src:ws:docs/dev.md#L168-L168〕 | 0.2.2-rc.1 |
-| v0.9.4 – v0.9.5 〔src:ws:docs/dev.md#L168-L168〕 | 0.2.2-rc.1 |
-| v0.9.3 | 〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md#L1-L5〕 0.2.1-rc.5 |
-| v0.8.3-rc 〔src:ws:docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md#L1-L5〕.1 – v0.9.3-rc 〔src:ws:docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md#L1-L5〕.4 | 〔src:ws:docs/plans/2026-09-30-harness-0.2.0-rc.2-migration.md#L1-L5〕 0.2.0-rc.2 |
-| v0.8.2 | 〔src:ws:docs/plans/2026-09-29-harness-0.1.7-rc.2-migration.md#L1-L5〕 0.1.7-rc.2 |
-| v0.6.3 – v0.8.1 | 〔src:ws:docs/plans/2026-09-12-harness-0.1.5-rc1-compatibility.md#L1-L5〕 0.1.5-rc.1 |
-| v0.6.0 – v0.6.2 | 〔src:ws:docs/plans/2026-09-08-harness-0.1.2-rc1-compat.md#L1-L5〕 0.1.2-rc.1 |
-| v0.5.0 | 〔src:ws:docs/release.md#L156-L156〕 0.1.1-rc.2 (启动器未设置版本门禁) |
+| `main`（未发布，v0.9.5 之后） | 0.2.2-rc.1 |
+| v0.9.4 – v0.9.5 | 0.2.2-rc.1 |
+| v0.9.3 | 0.2.1-rc.5 |
+| v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
+| v0.8.2 | 0.1.7-rc.2 |
+| v0.6.3 – v0.8.1 | 0.1.5-rc.1 |
+| v0.6.0 – v0.6.2 | 0.1.2-rc.1 |
+| v0.5.0 | 0.1.1-rc.2 (启动器未设置版本门禁) |
 
 没有最高版本限制，但更高版本的 dsh 可能尚未验证。当 dsh-cc 提高最低要求时，请先升级 dsh。
 
 这两个包独立发布，各自的 `@latest` 不一定构成已验证的版本组合。
 
-0.2.1 线写入的会话会记录 job 与工作目录事件，低于 0.2.1 的读取端会拒绝打开；因此使用该版本后降级 dsh，这些会话无法恢复 〔src:ws:docs/plans/2026-10-30-harness-0.2.1-rc.5-migration.md#L68-L68〕。降级前请先完成或导出需要的会话。
+0.2.1 线写入的会话会记录 job 与工作目录事件，低于 0.2.1 的读取端会拒绝打开；因此使用该版本后降级 dsh，这些会话无法恢复。降级前请先完成或导出需要的会话。
 
 维护者：请保持本表与 `.github/workflows/presubmit.yml` 的 `DSH_HARNESS_REF`、`packages/launcher/tui/bootstrap.mjs` 的 `MIN_DSH_VERSION` 一致。
 
@@ -105,8 +105,8 @@ dsh web
   - 三个公开 skill 支持中文和英文文章，覆盖三类文体。
   - 一次运行会在磁盘上保留 brief、plan、各阶段评审和保留性检查。
 - **`dsh-cc-shunt`** 将批量读取和重复代码生成交给 worker 子代理。配置 `haiku` 可降低模型成本。
-- **`cc-codex-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Codex 命令 〔src:ws:packages/plugin/cc-codex-bridge/README.md#L1-L5〕。
-- **`cc-grok-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Grok 命令 〔src:ws:packages/plugin/cc-grok-bridge/README.md#L1-L5〕。
+- **`cc-codex-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Codex 命令。
+- **`cc-grok-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Grok 命令。
 
 子代理使用完整作用域名称，例如 `dsh-cc-agents:critic`。桥接 hook 不会为每次符合规定的命令调用请求审批。
 
@@ -202,7 +202,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | 按任务选择模型 | 已配置的 provider/model 别名 |
 | 分解大型任务 | 子代理、后台任务和已保存会话 |
 | 控制变更 | 权限、审批规则、worktree 和工作区边界 |
-| 按需发现工具 | ToolSearch 和 MCP 发现 〔src:ws:packages/core/tool-search/README.md#L1-L5〕 |
+| 按需发现工具 | ToolSearch 和 MCP 发现 |
 | 切换交互界面 | 终端和 Web profile |
 | 审查文档证据 | 可选的 VWA 运行时与 vwa-writing skill |
 
@@ -210,7 +210,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 
 ## 适用用户
 
-- 使用 DeepSeek Harness 编程的开发者 〔src:ws:AGENTS.md#L1-L6〕。
+- 使用 DeepSeek Harness 编程的开发者。
 - 复用 `.claude/` agents、skills、hooks 和项目记忆的团队。
 - 按任务选择不同模型的用户。
 - 扩展 agent 运行时的插件作者。
@@ -236,7 +236,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 | Workspace | 0 | 4 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
-Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days) 〔src:ws:docs/cc-parity-matrix.md#L1-L8〕.
+Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->
@@ -266,7 +266,7 @@ skill provider 会发现项目和已安装技能目录中的 `SKILL.md`，可用
 
 ### MCP
 
-MCP 客户端提供工具、资源、提示词和 OAuth 2.1 认证 〔src:ws:packages/mcp/mcp-client/README.md#L1-L6〕。用 `/mcp` 查看和管理连接。
+MCP 客户端提供工具、资源、提示词和 OAuth 2.1 认证。用 `/mcp` 查看和管理连接。
 
 #### 可选的 Serena 代码智能
 
@@ -345,7 +345,7 @@ TUI 还提供任务列表、审批、排队提示词、会话导出、用量显�
 
 ### 配置 provider
 
-用 `/provider list` 查看路由，用 `/provider add <preset-id>` 添加 Moonshot、Z.AI/智谱、DeepSeek 或自定义端点 〔src:ws:packages/ui/tui/README.md#L42-L42〕。
+用 `/provider list` 查看路由，用 `/provider add <preset-id>` 添加 Moonshot、Z.AI/智谱、DeepSeek 或自定义端点。
 
 provider 面板可更换密钥、刷新模型列表、选择默认值和移除路由。
 
@@ -389,7 +389,7 @@ inherit             -> parent agent route
 
 ## 产品边界
 
-Claude Code 是独立产品；dsh-cc 将类似工作流加入 DeepSeek Harness 运行时 〔src:ws:docs/release.md#L12-L16〕。
+Claude Code 是独立产品；dsh-cc 将类似工作流加入 DeepSeek Harness 运行时。
 
 模型路由器负责切换模型路由，本插件栈还增加 UI、命令、工具、记忆、子代理、hooks、权限、会话和 worktree。
 
@@ -525,7 +525,7 @@ dsh web
 
 开发同步后，`dsh-cc --version` 显示 `-dev+<commit>[.dirty]`；通过 npm 更新启动器会将 profile 恢复到已发布 bundles。
 
-交付前运行生产启动检查。它使用临时 DSH_HOME 和伪终端，不调用模型 〔src:ws:docs/dev.md#L17-L23〕。
+交付前运行生产启动检查。它使用临时 DSH_HOME 和伪终端，不调用模型。
 
 ```sh
 pnpm smoke:profile-boot

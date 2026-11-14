@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The **shared System One client + token-budget helpers**: a native, never-throws transport client for the System One decision-model endpoint (`{baseURL}/v1/systemone`) with bounded HTTP 429 retry, plus a script-aware token-budget estimator used to pre-truncate lane payloads. Extracted from `@dsh-cc/permission-rules` (design: `docs/plans/2026-10-09-moa-tiered-cascade-routing.md` §3.6) so any harness feature that wires a System One lane — permission-rules today, `@dsh-cc/moa` next — consumes one implementation〔src:ws:docs/plans/2026-10-09-moa-tiered-cascade-routing.md#L105-L107〕. Pure modules: no runtime dependencies beyond node stdlib.
+The **shared System One client + token-budget helpers**: a native, never-throws transport client for the System One decision-model endpoint (`{baseURL}/v1/systemone`) with bounded HTTP 429 retry, plus a script-aware token-budget estimator used to pre-truncate lane payloads. Extracted from `@dsh-cc/permission-rules` (design: `docs/plans/2026-10-09-moa-tiered-cascade-routing.md` §3.6) so any harness feature that wires a System One lane — permission-rules today, `@dsh-cc/moa` next — consumes one implementation. Pure modules: no runtime dependencies beyond node stdlib.
 
 ## API
 
@@ -76,9 +76,9 @@ export interface SystemOneRetryClock
 ## Contract validation
 
 `systemoneDecide` enforces a strict two-sided contract (design:
-`docs/plans/2026-11-02-systemone-01-contract-validation.md`) 〔src:ws:docs/plans/2026-11-02-systemone-01-contract-validation.md#L1-L30〕. Requests are
+`docs/plans/2026-11-02-systemone-01-contract-validation.md`). Requests are
 pre-checked before any network work — question IDs, option counts, criteria
-shapes, JSON-serializable state (cycles, BigInt, non-finite numbers and undefined/function/symbol values are rejected) 〔src:ws:docs/plans/2026-11-02-systemone-01-contract-validation.md#L83-L83〕.
+shapes, JSON-serializable state (cycles, BigInt, non-finite numbers and undefined/function/symbol values are rejected).
 Model and timeout bounds are checked too, and a failed pre-check returns
 `malformed` with zero fetch calls. Responses
 must answer exactly the requested question set with type-matching answers:
