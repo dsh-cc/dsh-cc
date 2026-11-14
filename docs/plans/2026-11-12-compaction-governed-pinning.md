@@ -1,7 +1,7 @@
 # Compaction Governed-Message Pinning
 
 - Date: 2026-11-12
-- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim) — **Implemented** (package `packages/compaction/compaction-pinning`, model acceptance in `specs/tla/compaction-pin-restore/implementation.md`; implementation fold: rule (b) is commit-gated per the verified model, see §Detect)
+- Status: Design — accepted (four three-seat blind-review rounds converged; final: all seats CONFIRMED, one prescribed clause folded verbatim) — **Implemented** (PR #408, merged 2026-11-13; package `packages/compaction/compaction-pinning`, model acceptance in `specs/tla/compaction-pin-restore/implementation.md`; implementation fold: rule (b) is commit-gated per the verified model, see §Detect)
 
 r3 → r4 fold: the stale "summary fires only on success" anchor sentence deleted and replaced by the summary-then-commit ordering with the end-error cancellation contract (the exact premise the belt rejects).
 - Program: context-engineering input governance (doc 2 of 8)

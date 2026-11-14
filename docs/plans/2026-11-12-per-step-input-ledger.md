@@ -1,7 +1,7 @@
 # Per-step Input Ledger
 
 - Date: 2026-11-12
-- Status: Implemented — PR #409 (open, pending merge). Design accepted after four three-seat blind-review rounds; formal-design not-needed (pure observer).
+- Status: Implemented — PR #409 (merged 2026-11-13). Design accepted after four three-seat blind-review rounds; formal-design not-needed (pure observer).
 - Program: context-engineering input governance (doc 3 of 8)
 - Depends on: nothing (substrate). Docs 1 and 7 define *their* row payload shapes here by reference (single schema source, per review finding).
 - Literature basis: Four-condition evidence-utilization protocol; interaction-budget auditing of context compression (arxiv 2608.16370); "Context Is a Pipeline" (2610.36114).

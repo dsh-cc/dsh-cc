@@ -1,8 +1,8 @@
 # Memory section: one unified, maintained-order topic catalog
 
 - Date: 2026-11-13
-- Status: Design v2 — r1 three-lane review folded (critic GO-WITH-CHANGES, grok NO-GO, codex NO-GO); pending r2 delta
-  confirmation.
+- Status: Implemented — PR #415 (merged 2026-11-13); design v3b (r1 three-lane review folded, then the r2 and
+  r2→v3b delta rounds folded — see the fold ledger below).
 - Supersedes (partially): `docs/plans/2026-11-12-selective-system-prompt-sections.md` §A. That doc capped the derived
   index and kept the per-layer `MEMORY.md` fragments. This doc removes the fragments and merges both views into one
   budgeted catalog. §B (subagent catalog) is untouched. That landed doc is deliberately left byte-unmodified by this

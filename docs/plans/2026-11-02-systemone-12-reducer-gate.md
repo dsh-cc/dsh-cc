@@ -1,6 +1,6 @@
 # S1-12: Filter out reducer calls that are clearly not worth attempting, before receipt generation
 
-**Status: implemented (PR pending). Priority: P3.** The SystemOne decision model only decides whether to attempt generation; receipt validity remains decided by the deterministic verifier 〔src:ws:specs/tla/decision-gate-coalescing/implementation.md#L9-L14〕.
+**Status: implemented — PR #407 (merged 2026-11-13). Priority: P3.** The SystemOne decision model only decides whether to attempt generation; receipt validity remains decided by the deterministic verifier 〔src:ws:specs/tla/decision-gate-coalescing/implementation.md#L9-L14〕.
 **Source baseline:** `31fb29eb77148e92ca8da365adcbf4994622a31d`.
 **Dependencies:** `2026-11-02-systemone-00-overview.md`, `2026-11-02-systemone-01-contract-validation.md`, `2026-11-02-systemone-02-decision-runtime-metering.md`. This feature does not depend on the summary gate and can be rolled back independently.
 
