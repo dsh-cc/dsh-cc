@@ -8,7 +8,7 @@ Codex 有意重新实现了 Claude Code hook 协议的一个*子集*，包括相
 
 ## 共享内容（此处）与各方言内容（桥接）
 
-| 关注点 | 此处（`dsh-hook-protocol`） | 桥接（`dsh-hooks-claude-code` / `-codex`） |
+| 关注点 | 此处（`@dsh-cc/hook-protocol`） | 桥接（`@dsh-cc/hooks-claude-code` / `-codex`） |
 |---|---|---|
 | Matcher 校验与匹配判断 | `matcherDiagnostic(pattern, mode)` 用于解析时诊断；`matchesMatcher(pattern, query, mode)` 用于隔离的运行时匹配 | 选择自身的 `mode`（`claude` = 字面量或正则，`codex` = 始终使用正则），并拒绝带有诊断的配置组 |
 | 运行 hook | `runHook(bash, hook, opts, now)`：通过 `ctx.shell` 提供 stdin payload + env，再解码 | 构造每个事件的 stdin **payload** + 该方言的 **env** |
@@ -16,6 +16,8 @@ Codex 有意重新实现了 Claude Code hook 协议的一个*子集*，包括相
 | 合并 N 个 hook | `mergeHookOutputs(outputs)` → 最严格的 `MergedHookOutcome` | （无） |
 | 持久记录 | `appendHookInvoked` / `appendHookResult`（`hook/*` 会话事件；结果的 `decision`／`stderrSummary` 从此处的 `HookOutput` 派生） | 在每次调用前后调用它们 |
 | 脱离运行的完全停稳 | `createDetachedRuns()`：跟踪触发后不等待的运行链；`drain()` 先 abort，再等待它们 | 将 `signal` 传给每个脱离的 `runHook`，并将 `drain` 注册为 effect disposer |
+| Hook 问题诊断 | `hookDiagnosticsWriter(path)` / `readHookDiagnostics(path)`（`src/diagnostics.ts`）：JSONL 形式的 `HookIssue` 日志，跳过残缺行，超过 256 KB 时压缩 | 记录它观测到的问题；`/doctor` 读回该文件 |
+| 参考默认超时 | `DEFAULT_HOOK_TIMEOUT_MS`（command hook）与 `DEFAULT_HTTP_HOOK_TIMEOUT_MS`（`src/http.ts`），均为 10 分钟；hook 的 `timeoutSec` 可覆盖 | 拥有自身可配置的 `defaultTimeoutMs`，默认取该库的值 |
 
 ## 原语
 

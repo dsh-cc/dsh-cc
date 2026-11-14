@@ -64,7 +64,7 @@ for (const config of registrations) {
 
 每个通过的服务转换为一个 `@dsh-cc/mcp-client` `Config`：
 
-- 服务**名**成为 `serverName`，即模型可见工具名的公共命名空间（`mcp__<serverName>__*`）。
+- 服务**名**成为 `serverName`，即模型可见工具名的公共命名空间（`mcp__<serverName>__*`）。该名称会规范化为 mcp-client 的工具前缀约定 `[A-Za-z0-9_-]{1,32}`：其他字符的连续片段折叠为 `-`，首尾 `-` 被去除，结果截断到 32 个字符，完全不含合法字符的名称变为 `-`。策略钩子仍然看到原始名称。
 - 基于 `command` 的定义映射为 `stdio` 传输。
 - `http` / `streamable-http` 定义映射为 `streamable-http` 传输。
 - `sse` 定义映射为 `sse` 传输。
@@ -100,4 +100,9 @@ for (const config of registrations) {
 - `normalizeServerEntry(entry)` —— 单个原始条目 → 其传输部分（`McpTransport`：仅传输字段，不含 `serverName`，不展开环境变量），校验必填字段；`serverName` 稍后由 `buildRegistrations` 添加。
 - `applyEnv(config, env?)` —— 在一个规范化配置中展开 `${...}` 替换。
 - `expandEnv(value, env)` —— 展开单个字符串的替换。
-- `buildRegistrations(body, { env?, policy? })` —— 到 mcp-client 注册项的完整流水线。
+- `normalizeServerName(name)` 将 Claude Code 服务名折叠为 mcp-client 的 `[A-Za-z0-9_-]{1,32}` 工具前缀约定：非法字符的连续片段变为 `-`，首尾 `-` 被去除，结果截断到 32 个字符，完全不含合法字符的名称变为 `-`。
+- `resolveDefaultMcpPaths({ env?, cwd?, home? })` 将默认配置路径分为 dsh 原生、Claude Code 与迁移目标三类。三个输入全部给出时它是纯函数。
+- `readMcpServerNames(path)` 返回单个配置文件中声明的原始服务名，且从不抛错：`{ kind: 'absent' }`、`{ kind: 'invalid', error }` 或 `{ kind: 'ok', names }`。
+- `claudeOnlyServers(paths)` 按 Claude Code 文件报告未被任何 dsh 原生文件声明的服务名。
+- `migrateMcpServers({ sources, target })` 是本包唯一的文件写入面。它把原始服务条目以原子写入复制进目标文件，目标中已有的名称优先，仅在覆盖已有目标时生成 `.bak` 备份。
+- `buildRegistrations(body, { env?, policy?, deferStartupConnect? })` 运行到 mcp-client 注册项的完整流水线。`deferStartupConnect: true` 时，产出的配置同时设置 `failOnStartupError: false`，使两个标志不会互相矛盾。

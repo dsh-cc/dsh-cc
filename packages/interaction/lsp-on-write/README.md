@@ -25,4 +25,4 @@ Key `cc-lsp-on-write` in the **user-layer** `settings.json` (the harness-home fi
 
 ## Shape
 
-Plain cordis plugin (no Service, no isolate key). Mounted by `packages/preset/cc` in the cc-services group, right after edit-recovery-hint. Fail-soft: every fault degrades to a passthrough — the user's tool result is never turned into an error.
+Plain cordis plugin (no Service, no isolate key). Mounted by `packages/preset/cc` in the cc-services group, right after post-edit-verify. Fail-soft: every fault degrades to a passthrough — the user's tool result is never turned into an error.

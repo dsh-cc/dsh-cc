@@ -29,7 +29,7 @@ The grand total is a single exact figure only when every bucket is priced, no re
 
 All prices live in the plugin `Config` in your `cordis.yml`; nothing is hardcoded in the plugin. Prices are USD per one million tokens. Columns match in three tiers: an exact model id first (first row wins), then a `/`-suffix match for route-prefixed runtime ids (longest row wins; equal length → first row), then a `'*'` wildcard column.
 
-The CC preset (`@dsh-cc/preset-cc`) ships a starter table of official published list prices for common DeepSeek, GLM, and Kimi models, collected from the vendor pricing pages (see the `command-cost` row in its `agent.cordis.yml` for the collection date and sources). Deployment billing often differs from list prices — override the whole `modelTable` when yours does. The starter table deliberately carries no `'*'` wildcard column: unmatched models report usage with a "no price configured" marker instead of a misleading zero cost.
+The CC preset (`@dsh-cc/preset-cc`) ships a starter table of official published list prices for common DeepSeek, GLM, and Kimi models, collected from the vendor pricing pages (see the `command-cost` row in `packages/preset/cc/agent.shared.cordis.yml` for the collection date and sources). Deployment billing often differs from list prices — override the whole `modelTable` when yours does. The starter table deliberately carries no `'*'` wildcard column: unmatched models report usage with a "no price configured" marker instead of a misleading zero cost.
 
 The prices below are illustrative values, not a current vendor quote. Replace them with the prices for your deployment.
 

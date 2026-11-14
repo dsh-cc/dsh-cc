@@ -68,7 +68,8 @@ unset (inherit) is fail-closed — the block is stripped.
 
 - `toolFilter` = the definition's `toolRestriction` (allow/deny), **sanitized** of tool
      names this composition no longer registers;
-   - `maxDepth` = 3 (matches the harness default; configurable).
+   - `maxDepth` = 3 (hardcoded as `DEFAULT_MAX_DEPTH`, matching the harness
+     default; the plugin config exposes only `resumePins`, so it is not configurable).
 4. **Any other type containing no colon** (not found in the workspace) → an **error
    result** listing the available types in this workspace (or noting the workspace
    defines none) — with a colon-aware hint when the type contains `:`.
@@ -286,30 +287,40 @@ supplies the alias resolver. The cc preset **disables** the harness `tool-subage
 
 ## API
 
+The subpaths in the `exports` map are the package root (`.`), `./registry`,
+`./tool`, `./catalog` and `./src/*`; modules the root entry does not re-export
+are imported through `./src/*`.
+
 - `apply(ctx)` — cordis plugin entry (plugin id `cc-subagent-task`); safe when either the
   tools or the system-prompt seam is absent.
 - `AgentRegistry` (`./registry`) — per-workspace definition cache (`ensure` / `list` /
   `resolve`), lazily loading `loadClaudeCodeAgents(root)` (user layer + project layer,
   project shadows user).
 - `registerTaskTool` / `TASK_TOOL` (`./tool`) — register the `subagent_fork` Task tool.
-- `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL` (`./release-agent`) — register the
-  `release_agent` release-valve tool (dropped-return mount, F16 precedent).
+- `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL`
+  (`@dsh-cc/subagent-task/src/release-agent.ts`) — register the `release_agent`
+  release-valve tool (dropped-return mount, F16 precedent).
 - `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER` (`./catalog`) —
   mount the `Available subagents` section; also registers the `cc-subagent-catalog`
   settings namespace.
 - `renderCatalog` (`./catalog`) — the pure catalog renderer, `renderCatalog(defs, settings?)`;
   the settings argument defaults to `DEFAULT_SUBAGENT_CATALOG_SETTINGS`.
 - `registerSubagentCatalogSettings` / `SUBAGENT_CATALOG_NAMESPACE` /
-  `DEFAULT_SUBAGENT_CATALOG_SETTINGS` (`./catalog-settings`) — the `cc-subagent-catalog`
-  namespace (live reader; design defaults without a settings provider).
-- `renderCatalogBudgeted` / `truncateToBytes` (`./catalog-budget`) — the pure UTF-8 byte
-  budgeting core (import-free at runtime).
+  `DEFAULT_SUBAGENT_CATALOG_SETTINGS`
+  (`@dsh-cc/subagent-task/src/catalog-settings.ts`, also re-exported by the root entry) —
+  the `cc-subagent-catalog` namespace (live reader; design defaults without a settings
+  provider).
+- `renderCatalogBudgeted` / `truncateToBytes`
+  (`@dsh-cc/subagent-task/src/catalog-budget.ts`) — the pure UTF-8 byte budgeting core
+  (import-free at runtime).
 - `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`
-  (`./strip-instructions`) — mount (or classify for) the pre-step strip of the harness
-  `agent-instructions` workspace baseline on delegated Task children.
+  (`@dsh-cc/subagent-task/src/strip-instructions.ts`, also re-exported by the root entry) —
+  mount (or classify for) the pre-step strip of the harness `agent-instructions`
+  workspace baseline on delegated Task children.
 - `dispatchWorktreeIsolation` / `mountWorktreeIsolation` / `SubagentWorktreeRegistry`
-  (`./worktree-isolation`) — the `isolation: worktree` create/adopt/settle/lock lifecycle
-  (git command construction lives in `@dsh-cc/tool-git-worktree`; never re-implemented).
+  (`@dsh-cc/subagent-task/src/worktree-isolation.ts`) — the `isolation: worktree`
+  create/adopt/settle/lock lifecycle (git command construction lives in
+  `@dsh-cc/tool-git-worktree`; never re-implemented).
 
 ## Non-goals
 

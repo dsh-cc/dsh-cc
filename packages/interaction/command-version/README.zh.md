@@ -10,7 +10,7 @@
 |---|---|
 | `/version` | 打印 `@dsh-cc/plugins <版本>`，并在宿主暴露时附加 `harness <版本>` 行。无需网络。 |
 
-内置版本在调用时读取本包 `package.json`（带编译期兜底），因此确定且离线安全。harness 行仅在存在兼容的宿主值时出现。
+内置版本在运行时由 `@dsh-cc/version-info` 的 `readOwnVersion` 读取。该辅助函数读取 version-info 自身的 `package.json`，其中承载各发布包共用的发布列车版本，并在清单缺失或不可读时返回编译期兜底常量。该读取确定且离线安全。harness 行仅在存在兼容的宿主值时出现。
 
 ## 组合
 
@@ -22,6 +22,8 @@
 - id: command-version
   name: '@dsh-cc/command-version'
 ```
+
+版本读取委托给 `@dsh-cc/version-info` 依赖完成；本包不读取任何自身的清单文件。
 
 ## 模型体验
 

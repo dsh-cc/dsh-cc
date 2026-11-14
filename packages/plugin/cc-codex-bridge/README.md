@@ -2,7 +2,7 @@
 
 Official dsh-cc plugin: an **approval-free Codex rescue lane**. Installing it lets a
 dsh-cc session run exactly one canonical, locked-down Codex rescue invocation —
-`node <launcher> [--last] <prompt>` — with no human permission checkpoint, by
+`node <launcher> [--last] -- <prompt>` — with no human permission checkpoint, by
 auto-allowing that single command form through a PreToolUse hook.
 
 The core trade is **state relocation, not sandbox widening**: Codex runs with its

@@ -3,6 +3,9 @@
 English | [中文](README.zh.md)
 
 Optional `dsh-cc` bin. Canonical command is still `dsh --profile tui`.
+`dsh-cc --version` (or `-V`) prints the version label and exits: the
+launcher's semver for a release install, `<base>-dev+<commit>[.dirty]` for a
+dev-synced profile.
 
 First run bootstraps `$DSH_HOME/profiles/tui` with the three CC bundles.
 The launcher is a thin flag translator: it derives the session-mode env the
@@ -20,6 +23,14 @@ auto-resume — the TUI resumes the project's last session. `--resume` /
 `DSH_CC_WORKTREE`, and the TUI offers to keep or remove the worktree at
 `/quit`. Requires a git repository with at least one commit.
 
+The value may also be a PR or MR reference (`#<n>`, a GitHub PR URL, or a
+GitLab MR URL): the launcher fetches `pull/<n>/head` on github.com,
+`merge-requests/<n>/head` on gitlab.com, and both on an unknown host, then
+creates the worktree at `.claude/worktrees/pr-<n>` on branch
+`worktree-pr-<n>` from the fetched head. Repository-local filter drivers are
+neutralized on creation, so LFS content arrives as pointer files and a
+`git lfs pull` in the new tree restores it (`bootstrap.mjs:305-330,365-370`).
+
 Every launch also runs a boot-time sweep (never network I/O, 10s cap,
 fail-silent): worktrees under `.claude/worktrees/` on `worktree-*` branches
 older than `worktree.cleanupPeriodDays` (default 30, from the `worktree`
@@ -33,6 +44,12 @@ hard-reset to that base when it is clean and all its own commits are
 already merged into it. Created and reused worktrees are locked with
 `git worktree lock --reason="dsh-cc session <slug>"` for the session's
 duration.
+
+Before the session starts the launcher also converges the profile: a
+dev-synced profile paired with a different launcher version is restored to
+store bundles, an existing store profile is healed to the current version,
+and the bootstrap path stops with a message when `dsh --version` is below
+the required minimum (`bootstrap.mjs:708-930`, `bin/dsh-cc.js:110-152`).
 
 ## Resume environment contract
 
@@ -59,6 +76,10 @@ entry (a parent dsh-cc TUI leaks them to a child launcher) and re-derives
 them only from the current invocation's argv. Do not set them manually when
 launching `dsh-cc`.
 
+`DSH_CC_PROFILE` names the profile the launcher spawned (`tui`, or `cc-acp`
+on the ACP lane) so the plugin can surface it as `ctx.get('dshProfile')`
+(`bin/dsh-cc.js:82,385`).
+
 ### Mixed-version degradation
 
 Because the launcher npm package and the `tui` profile plugin version are
@@ -74,3 +95,14 @@ without reinstalling the profile:
   keeps working.
 
 This package does **not** ship a `dsh-tui` binary.
+
+## `dsh-cc acp`
+
+`dsh-cc acp [...]` starts the Agent Client Protocol lane. The bin intercepts
+it before any TUI processing (`bin/dsh-cc.js:37-99`), bootstraps the separate
+`cc-acp` profile from the ACP floor bundles (`bootstrap.mjs:18-32`; the
+installed `@deepseek-ai/dsh-acp-app` is pinned at `0.2.1-rc.5`), then spawns
+`dsh --profile cc-acp` with the remaining arguments. Stdout belongs to the
+ACP NDJSON protocol, so bootstrap and install output goes to stderr, stdin is
+never consumed, and the child inherits stdio. No TUI flag processing runs on
+this path, so `--worktree` and the resume flags pass through untouched.

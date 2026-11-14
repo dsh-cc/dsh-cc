@@ -34,7 +34,7 @@ ctx.toolSearch.registerDeferred({
 
 ## 语义工具发现（S1-05）
 
-词法排序看不见与工具元数据不共享任何字面词元的查询——中文问题对上英文元数据，或同一个请求换一种说法。可选的发现层在既有激活路径前加一次独立的相关性判断：每个已准入的延迟候选都通过 System One 决策运行时针对查询打分（该运行时即 `decision-usage` 插件提供的可选 `ctx.systemoneDecisions` 服务），只有相关性判断**与**直接匹配度都越过阈值的候选才会成为激活项。工具名、schema 与返回消息仍由确定性代码产生；模型只回答"这个候选是否相关"，每个候选一对问题，因此一个候选的元数据不会污染另一个的判断。
+词法排序看不见与工具元数据不共享任何字面词元的查询——中文问题对上英文元数据，或同一个请求换一种说法。可选的发现层在既有激活路径前加一次独立的相关性判断：每个已准入的延迟候选都通过 System One 决策运行时针对查询打分（该运行时即 `decision-usage` 插件提供的可选 `ctx.systemoneDecisions` 服务，或在决策组之外挂载时由 `@dsh-cc/decision-usage` 发布的 root realm 桥 `ccSystemoneDecisions`），只有相关性判断**与**直接匹配度都越过阈值的候选才会成为激活项。工具名、schema 与返回消息仍由确定性代码产生；模型只回答"这个候选是否相关"，每个候选一对问题，因此一个候选的元数据不会污染另一个的判断。
 
 该层**默认关闭**，且绝不会自行改写词法路径：
 
@@ -77,6 +77,8 @@ ctx.toolSearch.registerDeferred({
 **语料 schema v2**（`scripts/lib/eval-corpus.mjs`）：`{ schemaVersion: 2, corpusVersion, description?, cases[] }`。`corpusVersion` 是整数，用例一变就递增，每份报告都会带上它。每个用例带一个 `class`——即门控维度，取值为 `direct-fit`、`lexical-trap`（词法重叠/错误服务陷阱）、`multi-intent`、`negative-only`（`expectedNames: []`）、`keyword-stuffing`（元数据关键词堆砌）——外加可选的 `alsoClasses` 声明多标签归属；正是靠它在不做排他划分的前提下也能达到每类 ≥ 12 条归属。既有的 `subset: chinese|synonym|none|restricted` 过滤及其下限保留。查询不得等于某个候选的 `name`：精确名字查询会在判断器被调用之前短路，这种用例根本量不出判断质量。
 
 **划分。** `--split tune|held-out|full`（默认 `tune`）。按用例 id 的哈希排序把语料切成 2/3 tune、1/3 held-out；只有 `tune` 会被门控，`held-out` 留给一次性的翻转评估，`full` 用于检视。
+
+**语料。** `--corpus <path>` 让评估器改用另一个本地语料文件；默认值为 `packages/core/tool-search/tests/fixtures/discovery-corpus.json`，文件不可读时以状态码 2 失败退出。
 
 两种运行方式：
 

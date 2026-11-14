@@ -28,7 +28,7 @@ temp areas only.
 
 `scripts/lib/{lexer,argv,canonical}.mjs` are **generated** from
 `scripts/lib/bridge-lane/` at the repository root (the single authored source,
-shared with `cc-grok-bridge`); `scripts/lib/lane.mjs` is this plugin's own
+shared with `cc-codex-bridge`); `scripts/lib/lane.mjs` is this plugin's own
 hand-written config and the only per-lane input. Editing a generated file loses —
 edit the source and run `node scripts/generate-bridge-lane-lib.mjs`.
 `check` in pre-commit and presubmit fails when a copy drifts. `home.mjs` is

@@ -2,13 +2,15 @@
 
 English | [中文](README.zh.md)
 
-The replay-safe model-free microcompaction service (`ctx.microcompactor`). It keeps the most recent `retainResults` `tool/result` surface nodes verbatim and replaces every older one with a deterministic placeholder that re-embeds the original's spill locator when one was cited — no model call, no summarization.
+The replay-safe model-free microcompaction service (`ctx.microcompactor`). It keeps the most recent `retainResults` `tool/result` surface nodes verbatim and replaces every older one with a deterministic placeholder that re-embeds the original's spill locator when one was cited. The pass makes no model call and never summarizes; the one content it can substitute is a tool-use-summary digest another package recorded earlier for the same tool call.
 
 This is a concrete companion to [`dsh-compaction-basic`](../compaction-basic-cc/README.md), not a compaction backend. It composes ahead of summarization so the summarizer reads an already window-reduced surface. Both packages remain independently composable.
 
 ## Service API
 
-`microcompactSession(session)` scans one stable snapshot of the current surface. The most recent `retainResults` tool results are kept verbatim; each older result that is not already a placeholder is replaced by one newly appended `tool/result` carrying `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`. The replacement spreads the complete original data and changes only `content`, preserving `turn`, `step`, `callId`, error fields, `meta`, and later data additions. The original event remains available for persistence, replay, and exact-log inspection.
+`microcompactSession(session, tus?)` scans one stable snapshot of the current surface. `tus` is an optional `ReadonlyMap<ToolCallId, SummaryRow>` of tool-use-summary rows for this session; the auto pass loads it from the TUS ledger. The most recent `retainResults` tool results are kept verbatim; each older result that is not already a placeholder is replaced by one newly appended `tool/result` carrying `{ surfaceOp: { op: 'replace', start: originalSeq, end: originalSeq }, sourceEventSeqs: [originalSeq] }`. The replacement spreads the complete original data and changes only `content`, preserving `turn`, `step`, `callId`, error fields, `meta`, and later data additions. The original event remains available for persistence, replay, and exact-log inspection.
+
+The TUS upgrade path applies when a row with `status: 'ok'` and a summary exists for the node's `callId` and the `cc-tool-use-summary.upgradeMicroPlaceholders` setting is on: the placeholder then carries the framed digest instead of the generated text (the spill locator still follows it). Without a row the legacy placeholder is emitted bit for bit. A node whose body is already a context-crusher stub is never substituted, because its `context_retrieve` locator must survive. The peer dependency `@dsh-cc/tool-use-summary` supplies the row type, the digest framing, and the settings reader.
 
 Each replacement is immediately preceded by a `compaction/prune` shadow-price event pricing the shadowed node through the injected token meter, and followed by a `compaction/microcompact` decision record naming the shadowed `originalSeq`, the `replacementSeq`, the shared `callId`, and any re-embedded `spillLocator`. Together these keep the decision reconstructable from the log.
 

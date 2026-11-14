@@ -8,7 +8,7 @@ Human-facing `/status` command: a session status summary showing the current mod
 
 | Input | Result |
 |---|---|
-| `/status` | Show the current `provider/model` (from the latest `request/header`), the effective permission preset (when the permission service is mounted), the session id, and the working directory. Lines whose source is absent in the current composition are omitted rather than shown empty. |
+| `/status` | Show the current `provider/model` (from the latest `request/header`), the effective permission preset (when the permission service is mounted), the session id, and the working directory. The model and preset lines are omitted when their source is absent in the current composition. The `Directory:` line always renders: when the session header has no cwd it falls back to the process working directory. |
 
 The model line reads the session's durable `request/header` log; the preset line reads `ctx.permissionPresets` when present. A composition without either source simply omits that line. Running `/status` consumes no model tokens.
 

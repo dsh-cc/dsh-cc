@@ -37,7 +37,7 @@ Claude Code 的 `Task` 工具允许主代理按 `subagent_type`（如 `deep-reas
    marker 行绝不进入提示词；`model:` 未设置（继承）的定义是 fail-closed 的——块被剥离。
 
    - `toolFilter` = 定义的 `toolRestriction`（allow/deny），**消毒**掉本组合已不再注册的工具名；
-   - `maxDepth` = 3（与 harness 默认一致；可配置）。
+   - `maxDepth` = 3（硬编码为 `DEFAULT_MAX_DEPTH`，与 harness 默认一致；插件配置只暴露 `resumePins`，不可配置）。
 4. **其它不含冒号的类型**（工作区内找不到）→ **报错结果**，附带本工作区可用类型清单（或说明本工作区未定义任何 agent）；类型含 `:` 时提示带冒号感知的线索。
 5. **命中插件 agent 的 scoped id(`plugin:agent`)** → 以 `spawn` 启动，折叠方式与文件定义相同（persona、消毒后的 toolFilter、别名解析的 model、`maxDepth` 3），并从 `subagents` seam **实时**枚举。插件 agent **只能用其 scoped id** 寻址——裸插件 agent 名不可寻址，与 Claude Code 一致。
 
@@ -125,17 +125,19 @@ harness 的 `agent-instructions` 插件会在**每个**会话（包括 Task chil
 
 ## API
 
+已发布的子路径为包根（`.`）、`./registry`、`./tool`、`./catalog` 与 `./src/*`；根入口未再导出的模块通过 `./src/*` 导入。
+
 - `apply(ctx)` — cordis 插件入口（插件 id `cc-subagent-task`）；tools 或 system-prompt seam 任一缺席时也安全。
 - `AgentRegistry`（`./registry`）— 按工作区的定义缓存（`ensure` / `list` / `resolve`），惰性加载 `loadClaudeCodeAgents(root)`（用户层 + 项目层，项目遮蔽用户）。
 - `registerTaskTool` / `TASK_TOOL`（`./tool`）— 注册 `subagent_fork` Task 工具。
-- `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL`（`./release-agent`）— 注册
+- `registerReleaseAgentTool` / `RELEASE_AGENT_TOOL`（`@dsh-cc/subagent-task/src/release-agent.ts`）— 注册
   `release_agent` 释放阀工具（挂载遵循丢弃返回值的 F16 先例）。
 - `mountAgentCatalog` / `CATALOG_SECTION_NAME` / `CATALOG_SECTION_ORDER`（`./catalog`）— 挂载 `Available subagents` section；同时注册 `cc-subagent-catalog` 设置命名空间。
 - `renderCatalog`（`./catalog`）— 纯目录渲染器 `renderCatalog(defs, settings?)`；设置参数缺省时取 `DEFAULT_SUBAGENT_CATALOG_SETTINGS`。
-- `registerSubagentCatalogSettings` / `SUBAGENT_CATALOG_NAMESPACE` / `DEFAULT_SUBAGENT_CATALOG_SETTINGS`（`./catalog-settings`）— `cc-subagent-catalog` 命名空间（实时读取；无 settings provider 时读设计默认值）。
-- `renderCatalogBudgeted` / `truncateToBytes`（`./catalog-budget`）— 纯 UTF-8 字节预算内核（运行时零依赖）。
-- `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`（`./strip-instructions`）— 挂载（或为测试分类）pre-step 剥离监听器，把 harness `agent-instructions` 工作区基线从被委派的 Task child 中移除。
-- `dispatchWorktreeIsolation` / `mountWorktreeIsolation` / `SubagentWorktreeRegistry`（`./worktree-isolation`）— `isolation: worktree` 的 create/adopt/settle/lock 生命周期（git 命令构造在 `@dsh-cc/tool-git-worktree`，绝不重复实现）。
+- `registerSubagentCatalogSettings` / `SUBAGENT_CATALOG_NAMESPACE` / `DEFAULT_SUBAGENT_CATALOG_SETTINGS`（`@dsh-cc/subagent-task/src/catalog-settings.ts`，根入口也再导出）— `cc-subagent-catalog` 命名空间（实时读取；无 settings provider 时读设计默认值）。
+- `renderCatalogBudgeted` / `truncateToBytes`（`@dsh-cc/subagent-task/src/catalog-budget.ts`）— 纯 UTF-8 字节预算内核（运行时零依赖）。
+- `mountStripWorkspaceInstructions` / `isDelegated` / `isAgentInstructions`（`@dsh-cc/subagent-task/src/strip-instructions.ts`，根入口也再导出）— 挂载（或为测试分类）pre-step 剥离监听器，把 harness `agent-instructions` 工作区基线从被委派的 Task child 中移除。
+- `dispatchWorktreeIsolation` / `mountWorktreeIsolation` / `SubagentWorktreeRegistry`（`@dsh-cc/subagent-task/src/worktree-isolation.ts`）— `isolation: worktree` 的 create/adopt/settle/lock 生命周期（git 命令构造在 `@dsh-cc/tool-git-worktree`，绝不重复实现）。
 
 ## 非目标
 

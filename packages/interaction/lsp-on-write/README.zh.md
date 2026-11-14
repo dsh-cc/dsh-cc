@@ -27,4 +27,4 @@ LSP 诊断随写入返回：在 `edit`/`write`/`NotebookEdit` 成功之后，插
 
 ## 形态
 
-普通 cordis 插件（无 Service、无 isolate key）。由 `packages/preset/cc` 在 cc-services 组内挂载，位于 edit-recovery-hint 之后。全部失败路径软降级为透传——用户的工具结果绝不会变成错误。
+普通 cordis 插件（无 Service、无 isolate key）。由 `packages/preset/cc` 在 cc-services 组内挂载，位于 post-edit-verify 之后。全部失败路径软降级为透传——用户的工具结果绝不会变成错误。

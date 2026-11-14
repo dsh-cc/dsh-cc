@@ -8,6 +8,15 @@ per the Claude Code documentation — inline `export const meta = {...}` block,
 a saved file addressed by `name`, or any `scriptPath` — launches on the first
 try, and the consolidated result arrives as exactly one completion delivery.
 
+## Configuration
+
+`Config` (`src/index.ts:38-48`) has two keys:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `toolName` | `'workflow'` | The model-facing tool name to register (`src/index.ts:105`). |
+| `maxResultChars` | `50000` | Consolidated-delivery ceiling in characters; a longer JSON value is truncated with a notice (`src/index.ts:106`). |
+
 ## Behavior
 
 - **Inline meta extraction.** The script's leading

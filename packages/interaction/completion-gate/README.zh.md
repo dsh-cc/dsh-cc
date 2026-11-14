@@ -10,7 +10,7 @@
   dogfood 由暗发布转正；如需关闭设 `false`）。哈希字段始终记录；清洗过的 bash
   命令头（≤200 字节，六步 scrubber）只在开启时捕获，且绝不写入台账文件。
 - 提醒预算由 `nudges-per-session` 控制，默认每会话一次。两个键都只认用户层
-  settings.json，每个事件热读。
+  （harness 家目录 `<dshHome>/settings.json`），每个事件热读。
 - 委派工作：子会话的收据会 lift 到顶层会话的 lineage 桶；窗口里有委派收据
   而进程内没观测到子会话时，按 fail-open 处理。
 - 声明表是一份数据文件（`src/claims.json`），按命令分段匹配。

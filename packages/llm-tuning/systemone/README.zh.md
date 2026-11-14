@@ -2,7 +2,7 @@
 
 English | [中文](README.md)
 
-**共享的 System One 客户端 + token 预算助手**：针对 System One 决策模型端点（`{baseURL}/v1/systemone`）的原生、绝不抛异常的传输客户端，内建有限次数的 HTTP 429 重试；外加基于脚本感知的 token 预算估算器，用于预截断通道负载。自 `@dsh-cc/permission-rules` 抽出（设计文档：docs/plans/2026-10-09-moa-tiered-cascade-routing.md §3.6），使任何接入 System One 通道的 harness 特性——今天是 permission-rules，接下来是 `@dsh-cc/moa`——共用同一实现。纯模块：除 node 标准库外无运行时依赖。
+**共享的 System One 客户端 + token 预算助手**：针对 System One 决策模型端点（`{baseURL}/v1/systemone`）的原生、绝不抛异常的传输客户端，内建有限次数的 HTTP 429 重试；外加基于脚本感知的 token 预算估算器，用于预截断通道负载。自 `@dsh-cc/permission-rules` 抽出（设计文档：`docs/plans/2026-10-09-moa-tiered-cascade-routing.md` §3.6），使任何接入 System One 通道的 harness 特性——今天是 permission-rules，接下来是 `@dsh-cc/moa`——共用同一实现。纯模块：除 node 标准库外无运行时依赖。
 
 ## API
 
@@ -43,15 +43,43 @@ export function capMiddleToTokenBudget(text: string, budgetTokens: number, marke
 export const S1_ENVELOPE_TOKENS: number
 export const S1_MARGIN_TOKENS: number
 export const MIN_STATE_TOKENS: number
+
+// 决策通道：经 index.ts 重新导出（decision.ts 也重新导出 decision-types.ts）
+export const DECISION_LANE_ALIAS: string
+export function createDecisionRunner(deps: DecisionRunnerDeps): DecisionRunner
+
+// decision-types.ts：决策运行器的纯契约类型
+export type DecisionFeature
+export interface DecisionRunner
+export interface BoundDecisionRunner
+export interface DecisionBudgetPermit
+export interface DecisionLedgerRow
+
+// model-windows.ts：逐模型实测的决策上下文窗口
+export const DEFAULT_GAUGE_CONTEXT_WINDOW: number
+export const GAUGE_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>>
+export function normalizeGaugeModelId(model: string): string
+
+// decision-hash.ts：确定性输入哈希与 token 估算
+export function canonicalJson(value: unknown): string
+export function inputHashForDecision(input: DecisionHashInput): string
+export function estimateDecisionInputTokens(
+  state: unknown, questions: Record<string, SystemOneQuestion>,
+): DecisionInputTokenEstimate
+
+// client.ts：观察者接缝及其固定拒绝原因
+export const SYSTEMONE_OBSERVER_REJECTED_REASON: string
+export interface SystemOneAttemptObserver
+export interface SystemOneRetryClock
 ```
 
 ## 契约校验
 
 `systemoneDecide` 执行严格的双向契约（设计文档：
-docs/plans/2026-11-02-systemone-01-contract-validation.md）。请求在任何网络
+`docs/plans/2026-11-02-systemone-01-contract-validation.md`）。请求在任何网络
 动作之前先做预检——问题 ID、选项数量、criteria 形状、JSON 可序列化的
-state（拒绝环、BigInt、非有限数及 undefined/函数/symbol 值）、model 与
-timeout 边界——预检失败以 `malformed` 返回且 fetch 次数为零。响应必须
+state（拒绝环、BigInt、非有限数及 undefined/函数/symbol 值）。
+model 与 timeout 边界同样预检，预检失败以 `malformed` 返回且 fetch 次数为零。响应必须
 精确回答所请求的问题集且类型匹配：choice 的 probabilities 键集与
 criteria 完全一致、每个值在 `[0,1]` 内有限、总和在 1 的 `选项数 * 1e-4`
 容差内（4 位小数量化的最坏漂移的 2 倍，issue #361）、被选项的概率不比
@@ -71,5 +99,5 @@ import { systemoneDecide, estimateSystemOneTokens, capMiddleToTokenBudget } from
 
 const state = capMiddleToTokenBudget(JSON.stringify(bigState), 2048)
 const result = await systemoneDecide({ baseURL, model: 'systemone-model', state, questions, timeoutMs: 5000 })
-if (!result.ok) return /* 降级：'timeout' | 'error' */
+if (!result.ok) return /* 降级：'timeout' | 'cancelled' | 'error' | 'malformed' */
 ```

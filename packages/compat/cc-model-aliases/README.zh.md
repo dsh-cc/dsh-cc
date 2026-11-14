@@ -43,7 +43,8 @@ modelAliases:
 // settings 命名空间 "model-aliases"
 {
   "fable":  { "provider": "anthropic", "model": "claude-fable-5" },
-  "sonnet": null     // null = 删除同名的 config-default alias
+  "sonnet": null,            // null = 删除同名的 config-default alias
+  "warnOnInherit": true      // 控制键（布尔，默认 true）：未配置 alias 继承时告警
 }
 ```
 
@@ -120,6 +121,13 @@ alias 的查找顺序：**settings overlay → config 默认 → builtin fallbac
 - `toAgentOptions(route)` — 丢弃 resolved route 中的 `undefined` 字段以保住按字段继承（绝不把 child 请求的字段写成 `undefined`）；`undefined` 进 → `undefined` 出，全 `undefined` 的 route 收敛为 `undefined`（「无 override」）。由 Task、cc-plugin-loader、hooks bridge 与 memory recall 共享。
 - `toOneShotRoute(route, parent?)` — 把 resolved alias 填成完整的 `{provider, model}` 二元组，供独立的 one-shot `ctx.llm.stream` 调用使用：alias 字段优先，缺失字段从 `parent` 继承；补不完整（继承后仍无 model）返回 `undefined`，调用方视为「未配置」。session-title overlay 与 WebFetch summarizer 使用。
 - `ConfigAliasesSchema` / `SettingsAliasesSchema`（及其 record 形式）— config 层（无 `null`）与 settings 层（允许 `null`）的 schemastery schema，外加 `AliasTarget` / `ResolvedRoute` 类型。
+- `createModelInspector(getAliases, { warn })` 构建检查闭包，返回 `AliasInspection`（`{ kind, route?, via?, hop? }`），调用方无需再次解析即可报告某个 `model` 是如何被归类的。
+- `splitLevelSuffix(ref)` 从 model 引用中拆出末尾的 `$<level>` 推理强度后缀（`opus$high`）；格式非法的后缀会原样透传整个引用。
+- `resolveAlias(ctx, alias?)` / `resolveDetailedAlias(ctx, alias?)` 优先经已挂载的 `ccModelRoutes` 服务解析，服务缺失时回退到由 `model-aliases` 设置覆盖构建的解析器。
+- `MODEL_ALIASES_NAMESPACE` 是 `'model-aliases'` 设置命名空间常量。
+- `isSystemOneTarget(target)` 在 alias 目标指向 System One 模型、或携带 System One 协议标记时为真。
+- `CC_ALIASES` / `LANE_ALIASES` 是两份内建名称列表（`fable`/`opus`/`sonnet`/`haiku` 与六个 dsh-cc lane），供只需要名字、不需要映射的调用方使用。
+- 子路径导出 `@dsh-cc/model-aliases/types`、`/schema` 与 `/resolver`，无需插件入口即可取到类型、schema 与纯解析器。
 
 ## dsh-cc lane
 

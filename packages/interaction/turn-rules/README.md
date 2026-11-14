@@ -47,4 +47,4 @@ Key `cc-turn-rules` in the **user-layer** `settings.json` (the harness-home file
 
 ## Shape
 
-Plain cordis plugin (no Service, no isolate key). Mounted by `packages/preset/cc` in the cc-services group, directly after edit-recovery-hint (and therefore after the context-crusher: CCR outermost, turn-rules composed after it). Injections are advisory only — this engine never blocks a tool call.
+Plain cordis plugin (no Service, no isolate key). Mounted by `packages/preset/cc` in the cc-services group, directly after lsp-on-write, which in turn follows post-edit-verify (and therefore after the context-crusher: CCR outermost, turn-rules composed after it). Injections are advisory only — this engine never blocks a tool call.

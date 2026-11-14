@@ -34,7 +34,7 @@ The tool is `isConcurrencySafe = () => false`: it mutates shared cell state and 
 export const Config = z.object({})
 ```
 
-Each `apply(ctx, config)` call registers the `NotebookEdit` tool into `ctx.tools` and its `fs/observed` listener. Requires a loaded `ctx.tools` and an active `ctx.fs` backend (e.g. `@deepseek-ai/dsh-fs-local`); the plugin stays pending until `inject: ['tools', 'fs']` is satisfied.
+Each `apply(ctx)` call registers the `NotebookEdit` tool into `ctx.tools` and its `fs/observed` listener. Requires a loaded `ctx.tools` and an active `ctx.fs` backend (e.g. `@deepseek-ai/dsh-fs-local`); the plugin stays pending until `inject: ['tools', 'fs']` is satisfied.
 
 ## Install / registration
 

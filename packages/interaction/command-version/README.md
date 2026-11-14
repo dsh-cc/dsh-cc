@@ -10,7 +10,7 @@ Human-facing `/version` command that prints the plugin bundle version and, when 
 |---|---|
 | `/version` | Print `@dsh-cc/plugins <version>`, plus a `harness <version>` line when the host exposes one. No network. |
 
-The bundled version is read from this package's `package.json` at call time (with a compile-time fallback), so it is deterministic and offline-safe. The harness line appears only when a compatible host value is present.
+The bundled version is read at run time by `readOwnVersion` from `@dsh-cc/version-info`. That helper reads version-info's own `package.json`, which carries the shared release-train version used by the published packages, and returns a compile-time fallback constant when the manifest is missing or unreadable. The read is deterministic and offline-safe. The harness line appears only when a compatible host value is present.
 
 ## Composition
 
@@ -22,6 +22,8 @@ The plugin injects `commands`. A custom app mounts the owners plus this plugin:
 - id: command-version
   name: '@dsh-cc/command-version'
 ```
+
+The version read is delegated to the `@dsh-cc/version-info` dependency; this package reads no manifest of its own.
 
 ## Model Experience
 

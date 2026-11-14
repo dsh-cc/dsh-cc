@@ -33,7 +33,7 @@
 
 ## 形态
 
-普通 cordis 插件，`inject = ['shell']`（tool-use-summary / prompt-suggest 惯例）。由 `packages/preset/cc` 挂载在 cc-services 组。全程 fail-soft：任何故障都退化为透传——用户的工具结果绝不会变成错误结果。
+普通 cordis 插件，不声明 `inject`。shell 是一个可选接缝，经带守卫的 `ctx.get('shell')` 读取。宿主上下文没有 shell 服务时，插件记录一条警告并保持校验监听器未注册，而不依赖 shell 的编辑恢复提示监听器仍会挂载。由 `packages/preset/cc` 挂载在 cc-services 组。全程 fail-soft：任何故障都退化为透传——用户的工具结果绝不会变成错误结果。
 
 ## Dogfood（dsh-cc 贡献者）
 

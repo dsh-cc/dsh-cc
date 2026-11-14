@@ -3,6 +3,8 @@
 [English](README.md) | 中文
 
 可选的 `dsh-cc` bin。规范命令仍是 `dsh --profile tui`。
+`dsh-cc --version`（或 `-V`）打印版本标签后退出：release 安装为启动器的
+semver，dev 同步的 profile 为 `<base>-dev+<commit>[.dirty]`。
 
 首次运行会以三个 CC bundle 引导（bootstrap）`$DSH_HOME/profiles/tui`。
 启动器是一个薄薄的 flag 转换器：先派生出 TUI 插件消费的 session-mode 环境变量，
@@ -18,6 +20,13 @@ worktree 共享它）划分作用域，会退回默认的 auto-resume——TUI �
 `DSH_CC_WORKTREE` 标记会话，TUI 会在 `/quit` 时询问保留还是删除该
 worktree。要求 git 仓库至少有一个提交。
 
+该值也可以是 PR／MR 引用（`#<n>`、GitHub PR URL 或 GitLab MR URL）：启动器
+在 github.com 上 fetch `pull/<n>/head`，在 gitlab.com 上 fetch
+`merge-requests/<n>/head`，在未知 host 上两者都试，然后以取到的 head 在
+`.claude/worktrees/pr-<n>`、分支 `worktree-pr-<n>` 上创建 worktree。创建时
+会中和仓库本地的 filter driver，因此 LFS 内容以指针文件形式落盘，在新
+worktree 中执行 `git lfs pull` 即可还原（`bootstrap.mjs:305-330,365-370`）。
+
 每次启动还会运行一次引导清扫（不做网络 I/O，10 秒上限，失败静默）：
 `.claude/worktrees/` 下位于 `worktree-*` 分支、超过
 `worktree.cleanupPeriodDays`（默认 30，从 user → project → local 设置文件
@@ -29,6 +38,11 @@ worktree。要求 git 仓库至少有一个提交。
 自身提交全部已合入该基准时会被硬重置到该基准。创建与复用的 worktree 都会
 以 `git worktree lock --reason="dsh-cc session <slug>"` 加锁，会话期间
 保持锁定。
+
+会话开始前，启动器还会收敛 profile：与当前启动器版本不一致的 dev 同步
+profile 会被还原为 store bundle，已存在的 store profile 会被治愈到当前版本，
+而 bootstrap 路径在 `dsh --version` 低于要求的最低版本时打印信息并停止
+（`bootstrap.mjs:708-930`、`bin/dsh-cc.js:110-152`）。
 
 ## Resume environment contract
 
@@ -53,6 +67,9 @@ worktree。要求 git 仓库至少有一个提交。
 把泄漏给子启动器），并仅根据当前调用的 argv 重新派生。启动 `dsh-cc` 时
 不要手动设置它们。
 
+`DSH_CC_PROFILE` 指明启动器 spawn 的 profile（`tui`，ACP 通道上为
+`cc-acp`），供插件以 `ctx.get('dshProfile')` 呈现（`bin/dsh-cc.js:82,385`）。
+
 ### Mixed-version degradation
 
 由于启动器 npm 包与 `tui` profile 插件版本在安装时锁定，版本不匹配只会在
@@ -65,3 +82,13 @@ worktree。要求 git 仓库至少有一个提交。
   常见的同目录重启路径仍能正常工作。
 
 本包**不**附带 `dsh-tui` 二进制。
+
+## `dsh-cc acp`
+
+`dsh-cc acp [...]` 启动 Agent Client Protocol 通道。bin 在任何 TUI 处理之前
+就拦截它（`bin/dsh-cc.js:37-99`），先用 ACP 基础 bundle 引导独立的
+`cc-acp` profile（`bootstrap.mjs:18-32`；安装的 `@deepseek-ai/dsh-acp-app`
+固定为 `0.2.1-rc.5`），再以剩余参数 spawn `dsh --profile cc-acp`。stdout
+属于 ACP 的 NDJSON 协议，因此 bootstrap 与安装输出只写 stderr，绝不消费
+stdin，子进程继承 stdio。该路径不执行任何 TUI flag 处理，因此 `--worktree`
+与各 resume flag 都原样透传。

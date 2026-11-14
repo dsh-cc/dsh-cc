@@ -31,7 +31,7 @@ Rules run in a **POSIX shell** (`sh` semantics) — no Windows-native syntax. Th
 
 ## Shape
 
-Plain cordis plugin with `inject = ['shell']` (tool-use-summary / prompt-suggest idiom). Mounted by `packages/preset/cc` in the cc-services group. Fail-soft: every fault degrades to a passthrough — the user's tool result is never turned into an error.
+Plain cordis plugin with no `inject`. The shell is an optional seam read through a guarded `ctx.get('shell')`. When no shell service is on the host context the plugin logs one warning and leaves the verify listener unregistered, while the shell-independent recovery-hint listener still mounts. Mounted by `packages/preset/cc` in the cc-services group. Fail-soft: every fault degrades to a passthrough — the user's tool result is never turned into an error.
 
 ## Dogfood (dsh-cc contributors)
 

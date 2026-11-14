@@ -49,4 +49,4 @@ repeatGap: 10                   # 重新武装前的轮次间隔；默认 10
 
 ## 形态
 
-普通 cordis 插件（无 Service、无 isolate key）。由 `packages/preset/cc` 挂载在 cc-services 组，紧跟 edit-recovery-hint 之后（因此在 context-crusher 之后：CCR 最外层，turn-rules 在其内组合）。注入仅为建议性——本引擎绝不阻断工具调用。
+普通 cordis 插件（无 Service、无 isolate key）。由 `packages/preset/cc` 挂载在 cc-services 组，紧跟 lsp-on-write 之后，而后者又位于 post-edit-verify 之后（因此在 context-crusher 之后：CCR 最外层，turn-rules 在其内组合）。注入仅为建议性——本引擎绝不阻断工具调用。

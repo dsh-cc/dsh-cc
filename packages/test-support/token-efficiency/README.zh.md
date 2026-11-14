@@ -26,8 +26,8 @@ dsh-cc 的 token 效率评测装置：固定语料库、冻结验收门槛与比
 `pnpm check:token-efficiency` 以包内默认参数运行 `check`；bin 本身通过 tsx 运行（`pnpm exec tsx packages/test-support/token-efficiency/src/bin.ts <子命令> …`）：
 
 - `sanitize <session.jsonl|.zstd|-> [--out <path>]` — 原始日志 → 规范化脱敏 JSONL（Phase-0 dogfooding）。`--out` 要求恰好一个输入；否则输出到 stdout。
-- `run [--gate <path>] [--corpus <dir>] [--write-baseline <path>]` — 折叠每个 replay 任务的 fixture；逐任务打印一行向量（tokens、cost、counters）及页脚。`--write-baseline` 写出 `{foldedAt, ref: $TOKEN_EFFICIENCY_BASELINE_REF ?? 'unpinned', vectors}`。
-- `check [--gate <path>] [--corpus <dir>]` — 加载门槛与 baseline、折叠候选、逐任务判定、逐任务 usage 覆盖率、页脚。解析失败、capability 回归、定义变更、counter 期望不满足、候选/baseline 向量缺失时退出 1；参数错误退出 2。
+- `run [--gate <path>] [--corpus <dir>] [--mock-corpus <dir>] [--write-baseline <path>]` — 折叠每个 replay 任务的 fixture；逐任务打印一行向量（tokens、cost、counters）及页脚。`--write-baseline` 写出 `{foldedAt, ref: $TOKEN_EFFICIENCY_BASELINE_REF ?? 'unpinned', vectors}`。
+- `check [--gate <path>] [--corpus <dir>] [--mock-corpus <dir>]` — 加载门槛与 baseline、折叠候选、逐任务判定、逐任务 usage 覆盖率、页脚。解析失败、capability 回归、定义变更、counter 期望不满足、候选/baseline 向量缺失时退出 1；参数错误退出 2。
 
 非 replay（mock-script）任务通过下文描述的 mock 档位运行器执行；只有 live 档位保持手工运行。
 

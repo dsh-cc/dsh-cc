@@ -25,6 +25,18 @@ The summarize call never carries a `purpose` field: the harness `GenerateOptions
 union is closed (`'compaction' | 'session-title'`). A summary model that requests a tool
 or produces no text fails the call as an `isError` tool result.
 
+## Configuration
+
+`Config` (`src/index.ts:32-60`) has four optional keys, each applied at `apply` time
+(`src/index.ts:81-87`):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `fetchTimeoutMs` | `30000` | Cooperative tool-call timeout budget in milliseconds, attached as the tool's `timeoutMs`. |
+| `fetchMaxOutputChars` | `200000` | Cap on the complete rendered `web_fetch` output, in characters. |
+| `maxSummaryTokens` | `2048` | Token budget for the one-shot summarize call. |
+| `maxSummaryInputChars` | `32000` | Character cap on the document converted and fed to the summarize call. |
+
 ## Provider requirement
 
 CC deployments use the stock `@deepseek-ai/dsh-web-fetch-http` executor from
