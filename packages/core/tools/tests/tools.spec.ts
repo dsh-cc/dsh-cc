@@ -85,6 +85,23 @@ describe('ToolRuntime', () => {
     expect('timeoutMs' in (schema as object)).toBe(false)
   })
 
+  it('schemas() excludes MCP executor metadata — mcp/annotations must never reach the model', async () => {
+    const ctx = await setup()
+    // The MCP bridge stamps registration-time identity and tool-list
+    // annotations on the definition. Both are executor metadata like timeoutMs:
+    // projectToolSchema is an allowlist over name/description/parameters.
+    ctx.tools.register({
+      ...echoTool,
+      name: 'mcp-shim',
+      mcp: { server: 'serena', rawName: 'find_symbol' },
+      annotations: { readOnlyHint: true },
+    })
+    const schema = ctx.tools.schemas()[0] as unknown as Record<string, unknown>
+    expect(Object.keys(schema).sort()).toEqual(['description', 'name', 'parameters'])
+    expect(schema.mcp).toBeUndefined()
+    expect(schema.annotations).toBeUndefined()
+  })
+
   it('executes a tool and returns its content', async () => {
     const ctx = await setup()
     ctx.tools.register(echoTool)

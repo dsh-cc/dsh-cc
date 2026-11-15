@@ -20,6 +20,7 @@
 7. **呈现模式**——fork 的 `ToolExecutor` 插件（`cc-executor`，导出为 `@dsh-cc/tools/executor`）在共享批量流水线上实现 `native` / `code` / `both`，承载 `run_code` 传输与 SDK／协议 section；`both` 不声明「只能调用 run_code」的规则，因为它的原生调用确实会执行。SDK 渲染器本体经 `src/ptc-renderers.ts` 在运行时从上游 `@deepseek-ai/dsh-tool-executor-ptc` 导入（宽化动态导入——静态导入为何结构性不可行见该文件头注），配两个 fork 自有件：`src/sdk-schema.ts`（`ToolSdkSchema` 声明，同因）与渲染边界上的 `$schema` 注解剥除（delta 6 的容差在 SDK 路径上的延续，让 MCP schema 全量渲染）。TS 指令文案跟随 `runtime.programFormat`（切换 PR 的 delta c）；Python 渲染器上游无 format 参数。一个刻意的残留分叉：`run_code` 传输的 flavor 文案保持 function-body，而 SDK section 跟随运行时 format——上游本身就是这个并存，传输 schema 归运行时定义。
 8. **注册 tripwire**——扁平参数规格在测试模式下硬失败、在生产环境告警，即工具 schema 门禁的 CI 分支。
 9. **审批接缝拒绝文案**——`pipeline` 中的 ask 原因清洗与环境／权限指引尾句，每次 harness 版本升级都要保留。
+10. **MCP 执行器元数据**——`ToolDefinition` 携带 MCP bridge 打标的登记身份（`mcp: { server, rawName }`）与服务端 `tools/list` 注解（`annotations.readOnlyHint`），与 `timeoutMs` 同属执行器元数据：永不对模型可见（`projectToolSchema` 只放行 name/description/parameters），并被权限引擎的确定性 MCP 工具分类消费（服务端身份绝不通过解析公开工具名回推）。
 
 不再重新施加（已被上游吸收）：嵌套 `presentationMeta` 支持，以及分阶段调度垫片（调度由执行器自己负责）。
 

@@ -26,6 +26,7 @@ interface MockTool {
   inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
   execution?: { taskSupport?: 'optional' | 'required' | 'forbidden' }
+  annotations?: { readOnlyHint?: boolean }
   _meta?: Record<string, unknown>
 }
 
@@ -186,6 +187,25 @@ describe('deferred MCP tool disclosure', () => {
       expect(generation.eagerCount).toBe(1)
       expect(generation.deferredCount).toBe(1)
       expect(generation.eagerCount + generation.deferredCount).toBe(generation.disposers.size)
+    })
+
+    it('J. activation publishes the same stamped definition; the added metadata does not churn the defer path', async () => {
+      const client = createMockClient([{ ...greetTool, annotations: { readOnlyHint: true } }])
+      const opts = defaultOpts({ deferToolThreshold: 0 })
+
+      const generation = await syncTools(client as never, ctx, opts, emptyToolGeneration())
+      expect(ctx.tools.get('mcp__srv__greet')).toBeUndefined()
+      expect(ctx.toolSearch.activate('mcp__srv__greet').status).toBe('loaded')
+
+      const definition = ctx.tools.get('mcp__srv__greet')
+      expect(definition?.mcp).toEqual({ server: 'srv', rawName: 'greet' })
+      expect(definition?.annotations).toEqual({ readOnlyHint: true })
+
+      // The stamp lives on the definition, not in the fingerprinted payload: an
+      // identical re-sync still short-circuits instead of re-registering.
+      const second = await syncTools(client as never, ctx, opts, generation)
+      expect(second).toBe(generation)
+      expect(ctx.tools.get('mcp__srv__greet')?.mcp).toEqual({ server: 'srv', rawName: 'greet' })
     })
 
     it('E. deferred generation, identical second sync → no re-registerDeferred, same generation', async () => {

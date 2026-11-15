@@ -9,6 +9,7 @@
  */
 
 import z from '@deepseek-ai/schemastery'
+import type { McpToolClassesSettings } from './mcp-tool-classes.ts'
 import { PERMISSION_MODES, SOURCE_PRIORITY, type PermissionMode, type PermissionRuleSource } from './types.ts'
 
 /** `permissions.autoMode.classifier` — the plugin-local hand-mirror of the shared AutoModeClassifierSchema. */
@@ -169,6 +170,23 @@ export interface PermissionSettings {
    * sub-object. Absent ⇒ the stage stays disarmed (no defaults materialized).
    */
   autoMode?: AutoModeSettings
+  /**
+   * Per-server MCP tool permission classes (design D5): a `readOnlyTools`
+   * entry skips arbitration AND counts as read-only, a `workspaceWriteTools`
+   * entry skips arbitration only (plan mode still wraps it) and passes the
+   * protected-argument screen first, and `false` disables classification for
+   * the server (annotations included). A present entry REPLACES the curated
+   * table row for that server. Trusted settings layers only — the cascade
+   * reassembles this key from user/flag/policy (design D5).
+   */
+  mcpToolClasses?: McpToolClassesSettings
+  /**
+   * Trust server-authored MCP `tools/list` `readOnlyHint` annotations as a
+   * gauge-skip `readOnly` classification (design D3; absent ⇒ `false`). An
+   * annotation-sourced class never sets `isReadOnly`, and never applies to a
+   * server that has a curated or settings entry. Trusted settings layers only.
+   */
+  trustMcpAnnotations?: boolean
 }
 
 /** The Config-provided rule set: strings parsed as source-`config` rules. */
@@ -289,7 +307,10 @@ export function permissionSettingsSchema(): z<PermissionSettings> {
     defaultMode: z.union(PERMISSION_MODES as PermissionMode[]),
     disableBypassPermissionsMode: z.union(['disable'] as const),
     additionalDirectories: z.array(z.string()),
-    protectedFiles: z.array(z.string()),
+    // Absence-preserving (z.array materializes [] for an absent key, which
+    // would disable the curated protected-file defaults — and with them the
+    // HIGH protected-write classification — in every settings-mounted rig).
+    protectedFiles: z.union([z.array(z.string()), z.const(undefined)]),
     dangerousPatterns: z.array(z.string()),
     mediumPatterns: z.array(z.string()),
     criticalDeny: z.array(z.string()).default([]),
@@ -311,6 +332,22 @@ export function permissionSettingsSchema(): z<PermissionSettings> {
       }),
       z.const(undefined),
     ]),
+    // Design D5: per-server MCP tool classes. Absence-preserving like
+    // `autoMode` — a union with `undefined` keeps an absent key absent. An
+    // entry is either the explicit `false` kill switch or a partial object of
+    // server-local raw tool names (never `mcp__`-prefixed).
+    mcpToolClasses: z.union([
+      z.dict(z.union([
+        z.object({
+          readOnlyTools: z.union([z.array(z.string()), z.const(undefined)]),
+          workspaceWriteTools: z.union([z.array(z.string()), z.const(undefined)]),
+        }),
+        z.const(false),
+      ])),
+      z.const(undefined),
+    ]),
+    // Absence-preserving boolean; consumption default is `false`.
+    trustMcpAnnotations: z.union([z.boolean(), z.const(undefined)]),
   }) as unknown as z<PermissionSettings>
 }
 

@@ -22,6 +22,7 @@ interface MockTool {
   inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
   execution?: { taskSupport?: 'optional' | 'required' | 'forbidden' }
+  annotations?: { readOnlyHint?: boolean }
 }
 
 interface MockCallResult {
@@ -227,6 +228,27 @@ describe('syncTools', () => {
     expect(ctx.tools.get('mcp__srv__free')).toBeUndefined()
     // The squatter is untouched.
     expect(ctx.tools.get('mcp__srv__taken')).toBeDefined()
+  })
+
+  it('stamps registration-time MCP identity and tool-list annotations on each definition', async () => {
+    const client = createMockClient([
+      { name: 'find_symbol', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
+      { name: 'replace_content', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } },
+      // A raw name that normalizes lossily: its public name is hash-suffixed, so
+      // the stamped identity is the only faithful server/raw pairing.
+      { name: 'admin.reset', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
+      { name: 'plain', inputSchema: { type: 'object' } },
+    ])
+
+    await syncTools(client as never, ctx, defaultOpts, emptyToolGeneration())
+
+    expect(ctx.tools.get('mcp__srv__find_symbol')?.mcp).toEqual({ server: 'srv', rawName: 'find_symbol' })
+    expect(ctx.tools.get('mcp__srv__find_symbol')?.annotations).toEqual({ readOnlyHint: true })
+    expect(ctx.tools.get('mcp__srv__replace_content')?.annotations).toEqual({ readOnlyHint: false })
+    // Absent annotations normalize to `readOnlyHint: false` — never truthy by omission.
+    expect(ctx.tools.get('mcp__srv__plain')?.annotations).toEqual({ readOnlyHint: false })
+    expect(ctx.tools.get(publicToolName('srv', 'admin.reset'))?.mcp).toEqual({ server: 'srv', rawName: 'admin.reset' })
+    expect(ctx.tools.get(publicToolName('srv', 'admin.reset'))?.annotations).toEqual({ readOnlyHint: true })
   })
 
   it('unregisters previous tools before re-syncing', async () => {

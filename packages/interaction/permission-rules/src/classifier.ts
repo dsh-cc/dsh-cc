@@ -155,22 +155,35 @@ export function assessFilePath(
   return { level: 'LOW', reasons: [] }
 }
 
-/** Whether a path (or its basename) matches any protected wildcard pattern. */
-function protectedMatch(filePath: string, protectedFiles: readonly string[]): boolean {
-  const base = filePath.split('/').at(-1) ?? filePath
+/**
+ * The protected-file wildcard matcher shared by {@link assessFilePath} and the
+ * MCP `workspaceWrite` protected screen (`permission-rules` design D6b). One
+ * pattern is tested as an anchored whole-string matcher against the raw value,
+ * its `~/`-stripped form, and its basename.
+ * @param value - the candidate string (a path, or any argument string value).
+ * @param protectedFiles - the effective wildcard patterns.
+ * @returns the first matching pattern, or `undefined` when none matches.
+ */
+export function protectedPatternMatch(value: string, protectedFiles: readonly string[]): string | undefined {
+  const base = value.split('/').at(-1) ?? value
   const candidates = [
-    filePath,
-    filePath.replace(/^~\/?/, ''),
+    value,
+    value.replace(/^~\/?/, ''),
     base,
   ]
   for (const pattern of protectedFiles) {
     const regex = wildcardToRegExp(pattern)
     for (const candidate of candidates) {
       regex.lastIndex = 0
-      if (regex.test(candidate)) return true
+      if (regex.test(candidate)) return pattern
     }
   }
-  return false
+  return undefined
+}
+
+/** Whether a path (or its basename) matches any protected wildcard pattern. */
+function protectedMatch(filePath: string, protectedFiles: readonly string[]): boolean {
+  return protectedPatternMatch(filePath, protectedFiles) !== undefined
 }
 
 /** Translate a `**`/`*` wildcard pattern into a whole-string matcher. */

@@ -350,6 +350,12 @@ export function createAutoStage(deps: AutoStageDeps): AutoStage {
       if (decided.decision.kind !== 'passthrough') return undefined
       if (decided.risk.level !== 'LOW' && decided.risk.level !== 'MEDIUM') return undefined
       if (decided.isReadOnly) return undefined
+      // Deterministic MCP classification (design D1/D3): a classified call —
+      // `readOnly` from curated/settings or from a trusted annotation, as well
+      // as `workspaceWrite` — never reaches arbitration. This also skips the
+      // autoMode hard_deny/soft_deny slot arbitration for classified calls,
+      // an inherent and accepted consequence of the bypass (design D1).
+      if (decided.mcpClass !== undefined) return undefined
       // D11: enabled-but-unavailable (unarmable / route-missing / breaker
       // open) ⇒ a stage-ELIGIBLE call fails to PROMPT with an availability
       // reason — never a silent fall-through to the downstream allow.

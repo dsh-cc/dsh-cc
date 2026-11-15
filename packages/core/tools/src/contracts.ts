@@ -68,6 +68,21 @@ export interface ToolDefinition extends ToolSchema {
    */
   timeoutMs?: number
   /**
+   * Registration-time MCP identity stamped by the MCP bridge: the configured
+   * server name and the server-local raw tool name this public tool stands for.
+   * Executor metadata like {@link timeoutMs} — NEVER sent to the model
+   * (`projectToolSchema` allowlists only name/description/parameters).
+   * Consumers resolve MCP provenance from this field, never by parsing the
+   * public tool name. Absent for native tools.
+   */
+  mcp?: { readonly server: string; readonly rawName: string }
+  /**
+   * MCP `tools/list` annotations stamped by the MCP bridge. Server-authored and
+   * therefore untrusted: a consumer may use `readOnlyHint` only behind an
+   * explicit opt-in setting. Executor metadata — NEVER sent to the model.
+   */
+  annotations?: { readonly readOnlyHint?: boolean }
+  /**
    * Pure synchronous classifier for overlap with sibling tool calls. Only
    * `true` opts in; omission, exceptions, non-`true` returns, and invalid
    * `defineTool` arguments are exclusive. This metadata is never model-visible.

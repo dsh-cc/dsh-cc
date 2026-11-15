@@ -44,6 +44,7 @@ const decisionDeps = (readOnlyTools: readonly string[]): DecideDeps => ({
   rules: () => ({ allow: [], deny: [], ask: [], bypassImmune: [] }),
   bypassDisabled: () => false,
   sessionAllowMatches: () => false,
+  mcpToolClassOf: () => undefined,
   shellMode: () => undefined,
 })
 

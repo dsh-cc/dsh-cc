@@ -74,3 +74,28 @@ export function reassembleTrustedAutoMode(
     'autoMode',
   )
 }
+
+/**
+ * Recompute the MCP-classification keys of the merged `permissions` section
+ * from the trusted layers, mutating `merged` in place: `mcpToolClasses` (the
+ * per-server permission classes) and `trustMcpAnnotations` (annotation-trust
+ * opt-in). Same rule as {@link reassembleTrustedAutoMode} (design D5): a
+ * cloned repo's project and local layers can neither classify MCP tools nor
+ * enable annotation trust, because `<cwd>/.mcp.json` is itself project-level
+ * discovery. When no trusted layer carries a key, it is deleted.
+ * @param merged - the fully merged settings document (pre-alias-application).
+ * @param trustedLayers - trusted layers in merge order (user, flag, policy).
+ */
+export function reassembleTrustedMcpToolClasses(
+  merged: Record<string, unknown>,
+  trustedLayers: readonly Record<string, unknown>[],
+): void {
+  const permissions = isPlainObject(merged['permissions'])
+    ? merged['permissions']
+    : undefined
+  if (permissions === undefined) return
+  const trustedPermissions = trustedLayers.map(layer =>
+    (isPlainObject(layer['permissions']) ? layer['permissions'] : {}))
+  reassembleTrustedKey(permissions, trustedPermissions, 'mcpToolClasses')
+  reassembleTrustedKey(permissions, trustedPermissions, 'trustMcpAnnotations')
+}

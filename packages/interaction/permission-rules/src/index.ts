@@ -25,7 +25,7 @@ import { criticalDenyRules } from './critical-deny.ts'
 import { pinDefaultMode } from './default-mode-pin.ts'
 import { mergeRuleSets } from './evaluate.ts'
 import { autoSuspensionReasonOf, filterAutoAllowRules, type SuspensionCategory } from './auto-rule-filter.ts'
-import { registerPreExecute } from './pre-execute.ts'
+import { createMcpToolClassOf, registerPreExecute } from './pre-execute.ts'
 import type { AutoStage } from './auto-stage.ts'
 import type { PiProbe } from './pi-probe.ts'
 import {
@@ -271,6 +271,8 @@ export class PermissionRulesService extends Service {
       rules: () => this.state.rules,
       bypassDisabled: () => this.bypassDisabled(),
       sessionAllowMatches: (exec) => this.sessionAllows.matches(exec),
+      // D3/D4: the service owns the definition lookup + live settings section.
+      mcpToolClassOf: createMcpToolClassOf(ctx, () => this.settingsSection()),
       workspaceOf: (agent) => this.sessionAllows.workspaceOf(agent),
       taskGrantMatches: (decided, exec) => this.taskGrants.authorize(decided, exec),
       registerGrantEscalation: (grant, exec) => this.taskGrants.registerEscalation(grant, exec),
