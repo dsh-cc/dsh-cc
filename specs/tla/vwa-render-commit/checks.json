@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-render-commit",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "FALSE",
+        "MisclassifyStale": "FALSE",
+        "AllowOverlap": "FALSE",
+        "OverwriteForeign": "FALSE",
+        "AdoptWithoutRender": "FALSE",
+        "SkipIntent": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults",
+        "NoTornOutput",
+        "MarkerFreeByConstruction",
+        "AgreementWhenQuiescent",
+        "ProvisionalIsStale",
+        "SpanSafety",
+        "ReplayContentStable",
+        "NoLostUserFile"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
