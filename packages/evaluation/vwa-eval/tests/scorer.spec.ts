@@ -33,7 +33,7 @@ const claim = (id: string, span: [number, number], kind: string, text: string, c
 })
 
 describe('humanities-scorer@1 primitives (§22.2)', () => {
-  it('pins the frozen scorer version, seed, and lane-1 mapping', () => {
+  it('pins the frozen scorer version, seed, and citation-check mapping', () => {
     expect(SCORER_VERSION).toBe('humanities-scorer@1')
     expect(BOOTSTRAP_SEED).toBe(20261016)
     expect(LANE1_SUPPORT_MAP).toEqual({

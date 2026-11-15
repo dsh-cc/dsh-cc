@@ -1,6 +1,6 @@
-# VWA writing guidance (lane 1: technical documentation)
+# VWA writing guidance (citation checks: technical documentation)
 
-An AGENTS-mountable fragment for the verifiable workspace agent, lane 1.
+An AGENTS-mountable fragment for the verifiable workspace agent, citation checks.
 Design basis: `docs/plans/2026-10-12-verifiable-workspace-agent.md` (§5 for
 the pipeline and language note, §4 for the receipt contract). This fragment
 is behavioral guidance, not a re-spec; where the two disagree, the design

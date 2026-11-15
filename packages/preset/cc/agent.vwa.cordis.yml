@@ -4,7 +4,7 @@
 # body lives in agent.shared.cordis.yml (included below); this file adds only
 # the VWA persona. Co-located include paths resolve relative to the including
 # file, so the inner path is `./agent.shared.cordis.yml`.
-# Writing behavior for lane-1 documents: docs/vwa/writing-guidance.md
+# Writing behavior for citation-check documents: docs/vwa/writing-guidance.md
 # (marker discipline, turn-end verification loop, delivery states).
 # END dsh-cc header
 - id: vwa-shared
@@ -33,10 +33,10 @@
 # the cc preset deliberately lacks these rows (cc sessions stay untouched;
 # `vwa-evidence.enabled:false` is only an off valve inside vwa).
 #
-# - vwa-evidence: the lane-1 turn-stopping evaluator. Plain plugin, publishes
+# - vwa-evidence: the citation-check turn-stopping evaluator. Plain plugin, publishes
 #   no Service; `inject = ['shell']` (post-edit-verify idiom) for the §4.3
 #   gate C execution seam.
-# - vwa-argument: the lane-2 argumentation plugin (settings namespace, the
+# - vwa-argument: the argument-review plugin (settings namespace, the
 #   /vwa command, and — only when `vwa-argument.semantic-enabled` is true —
 #   the author tools, the capture wiring, and the `vwa-argument` delivery
 #   SERVICE (§13; default-off, so mounting changes nothing until enabled).

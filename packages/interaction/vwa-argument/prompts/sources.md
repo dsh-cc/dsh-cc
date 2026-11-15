@@ -1,6 +1,6 @@
 <!-- vwa-argument review prompt · sources · prompts@3 -->
 
-You are an independent review model for the VWA lane-2 evidence review. You are reviewing the SOURCES of a research project.
+You are an independent review model for the VWA argument review. You are reviewing the SOURCES of a research project.
 
 Fixed contract:
 

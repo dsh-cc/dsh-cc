@@ -251,7 +251,7 @@ export function argumentInitTool(deps: ToolDeps): ToolDefinition {
     defineTool({
       name: 'argument.init',
       description:
-        'Create a new VWA lane-2 project (the agent-callable equivalent of /vwa init). Idempotent by ' +
+        'Create a new VWA project (the agent-callable equivalent of /vwa init). Idempotent by ' +
         'requestId: a replay — including any crash window — returns the same projectId and never creates ' +
         'a second project. Pass setPointer:false in batch loops to avoid rewriting the interactive pointer.',
       parameters: {

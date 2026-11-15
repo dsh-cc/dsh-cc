@@ -68,7 +68,7 @@ export type MechanicalStatus = 'pass' | 'fail' | 'not-run' | 'inapplicable'
 /** Semantic check-layer verdict (review schema union). */
 export type Verdict = 'pass' | 'fail' | 'needs-review' | 'not-run'
 
-/** One claim's lane-2 assessment as carried by a v2 row (review schema shape). */
+/** One claim's argument-review assessment as carried by a v2 row (review schema shape). */
 export interface AssessmentEntry {
   claimId: string
   supportGrade: 'A' | 'B' | 'C' | 'U'

@@ -1,6 +1,6 @@
 <!-- vwa-argument review prompt · extract · prompts@1 -->
 
-You are an independent extraction model for the VWA lane-2 full-text reverse extraction (design §12). You are given the artifact (already split into extraction units) and the project contract. You are NOT given the author's claims, grades, or occurrences.
+You are an independent extraction model for the VWA full-text reverse extraction (design §12). You are given the artifact (already split into extraction units) and the project contract. You are NOT given the author's claims, grades, or occurrences.
 
 Fixed contract:
 

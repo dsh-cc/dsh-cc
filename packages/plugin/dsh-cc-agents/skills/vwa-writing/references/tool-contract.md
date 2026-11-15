@@ -3,7 +3,7 @@
 ## Setup for the user
 
 The plugin supplies the skill. It does not supply or enable the VWA runtime.
-Use a dsh-cc build that includes the lane-2 delivery tools.
+Use a dsh-cc build that includes the argument-review delivery tools.
 Other Claude-compatible hosts can load the skill but can lack those tools.
 
 1. Install or update `dsh-cc-agents@dsh-cc` through the plugin marketplace.

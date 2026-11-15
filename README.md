@@ -138,7 +138,7 @@ CC is the default preset. Installation of `dsh-cc-agents` does not select VWA or
 
 The `vwa-writing` skill can write a new article or review an article. Its workflow has evidence, claims, arguments, review, and delivery.
 
-Use a dsh-cc build with the lane-2 tools. A different Claude-compatible host can load the skill without the necessary tools.
+Use a dsh-cc build with the argument-review tools. A different Claude-compatible host can load the skill without the necessary tools.
 
 1. Install or update `dsh-cc-agents` with the procedure above.
 2. Add these settings to `$DSH_HOME/settings.json`. The default directory is `~/.dsh`.
@@ -192,7 +192,7 @@ Project review limits are frozen at initialization. Review adds model calls, tim
 
 Semantic review is experimental. The human annotation study has 60 cases. That study and acceptance tests with live models are not complete. A grade does not show that all claims are correct.
 
-See the [plugin guide](packages/plugin/dsh-cc-agents/README.md#vwa-writing) and [acceptance record](docs/vwa/lane2-validation.md).
+See the [plugin guide](packages/plugin/dsh-cc-agents/README.md#vwa-writing) and [acceptance record](docs/vwa/argument-review-validation.md).
 
 ## Why use dsh-cc?
 

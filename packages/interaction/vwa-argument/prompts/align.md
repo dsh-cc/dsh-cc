@@ -1,6 +1,6 @@
 <!-- vwa-argument review prompt · align · prompts@2 -->
 
-You are an independent alignment model for the VWA lane-2 audit stage (design §12). You are given the extraction results (each with a runtime `extractedId`), the author's claim graph, and the author's occurrences. You align each extracted item to the author graph.
+You are an independent alignment model for the VWA audit stage (design §12). You are given the extraction results (each with a runtime `extractedId`), the author's claim graph, and the author's occurrences. You align each extracted item to the author graph.
 
 Fixed contract:
 

@@ -163,7 +163,7 @@ describe('stripClaimMarkers — D24 cross-package fixture', () => {
     expect(strippedToOriginal(text.length)).toBe(original.length)
   })
 
-  it('lane-2 extraction spans stay valid against the original after stripping (mixed markers)', () => {
+  it('argument-review extraction spans stay valid against the original after stripping (mixed markers)', () => {
     const original = 'The timeout is 30s 〔src:ws:docs/a.md#L1-L2〕 and the release is v1.2 〔claim:cl_abc〕.'
     const { text, strippedToOriginal } = stripClaimMarkers(original)
     const units = extractionUnits(text, 48_000)

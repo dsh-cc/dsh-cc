@@ -124,7 +124,7 @@ function runTool(
   })
 }
 
-/** Mount the three lane-2 tools (caller gates on semantic-enabled, §13). */
+/** Mount the three argument-review tools (caller gates on semantic-enabled, §13). */
 export function registerArgumentTools(
   registrar: { tools: { register(definition: ToolDefinition): unknown } },
   deps: ToolDeps,
@@ -145,7 +145,7 @@ export function registerArgumentTools(
       defineTool({
         name: 'evidence.register',
         description:
-      'Register a source snapshot and optional evidence excerpts for a VWA lane-2 project. ' +
+      'Register a source snapshot and optional evidence excerpts for a VWA project. ' +
       'The snapshot is an exact byte copy of the cited file; quotes are read by the runtime ' +
       'from the given UTF-16 spans and are never passed by the model.',
     parameters: {
@@ -176,7 +176,7 @@ export function registerArgumentTools(
       defineTool({
         name: 'evidence.search_log',
         description:
-      'Record 1–50 search-log entries for a VWA lane-2 project. This tool performs no searches; ' +
+      'Record 1–50 search-log entries for a VWA project. This tool performs no searches; ' +
       'it validates and atomically records already-executed (or planned/failed) search events.',
     parameters: {
       ...common(),
@@ -237,7 +237,7 @@ export function registerArgumentTools(
       defineTool({
         name: 'argument.update',
         description:
-      'Atomically mutate a VWA lane-2 argument graph: set the project contract, upsert claims/' +
+      'Atomically mutate a VWA argument graph: set the project contract, upsert claims/' +
       'evidence groups/arguments/issues, revise the frozen review settings (op set-review-settings), ' +
       'or bind the artifact. Full-graph validation runs before commit; failures report a stable error code and never partially commit.',    parameters: {
       ...common(),
@@ -270,7 +270,7 @@ export function registerArgumentTools(
       defineTool({
         name: 'argument.review',
         description:
-      'Run a lane-2 semantic review stage (sources|support|claims|arguments|all) over the current graph ' +
+      'Run a semantic review stage (sources|support|claims|arguments|all) over the current graph ' +
       'revision. Registers a background run and returns immediately; the run NEVER modifies the body or ' +
       'the author graph. Repeating the same requestId returns the run state without re-calling the model. ' +
       'Pass input.continue=true (with a NEW requestId) after an incomplete run to re-execute only tasks ' +
@@ -470,14 +470,14 @@ export function registerArgumentTools(
   )
 }
 
-/** True when the lane-2 feature gate is on in the raw settings file (§13). */
+/** True when the argument-review feature gate is on in the raw settings file (§13). */
 export function semanticEnabled(dshHome: string): boolean {
   return readUserSettingsSync(dshHome)['semantic-enabled']
 }
 
 /**
  * Apply-time wiring: register the tools ONLY when semantic-enabled is true
- * (feature gate; cc/lane-1 unchanged). When the harness tools service is not
+ * (feature gate; cc mode and the citation checks unchanged). When the harness tools service is not
  * mounted in this context, the inject simply never fires.
  */
 export function mountArgumentTools(ctx: Context, deps: ToolDeps, dshHome: string): void {

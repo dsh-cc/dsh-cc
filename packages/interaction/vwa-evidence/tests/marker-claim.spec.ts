@@ -1,5 +1,5 @@
 /**
- * D24 (lane-1 side): `〔claim:<id>〕` authoring-aid markers are non-marker
+ * D24 (citation-check side): `〔claim:<id>〕` authoring-aid markers are non-marker
  * text — skipped, no `invalid-marker`, and every character offset stays
  * valid when they are mixed with `src:` markers (design §19, §2 marker row).
  */

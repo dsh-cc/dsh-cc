@@ -1,7 +1,7 @@
 /**
  * Settings schema for namespace `vwa-argument` (design
  * docs/plans/2026-10-16-vwa-evidence-argument.md §13). All defaults for the
- * semantic feature are OFF (`semantic-enabled: false`): lane 2 changes
+ * semantic feature are OFF (`semantic-enabled: false`): the argument review changes
  * nothing until explicitly enabled.
  *
  * Same shape as vwa-evidence's settings.ts: `registerNamespaceSafe` +
@@ -19,7 +19,7 @@ import type { SettingsNamespace } from '@dsh-cc/settings'
 import z from '@deepseek-ai/schemastery'
 import { registerNamespaceSafe } from '@dsh-cc/settings/ns'
 
-/** The settings namespace carrying the lane-2 review flags (§13). */
+/** The settings namespace carrying the argument-review flags (§13). */
 export const SETTINGS_NAMESPACE = 'vwa-argument'
 
 /** Resolved settings shape (flat kebab keys, §13 table). */

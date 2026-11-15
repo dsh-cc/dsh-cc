@@ -233,7 +233,7 @@ async function waitForRun(
 }
 
 describe('vwa-argument real mount (semantic-enabled)', () => {
-  it('registers the lane-2 tools and the vwa-argument service on a real cordis mount', async () => {
+  it('registers the argument-review tools and the vwa-argument service on a real cordis mount', async () => {
     const { ctx, commandNames } = await boot()
     // The user-surface /vwa command reaches the real commands service too.
     expect(commandNames).toContain('vwa')

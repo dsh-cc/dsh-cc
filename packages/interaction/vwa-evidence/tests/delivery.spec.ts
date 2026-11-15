@@ -392,7 +392,7 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
     })
     expect(row.checks.mechanical).toBe('inapplicable')
   })
-  it('D22: runtime output trees are outside the lane-1 whitelist (no self-referential capture)', () => {
+  it('D22: runtime output trees are outside the citation-check whitelist (no self-referential capture)', () => {
     expect(isWhitelistedRel('.dsh/vwa/prj_x/reports/a.md')).toBe(false)
     expect(isWhitelistedRel('.dsh/vwa/current-project.json')).toBe(false)
     expect(isWhitelistedRel('docs/vwa-sources/x/y.md')).toBe(true)
@@ -425,7 +425,7 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
     expect(resolveDeliveryProvider({ get: () => host }, '/w')).toBe(provider)
     expect(roots).toEqual(['/w'])
   })
-  it('the pointer is fail-soft: corrupt/missing means no bound lane-2 turn', async () => {
+  it('the pointer is fail-soft: corrupt/missing means no bound argument-review turn', async () => {
     const e = await env()
     expect(readCurrentProject(e.root)).toBeUndefined()
     await mkdir(join(e.root, '.dsh', 'vwa'), { recursive: true })

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dsh-cc.dev/schemas/vwa-argument/review.schema.json",
-  "title": "VWA lane-2 review records (design docs/plans/2026-10-16-vwa-evidence-argument.md \u00a76, \u00a711.4, \u00a712)",
+  "title": "VWA argument-review records (design docs/plans/2026-10-16-vwa-evidence-argument.md \u00a76, \u00a711.4, \u00a712)",
   "$defs": {
     "Hash": {
       "$ref": "author.schema.json#/$defs/Hash"

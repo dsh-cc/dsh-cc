@@ -128,7 +128,7 @@ const mask = text.split('')
 }
 
 /**
- * `〔claim:<id>〕` authoring-aid markers (§19): lane-1 treats them as
+ * `〔claim:<id>〕` authoring-aid markers (§19): the citation check treats them as
  * non-marker text — they are skipped entirely (no SourceSpec, no
  * `invalid-marker`) and every character offset stays valid because nothing
  * is removed or masked. Recognition is by inner-text prefix only.
@@ -168,7 +168,7 @@ export function findMarkers(maskedText: string): MarkerOccurrence[] {
   let match: RegExpExecArray | null
   while ((match = re.exec(maskedText)) !== null) {
     const inner = match[1] ?? ''
-    // 〔claim:<id>〕 is non-marker text on the lane-1 surface: skipped, no
+    // 〔claim:<id>〕 is non-marker text on the citation-check surface: skipped, no
     // invalid-marker, offsets preserved (§19/D24).
     if (isClaimMarkerInner(inner)) continue
     const specs = parseMarkerInner(inner)

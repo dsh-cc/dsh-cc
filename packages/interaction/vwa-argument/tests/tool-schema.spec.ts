@@ -1,5 +1,5 @@
 /**
- * Slice A regression pins (fix plan §A4): the five lane-2 tools register
+ * Slice A regression pins (fix plan §A4): the five argument-review tools register
  * through defineTool (compiled model-facing JSON Schema), shape rejections
  * keep the §10.1 SCHEMA_INVALID envelope, and returned envelopes validate
  * against the ported RESULT_SCHEMA.

@@ -122,7 +122,7 @@ export interface EvaluateTurnOptions {
   signal?: AbortSignal | undefined
   /**
    * The vwa-argument delivery provider (§16.2), resolved duck-typed per
-   * dispatch. Undefined / absent service ⇒ lane-1-only (v1 path unchanged).
+   * dispatch. Undefined / absent service ⇒ citation-check-only (v1 path unchanged).
    */
   deliveryProvider?: VwaArgumentDeliveryProvider | undefined
 }
@@ -259,8 +259,8 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
     // Discriminated union read (§16.1): callers filter by row.v; nothing
     // here casts the whole ledger to v1.
     const rows = (await readJsonl<unknown>(ledgerPath).catch(() => [] as unknown[])) as AnyReceiptRow[]
-    // Bound lane-2 artifacts (§16.2 step 2): editing paths ∪ project-bound
-    // artifacts ∪ pending, deduped by realpath. No pointer / provider ⇒ lane 1 only.
+    // Bound argument-review artifacts (§16.2 step 2): editing paths ∪ project-bound
+    // artifacts ∪ pending, deduped by realpath. No pointer / provider ⇒ citation checks only.
     const bound = boundArtifactMap(options, events, debug)
     const windowArtifacts = await deriveArtifacts(windowEdits, options.workspaceRoot)
     const pending = await pendingArtifacts(
@@ -282,7 +282,7 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
       const realKey = await realpath(artifactPath).catch(() => artifactPath)
       const boundEntry = bound.get(realKey) ?? bound.get(artifactPath)
       if (boundEntry !== undefined) {
-        // §16.2 lane-2 path: the vwa-argument provider owns the checks.
+        // §16.2 bound-artifact path: the vwa-argument provider owns the checks.
         const outcome = await evaluateBoundArtifact(options, {
           sessionId, turnKey, ledgerPath, rows, events, artifactPath, boundEntry,
         })

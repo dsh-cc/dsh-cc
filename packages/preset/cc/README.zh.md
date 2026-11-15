@@ -18,7 +18,7 @@ DeepSeek Harness(dsh)的 **CC 模式** agent preset：除内置 `standard`、`mi
 
 ## VWA 模式
 
-本包还发行并声明了 `vwa` 预设（`agent.vwa.cordis.yml`，order 6）：同一份共享行体，另加一个面向可验证工作区产物的 VWA persona——技术文档与研究制品，其断言引证工作区文件。它增加 `/vwa` 命令（init/status/import/sign/adjudicate/repair——面向用户的表面，无论语义门是否开启都挂载），并**仅在此预设**挂载 `@dsh-cc/vwa-evidence`（第一通道证据门）与 `@dsh-cc/vwa-argument`（论证通道）；两者都停在各关闭阀 `vwa-evidence.enabled` 与 `vwa-argument.semantic-enabled`（默认关闭）之后。
+本包还发行并声明了 `vwa` 预设（`agent.vwa.cordis.yml`，order 6）：同一份共享行体，另加一个面向可验证工作区产物的 VWA persona——技术文档与研究制品，其断言引证工作区文件。它增加 `/vwa` 命令（init/status/import/sign/adjudicate/repair——面向用户的表面，无论语义门是否开启都挂载），并**仅在此预设**挂载 `@dsh-cc/vwa-evidence`（引用检查门）与 `@dsh-cc/vwa-argument`（论证审查包）；两者都停在各关闭阀 `vwa-evidence.enabled` 与 `vwa-argument.semantic-enabled`（默认关闭）之后。
 
 ## 安装
 

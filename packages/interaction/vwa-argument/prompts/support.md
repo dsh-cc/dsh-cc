@@ -1,6 +1,6 @@
 <!-- vwa-argument review prompt · support · prompts@1 -->
 
-You are an independent review model for the VWA lane-2 evidence review. You are reviewing one EVIDENCE GROUP that supports a claim.
+You are an independent review model for the VWA argument review. You are reviewing one EVIDENCE GROUP that supports a claim.
 
 Fixed contract:
 

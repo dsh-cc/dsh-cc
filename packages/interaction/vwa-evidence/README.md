@@ -85,7 +85,7 @@ evaluator also handles artifacts that a `vwa-argument` project has bound
 structurally per dispatch with `ctx.get('vwa-argument')`
 (`resolveDeliveryProvider`); this package never imports `@dsh-cc/vwa-argument`.
 When the service is absent or lacks the provider face, the artifact stays on
-the lane-1 path above (fail-soft).
+the citation-check path above (fail-soft).
 
 - **Report first, then receipt.** The review report is written under
   `docs/vwa-reports/<projectId>/<artifactId>.review.md` (`writeBoundReport`), and a
@@ -99,7 +99,7 @@ the lane-1 path above (fail-soft).
   presented files' current bytes at check time and compared with the binding.
   Events are never fabricated.
 - **Claim markers.** `〔claim:<id>〕` authoring-aid markers are plain text on the
-  lane-1 surface: they are skipped (no source spec, no `invalid-marker`) and
+  citation-check surface: they are skipped (no source spec, no `invalid-marker`) and
   every character offset stays valid (`isClaimMarkerInner`, `src/marker.ts`).
 - Nudges still go through the single `vwa-evidence` inject source; a stale
   binding produces its own nudge.
