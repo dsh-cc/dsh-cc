@@ -21,15 +21,16 @@ import { reportTool } from './report-tool.ts'
 import type { VwaArgumentService } from './report.ts'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readUserSettingsSync } from './settings.ts'
 import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
 import { semanticContractHash } from './review-contract.ts'
-import { VwaFail, fail, ProjectStore, type Fail, type Result } from './store.ts'
+import { VwaFail, fail, ProjectStore, type Fail, type Result, type StagedFile } from './store.ts'
 import { applyMutation, GraphContext, type Mutation } from './graph.ts'
+import { readDraftText, classifyStoredState, STALE_RENDER_MESSAGE } from './render-state.ts'
 import { afterRevisionCommit, discloseCycleBudgetStatus } from './review-settings-revision.ts'
 import { CaptureRegistry, registerSourceApply } from './sources.ts'
+import { resolveRecordedPath } from './paths.ts'
 import type { Id, ProjectSnapshot, SearchLog } from './types.ts'
 import type { ReviewStage } from './review-plan.ts'
 import { createHostTaskService, type ReviewBudget, type ReviewTaskService } from './review-tasks.ts'
@@ -147,7 +148,8 @@ export function registerArgumentTools(
         description:
       'Register a source snapshot and optional evidence excerpts for a VWA project. ' +
       'The snapshot is an exact byte copy of the cited file; quotes are read by the runtime ' +
-      'from the given UTF-16 spans and are never passed by the model.',
+      'from the given UTF-16 spans and are never passed by the model. Citable as 〔src:gr:<sourceId>#La-Lb〕 ' +
+      'only when the registered path is corpus-class (a docs/ path, or a .md/.mdx file); other paths stay reason-able in the graph but cannot be cited.',
     parameters: {
       ...common(),
       input: { type: 'object', additionalProperties: true, required: true, description: 'body: {path, metadata, excerpts}' },
@@ -194,9 +196,8 @@ export function registerArgumentTools(
       return finish(
         runTool(deps, args, exec as ExecContext, { op: 'search_log', input: args.input }, (snapshot) => {
           const entries = (args.input as { entries?: unknown }).entries
-          if (!Array.isArray(entries) || entries.length < 1 || entries.length > 50) {
+          if (!Array.isArray(entries) || entries.length < 1 || entries.length > 50)
             throw new VwaFail(fail('SCHEMA_INVALID', 'entries must be an array of 1–50 search-log bodies'))
-          }
           const now = new Date().toISOString()
           const ids: string[] = []
           for (const entry of entries as Record<string, unknown>[]) {
@@ -208,20 +209,12 @@ export function registerArgumentTools(
             const validate = authorDefValidator('SearchLog')
             if (!validate(searchLog)) throw new VwaFail(fail('SCHEMA_INVALID', ajvErrors(validate)))
             if (searchLog.state === 'executed' && !searchLog.executionEventRef && !searchLog.externalAttestation)
-              throw new VwaFail(
-                fail(
-                  'SCHEMA_INVALID',
-                  'executed search requires a tool event reference or explicit external attestation',
-                ),
-              )
-            for (const targetId of searchLog.targetIds) {
-              if (!snapshot.claims.some((claim) => claim.id === targetId)) {
+              throw new VwaFail(fail('SCHEMA_INVALID', 'executed search requires a tool event reference or explicit external attestation'))
+            for (const targetId of searchLog.targetIds)
+              if (!snapshot.claims.some((claim) => claim.id === targetId))
                 throw new VwaFail(fail('REFERENCE_INVALID', `search log references unknown claim ${targetId}`))
-              }
-            }
-            if (searchLog.state === 'planned' && searchLog.executionEventRef !== undefined) {
+            if (searchLog.state === 'planned' && searchLog.executionEventRef !== undefined)
               throw new VwaFail(fail('SCHEMA_INVALID', 'planned entries must not claim an execution event'))
-            }
             snapshot.searches.push(searchLog)
           }
           return { result: { searchIds: ids } }
@@ -239,7 +232,10 @@ export function registerArgumentTools(
         description:
       'Atomically mutate a VWA argument graph: set the project contract, upsert claims/' +
       'evidence groups/arguments/issues, revise the frozen review settings (op set-review-settings), ' +
-      'or bind the artifact. Full-graph validation runs before commit; failures report a stable error code and never partially commit.',    parameters: {
+      'or bind the artifact. bind-artifact REQUIRES mode: "draft" reads draftPath, validates every occurrence ' +
+      'against the draft text (spans stay in draft coordinates) and renders the deliverable into path with the ' +
+      '〔src:…〕/〔claim:…〕 markers stripped — edit the draft, never the deliverable; "inline" binds an existing artifact with no draft, writing nothing. ' +
+      'Full-graph validation runs before commit; failures report a stable error code and never partially commit.',    parameters: {
       ...common(),
       input: {
         type: 'object',
@@ -255,8 +251,9 @@ export function registerArgumentTools(
       const root = deps.workspaceRoot(exec.agent)
       if (root === undefined) return fail('STORE_IO_FAILED', 'no workspace root is bound to this session', false)
       const result = runTool(deps, args, exec as ExecContext, { op: 'update', input: args.input }, (_snapshot, graph) => {
-        const outcome = applyMutation(graph, args.input as Mutation)
-        return { result: outcome }
+        const staged: StagedFile[] = []
+        const outcome = applyMutation(graph, args.input as Mutation, { root, requestId: args.requestId, staged })
+        return { result: outcome, ...(staged.length === 0 ? {} : { files: staged }) }
       })
       const cycleBudgetUpdated = afterRevisionCommit(root, args.projectId, (args.input as { op?: unknown }).op, result)
       return finish(discloseCycleBudgetStatus(result, cycleBudgetUpdated))
@@ -273,6 +270,8 @@ export function registerArgumentTools(
       'Run a semantic review stage (sources|support|claims|arguments|all) over the current graph ' +
       'revision. Registers a background run and returns immediately; the run NEVER modifies the body or ' +
       'the author graph. Repeating the same requestId returns the run state without re-calling the model. ' +
+      'A draft-backed artifact is reviewed from its DRAFT (the semantic text); the deliverable on disk must already be the render of that draft or the run refuses with STALE_RENDER. ' +
+      'The audit still reads the deliverable through the .md/.mdx artifact-path gate, so a non-markdown deliverable cannot be reviewed. ' +
       'Pass input.continue=true (with a NEW requestId) after an incomplete run to re-execute only tasks ' +
       'without a reusable completed record (audit included); refused with NOTHING_TO_CONTINUE when everything ' +
       'already completed, or BUDGET_EXHAUSTED when the review cycle budget (shared with the fresh request) is spent.',
@@ -342,18 +341,23 @@ export function registerArgumentTools(
       }
       const review = { ...resolved, ...snapshot.contract.reviewSettings }
       // §11.4: quotes/context come from the exact-byte snapshot on disk unless the host overrides.
+      // §8.1: the recorded `snapshotPath` is the address (stored data) — a
+      // pre-migration v1 record still reads its docs/vwa-sources/ snapshot.
       const readSnapshot =
         review.readSnapshot ??
         ((sourceId: Id): string | undefined => {
+          const source = snapshot.sources.find((candidate) => candidate.id === sourceId)
+          if (source === undefined) return undefined
           try {
-            return readFileSync(join(store.snapshotDir, `${sourceId}.md`), 'utf8')
+            return readFileSync(resolveRecordedPath(root, source.snapshotPath), 'utf8')
           } catch {
             return undefined
           }
         })
-      // §12: the audit stage needs the bound artifact's ACTUAL bytes; the
-      // artifact is resolved from the bound snapshot + the host text map.
-      let artifact: { id: string; path: string; text: string } | undefined
+      // §12: the audit stage needs the bound artifact's ACTUAL bytes; for a
+      // draft-backed artifact the semantic text is the DRAFT (§4.4) and a
+      // mismatched deliverable classifies §7.2 (provisional ⇒ STALE_RENDER).
+      let artifact: { id: string; path: string; text: string; artifactHash?: string } | undefined
       if (stage === 'audit' || stage === 'all' || body.skipAudit === true || body.artifactId !== undefined || snapshot.artifacts.length === 1) {
         const bound =
           body.artifactId !== undefined
@@ -361,19 +365,26 @@ export function registerArgumentTools(
             : snapshot.artifacts.length === 1
               ? snapshot.artifacts[0]
               : undefined
-        if (bound === undefined) {
-          return fail(
-            'SCHEMA_INVALID',
-            'the audit stage requires exactly one bound artifact (pass artifactId when several are bound)',
-            false,
-          )
-        }
-        const text = deps.artifactTexts.get(bound.path) ?? deps.readArtifact?.(root, bound.path)
-        if (text !== undefined && sha256Hex(text) !== bound.contentHash)
-          return fail('INPUT_CHANGED', 'artifact bytes changed after binding; re-bind before review', true)
-        if (text === undefined)
+        if (bound === undefined)
+          return fail('SCHEMA_INVALID', 'the audit stage requires exactly one bound artifact (pass artifactId when several are bound)', false)
+        const bytes = deps.artifactTexts.get(bound.path) ?? deps.readArtifact?.(root, bound.path)
+        if (bytes === undefined)
           return fail('INPUT_CHANGED', `artifact text for ${bound.path} is not available to the runtime`, true)
-        artifact = { id: bound.id, path: bound.path, text }
+        if (sha256Hex(bytes) !== bound.contentHash) {
+          // §7.2: a draft-backed artifact's provisional render is STALE_RENDER.
+          const state = bound.draft === undefined ? 'input-changed' : classifyStoredState(root, args.projectId, bound, sha256Hex(bytes))
+          if (state !== 'stale-render')
+            return fail('INPUT_CHANGED', 'artifact bytes changed after binding; re-bind before review', true)
+          return fail('STALE_RENDER', STALE_RENDER_MESSAGE, true)
+        }
+        let text = bytes
+        if (bound.draft !== undefined) {
+          const draftText = deps.artifactTexts.get(bound.draft.path) ?? readDraftText(root, args.projectId, bound.draft.path)
+          if (draftText === undefined)
+            return fail('INPUT_CHANGED', `draft text for ${bound.draft.path} is not available to the runtime`, true)
+          text = draftText
+        }
+        artifact = { id: bound.id, path: bound.path, text, artifactHash: bound.contentHash }
       }
       // §A.2: continue on a fully completed plan is refused BEFORE reserving the
       // request, via the shared pre-check (the runner's guard uses the same logic).
@@ -436,10 +447,7 @@ export function registerArgumentTools(
               ? {} : { projectBudget: snapshot.contract.reviewSettings.projectBudget }),
             contractHash: semanticContractHash(snapshot.contract),
             readSnapshot,
-            emitProgress: (event) => {
-              tasks.emitProgress(event)
-              review.emitProgress?.(event)
-            },
+            emitProgress: (event) => { tasks.emitProgress(event); review.emitProgress?.(event) },
           },
           runId,
           requestId: args.requestId,

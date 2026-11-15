@@ -4,30 +4,27 @@
  *
  * Layout (§14.1): `.dsh/vwa/<projectId>/` with HEAD.json, revisions/,
  * operations/, locks/write.lock, workspace.json (identity nonce); source
- * snapshots live under `docs/vwa-sources/<projectId>/`. HEAD =
- * `{schemaVersion,projectId,revision,graphHash,revisionPath,operationId}`;
- * the revision envelope additionally wraps `parentGraphHash` + `operationId`
- * (the envelope is not part of graphHash, §14.2) so the parent chain is
- * persisted, not just the latest HEAD.
+ * snapshots live under `.dsh/vwa/<projectId>/sources/` (§8.1). The revision
+ * envelope wraps the parent-hash chain (`parentGraphHash` + `operationId`
+ * are persisted, not just the latest HEAD); the envelope is outside graphHash.
  *
- * Durability order per §14.2: source snapshots → revision file → operation
- * file (status `prepared`) → atomic HEAD replace + parent-dir fsync →
- * read-back HEAD/revision hash. Every write-rename passes through the
- * injectable `io` seam; `crashAfter` counts rename ops 1..N so tests can
- * drop the "process" at any point (D09).
+ * Durability order per §14.2: staged files → revision file → operation file
+ * (status `prepared`) → atomic HEAD replace + parent-dir fsync → read-back
+ * HEAD/revision hash → render-intent clear (§7.1). Every write-rename passes
+ * through the injectable `io` seam; `crashAfter` counts rename ops 1..N so
+ * tests can drop the "process" at any point (D09).
  *
  * @module @dsh-cc/vwa-argument/store
  */
 
 import { freezeReviewSettings, type FrozenReviewSettings } from './review-config.ts'
 import { randomUUID } from 'node:crypto'
-import {
-  closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync,
-  renameSync, rmSync, statSync, writeSync,
-} from 'node:fs'
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { sha256Hex, stableJson, type JsonValue } from './schema.ts'
 import { acquireLock as acquireProjectLock, releaseLock } from './lock.ts'
+import { projectSourcesDir } from './paths.ts'
+import { renderIntentFile, sweepStaleTemps } from './render-state.ts'
 import type { ProjectSnapshot } from './types.ts'
 
 /** Uniform failed result (§10.8 stable codes). */
@@ -41,6 +38,8 @@ export interface Fail {
     | 'STORE_IO_FAILED' | 'LOCK_BUSY' | 'IDEMPOTENCY_CONFLICT' | 'NOT_FOUND'
     | 'REVIEW_UNAVAILABLE' | 'REVIEW_INVALID' | 'BUDGET_EXHAUSTED' | 'CANCELLED'
     | 'NOTHING_TO_CONTINUE' | 'BUDGET_INSUFFICIENT' | 'REVIEW_RETRY_BUDGET' | 'PROJECT_BUDGET_EXHAUSTED'
+    // §7.3: the provisional-render crash state (retryable: re-run the bind).
+    | 'STALE_RENDER'
   message: string
   retryable: boolean
   details?: JsonValue
@@ -67,6 +66,26 @@ export type Result<T> = Ok<T> | Fail
 export function fail(code: Fail['code'], message: string, retryable = false, details?: JsonValue): Fail {
   // Omit an absent `details`: tool results must be lossless JSON (no undefined).
   return details === undefined ? { ok: false, code, message, retryable } : { ok: false, code, message, retryable, details }
+}
+
+/** Snapshot versions this build reads (§8.2/§8.3: reads accept {1,2}). */
+const READABLE_SCHEMA_VERSIONS: readonly number[] = [1, 2]
+
+/** The only snapshot version this build writes (§8.3). */
+const WRITABLE_SCHEMA_VERSION = 2
+
+/**
+ * §8.3 write gate: a `schemaVersion: 1` graph is READ-ONLY until migrated
+ * (its recorded source paths still point at the legacy tree, so every
+ * dependency hash is about to change). The single exception is the migration
+ * itself, identified by its own store entry point ({@link ProjectStore.migrate}).
+ */
+export function schemaWriteGate(snapshot: { schemaVersion: number }, projectId: string): Fail | undefined {
+  if (snapshot.schemaVersion === WRITABLE_SCHEMA_VERSION) return undefined
+  return fail(
+    'SCHEMA_INVALID',
+    `project ${projectId} is at schemaVersion ${snapshot.schemaVersion}: writes are rejected until it is migrated (run /vwa repair ${projectId} --migrate)`,
+  )
 }
 
 /** HEAD document (§14.1). */
@@ -137,10 +156,14 @@ function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-/** Files staged before the revision file (exact-byte source snapshots). */
+/** Files staged before the revision file (exact-byte source snapshots, render intents, out-of-tree deliverables). */
 export interface StagedFile {
   path: string
   bytes: Buffer
+  /** 'deliverable' = out-of-tree render output: random-suffix temp, read-back check and sibling sweep (§4.6). */
+  kind?: 'deliverable'
+  /** sha256 the out-of-tree temp must read back with before its rename (deliverable kind only). */
+  expectedHash?: string
 }
 
 export interface TransactionInput<T> {
@@ -153,7 +176,8 @@ export interface TransactionInput<T> {
 
 export class ProjectStore {
   readonly projectId: string
-  private readonly root: string
+  /** The session workspace root this project lives in (`<root>/.dsh/vwa/<projectId>`). */
+  readonly root: string
   private readonly io: DurabilityIo
   private readonly crashAfter: number | undefined
   private renameCount = 0
@@ -170,12 +194,10 @@ export class ProjectStore {
   }
 
   get snapshotDir(): string {
-    return join(this.root, 'docs', 'vwa-sources', this.projectId)
+    return projectSourcesDir(this.root, this.projectId)
   }
 
-  private revisionsDir(): string {
-    return join(this.dir, 'revisions')
-  }
+  private revisionsDir(): string { return join(this.dir, 'revisions') }
 
   /** Crash-injection counter: throws at the injected rename point (D09). */
   private tick(): void {
@@ -202,9 +224,7 @@ export class ProjectStore {
     const lockFailure = this.acquireLock()
     if (lockFailure !== undefined) return lockFailure
     try {
-      if (existsSync(join(this.dir, 'HEAD.json'))) {
-        return fail('SCHEMA_INVALID', `project ${this.projectId} already exists`)
-      }
+      if (existsSync(join(this.dir, 'HEAD.json'))) return fail('SCHEMA_INVALID', `project ${this.projectId} already exists`)
       mkdirSync(this.revisionsDir(), { recursive: true })
       mkdirSync(join(this.dir, 'operations'), { recursive: true })
       mkdirSync(join(this.dir, 'locks'), { recursive: true })
@@ -212,7 +232,7 @@ export class ProjectStore {
       const workspaceIdentity = sha256Hex(stableJson({ root: this.root, nonce: randomUUID() }))
       this.writeAtomic(join(this.dir, 'workspace.json'), { schemaVersion: 1, projectId: this.projectId, workspaceIdentity })
       const snapshot: ProjectSnapshot = {
-        schemaVersion: 1, projectId: this.projectId, revision: 1, workspaceIdentity,
+        schemaVersion: 2, projectId: this.projectId, revision: 1, workspaceIdentity,
         contract: { ...contract, reviewSettings }, sources: [], evidence: [], claims: [], groups: [], arguments: [],
         issues: [], searches: [], artifacts: [],
       }
@@ -272,6 +292,11 @@ export class ProjectStore {
     }
     const envelope = envelopeValue as unknown as RevisionEnvelope
     const snapshot = envelope.snapshot
+    // §8.2/§8.3: reads accept {1,2}; anything else is not a graph this build knows.
+    const version = (snapshot as { schemaVersion?: unknown }).schemaVersion
+    if (typeof version !== 'number' || !READABLE_SCHEMA_VERSIONS.includes(version)) {
+      return this.corrupt(`snapshot schemaVersion ${String(version)} is not supported`)
+    }
     const graphHash = sha256Hex(stableJson(snapshot))
     if (graphHash !== head.graphHash || envelope.graphHash !== head.graphHash
       || envelope.operationId !== head.operationId) {
@@ -281,9 +306,7 @@ export class ProjectStore {
   }
 
   /** STORE_CORRUPT with verifiable recovery candidates (§14.2) — never auto-adopt. */
-  private corrupt(message: string): Fail {
-    return fail('STORE_CORRUPT', message, true, { candidates: this.recoveryCandidates() })
-  }
+  private corrupt(message: string): Fail { return fail('STORE_CORRUPT', message, true, { candidates: this.recoveryCandidates() }) }
 
   /** All revision envelopes whose snapshot hash self-verifies. */
   recoveryCandidates(): { revision: number; graphHash: string; revisionPath: string }[] {
@@ -300,9 +323,7 @@ export class ProjectStore {
           revision: envelope.revision, graphHash: envelope.graphHash,
           revisionPath: `revisions/${file}`,
         })
-      } catch {
-        // Unreadable files are not candidates.
-      }
+      } catch { /* Unreadable files are not candidates. */ }
     }
     return candidates.sort((a, b) => b.revision - a.revision)
   }
@@ -312,9 +333,7 @@ export class ProjectStore {
    * §14.2) after re-verifying its hash and parent chain.
    */
   repair(revisionPath: string): Result<{ revision: number }> {
-    if (!revisionPath.startsWith('revisions/')) {
-      return fail('PATH_OUT_OF_BOUNDS', `not a revision path: ${revisionPath}`)
-    }
+    if (!revisionPath.startsWith('revisions/')) return fail('PATH_OUT_OF_BOUNDS', `not a revision path: ${revisionPath}`)
     const absolute = join(this.dir, revisionPath)
     if (!existsSync(absolute)) return fail('NOT_FOUND', `no such revision file: ${revisionPath}`)
     let envelopeValue: unknown
@@ -323,13 +342,9 @@ export class ProjectStore {
     } catch {
       return fail('STORE_CORRUPT', 'candidate envelope is not valid JSON')
     }
-    if (!isObject(envelopeValue) || !isObject(envelopeValue.snapshot)) {
-      return fail('STORE_CORRUPT', 'candidate envelope is malformed')
-    }
+    if (!isObject(envelopeValue) || !isObject(envelopeValue.snapshot)) return fail('STORE_CORRUPT', 'candidate envelope is malformed')
     const envelope = envelopeValue as unknown as RevisionEnvelope
-    if (sha256Hex(stableJson(envelope.snapshot)) !== envelope.graphHash) {
-      return fail('STORE_CORRUPT', 'candidate snapshot hash mismatch')
-    }
+    if (sha256Hex(stableJson(envelope.snapshot)) !== envelope.graphHash) return fail('STORE_CORRUPT', 'candidate snapshot hash mismatch')
     const chain = this.verifyChain(envelope)
     if (!chain.ok) return chain
     this.writeCommittedRevision(envelope.snapshot, envelope.parentGraphHash, envelope.operationId)
@@ -345,13 +360,9 @@ export class ProjectStore {
       const parentFile = readdirSync(dir).find((file) => {
         return file.startsWith(`${current.revision - 1}-`) && file.endsWith('.json') && !file.endsWith('.tmp')
       })
-      if (parentFile === undefined) {
-        return fail('STORE_CORRUPT', `missing parent revision for ${current.revision}`)
-      }
+      if (parentFile === undefined) return fail('STORE_CORRUPT', `missing parent revision for ${current.revision}`)
       const parentEnvelope = readJson(join(dir, parentFile)) as RevisionEnvelope
-      if (parentEnvelope.graphHash !== current.parentGraphHash) {
-        return fail('STORE_CORRUPT', `parent hash mismatch at revision ${current.revision}`)
-      }
+      if (parentEnvelope.graphHash !== current.parentGraphHash) return fail('STORE_CORRUPT', `parent hash mismatch at revision ${current.revision}`)
       current = parentEnvelope
       depth += 1
     }
@@ -402,9 +413,25 @@ export class ProjectStore {
    * Run one CAS transaction (§14.2): idempotency pre-check → lock → HEAD
    * verify → expectedRevision CAS → apply in memory → staged files →
    * revision → operation (`prepared`) → atomic HEAD replace → read-back.
-   * Commit happens only when everything succeeded.
+   * Commit happens only when everything succeeded. Writes to a
+   * `schemaVersion: 1` graph are rejected by the §8.3 gate; the migration is
+   * the one operation exempt from it ({@link migrate}).
    */
   withTransaction<T>(input: TransactionInput<T>): Result<T> {
+    return this.runChecked(input, 'transaction')
+  }
+
+  /**
+   * §8.3 migration path — the single write allowed while `schemaVersion === 1`.
+   * The exception is this entry point (called only by
+   * `/vwa repair <projectId> --migrate`), not a caller-supplied transaction
+   * flag, so ordinary transactions cannot opt out of the gate.
+   */
+  migrate<T>(input: TransactionInput<T>): Result<T> {
+    return this.runChecked(input, 'migration')
+  }
+
+  private runChecked<T>(input: TransactionInput<T>, operation: 'transaction' | 'migration'): Result<T> {
     const opPath = join(this.dir, 'operations', `${input.requestId}.json`)
     if (existsSync(opPath)) {
       let record: OperationRecord
@@ -413,9 +440,7 @@ export class ProjectStore {
       } catch {
         return fail('STORE_CORRUPT', 'operation record is not valid JSON')
       }
-      if (record.payloadHash !== input.payloadHash) {
-        return fail('IDEMPOTENCY_CONFLICT', `requestId ${input.requestId} was used with a different payload`)
-      }
+      if (record.payloadHash !== input.payloadHash) return fail('IDEMPOTENCY_CONFLICT', `requestId ${input.requestId} was used with a different payload`)
       const head = this.readHead()
       if (head.ok && head.data.head.operationId === input.requestId) {
         return { ok: true, projectId: this.projectId, revision: head.revision, data: record.result as T }
@@ -425,20 +450,23 @@ export class ProjectStore {
     const lockFailure = this.acquireLock()
     if (lockFailure !== undefined) return lockFailure
     try {
-      return this.runTransaction(input)
+      return this.runTransaction(input, operation)
     } finally {
       releaseLock(this.dir)
     }
   }
 
-  private runTransaction<T>(input: TransactionInput<T>): Result<T> {
+  private runTransaction<T>(input: TransactionInput<T>, operation: 'transaction' | 'migration'): Result<T> {
     const current = this.readHead()
     if (!current.ok) return current
     const { head, snapshot } = current.data
-    if (head.revision !== input.expectedRevision) {
-      return fail('REVISION_CONFLICT', `expected revision ${input.expectedRevision}, HEAD is ${head.revision}`, true)
+    if (head.revision !== input.expectedRevision) return fail('REVISION_CONFLICT', `expected revision ${input.expectedRevision}, HEAD is ${head.revision}`, true)
+    // §8.3: only the migration may write a v1 graph.
+    if (operation === 'transaction') {
+      const gate = schemaWriteGate(snapshot, this.projectId)
+      if (gate !== undefined) return gate
     }
-    let applied: { result: T; files?: { path: string; bytes: Buffer }[] }
+    let applied: { result: T; files?: StagedFile[] }
     try {
       const working = structuredClone(snapshot)
       applied = input.applyFn(working)
@@ -459,14 +487,31 @@ export class ProjectStore {
     nextSnapshot: ProjectSnapshot,
     head: Head,
     input: TransactionInput<T>,
-    applied: { result: T; files?: { path: string; bytes: Buffer }[] },
+    applied: { result: T; files?: StagedFile[] },
   ): Result<T> {
     const nextRevision = head.revision + 1
     const graphHash = sha256Hex(stableJson(nextSnapshot))
-    // 1. Stage extra files (source snapshots): temp → fsync → rename (§14.2).
+    // 1. Stage extra files (source snapshots, render intents before the
+    //    deliverable they describe, §7.1): temp → fsync → rename (§14.2);
+    //    out-of-tree deliverables additionally random-suffix the temp, verify
+    //    it on read-back and sweep stale sibling temps (§4.6).
     for (const file of applied.files ?? []) {
-      const tmp = `${file.path}.tmp`
+      mkdirSync(dirname(file.path), { recursive: true })
+      const tmp = file.kind === 'deliverable' ? `${file.path}.${randomUUID()}.tmp` : `${file.path}.tmp`
       this.io.writeTemp(tmp, file.bytes)
+      if (file.kind === 'deliverable') {
+        let readBack = ''
+        try {
+          readBack = readFileSync(tmp, 'utf8')
+        } catch {
+          return fail('STORE_IO_FAILED', 'staged deliverable failed its read-back verification', true)
+        }
+        if (sha256Hex(readBack) !== file.expectedHash) {
+          rmSync(tmp, { force: true })
+          return fail('STORE_IO_FAILED', 'staged deliverable failed its read-back verification', true)
+        }
+        sweepStaleTemps(dirname(file.path))
+      }
       this.io.rename(tmp, file.path)
       this.tick()
       this.io.fsyncDir(dirname(file.path))
@@ -495,6 +540,8 @@ export class ProjectStore {
     if (!readBack.ok || readBack.data.head.graphHash !== graphHash) {
       return fail('STORE_CORRUPT', 'HEAD read-back verification failed', true)
     }
+    // §7.1: HEAD adoption consumed this transaction's render intent.
+    rmSync(renderIntentFile(this.root, this.projectId, input.requestId), { force: true })
     return { ok: true, projectId: this.projectId, revision: nextRevision, data: applied.result }
   }
 }

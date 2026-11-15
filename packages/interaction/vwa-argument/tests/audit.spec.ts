@@ -18,7 +18,8 @@ import { BudgetTracker } from '../src/review-tasks.ts'
 import type { ReviewBudget } from '../src/review-runner.ts'
 import type { UsageRow } from '../src/review-run-store.ts'
 import { auditCostModel } from '../src/audit-cost.ts'
-import { auditUnitChars } from '../src/audit-reuse.ts'
+import { auditInputHash, auditUnitChars, recordSemanticHash } from '../src/audit-reuse.ts'
+import { sha256Hex } from '../src/schema.ts'
 import type { ReviewCaller as ReviewCallerType } from '../src/review-call.ts'
 import type { AlignEnvelope, ExtractEnvelope } from '../src/audit.ts'
 import type { Claim, ExtractedItem, ProjectSnapshot, ReviewRecord, AlignResponse } from '../src/types.ts'
@@ -1135,5 +1136,113 @@ describe('executeAudit — extract scope normalization', () => {
     }
     expect(outcome.extractionRecord.response.items[0]!.atomicClaims[0]!.scope).toEqual(expected)
     expect(alignScope).toEqual(expected)
+  })
+})
+
+// ---- §4.4a audit identity: artifactHash rendered, semanticHash draft ----
+
+describe('executeAudit — §4.4a dual identity', () => {
+  const renderedHash = 'r'.repeat(64)
+
+  it('records carry artifactHash = rendered hash and semanticHash = sha256(draft)', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const adapter = auditAdapter({
+      items: [item('The minutes record only the vote.', ARTIFACT, 'core')],
+      align: (envelope) => ({
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
+        alignment: envelope.items.map((entry: { extractedId: string }) => ({
+          extractedId: entry.extractedId,
+          claimIds: [],
+          relation: 'new',
+          rationale: 'unregistered',
+        })),
+      }),
+    })
+    const input = auditInput(ARTIFACT, snapshot, adapter)
+    const outcome = await executeAudit({
+      ...input,
+      artifact: { ...input.artifact, artifactHash: renderedHash },
+    })
+    for (const record of [outcome.extractionRecord, outcome.alignRecord]) {
+      expect(record.artifactHash).toBe(renderedHash)
+      expect(record.semanticHash).toBe(sha256Hex(ARTIFACT))
+    }
+  })
+
+  it('falls back to the bound artifact contentHash, then to the semantic hash', async () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const input = auditInput(ARTIFACT, snapshot, auditAdapter({
+      items: [item('The minutes record only the vote.', ARTIFACT, 'core')],
+      align: (envelope) => ({
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
+        alignment: envelope.items.map((entry: { extractedId: string }) => ({
+          extractedId: entry.extractedId,
+          claimIds: [],
+          relation: 'new',
+          rationale: 'unregistered',
+        })),
+      }),
+    }))
+    const boundHash = 'c'.repeat(64)
+    snapshot.artifacts.push({
+      id: input.artifact.id, entityVersion: 1, createdAt: '', updatedAt: '',
+      path: 'docs/a.md', contentHash: boundHash, occurrences: [], outline: [],
+    })
+    const outcome = await executeAudit(input)
+    expect(outcome.alignRecord.artifactHash).toBe(boundHash)
+    expect(outcome.alignRecord.semanticHash).toBe(sha256Hex(ARTIFACT))
+
+    // No binding at all: identity degenerates to the semantic hash (legacy inline shape).
+    const unbound = makeSnapshot({ claims: [makeClaim('fact')] })
+    const again = await executeAudit(auditInput(ARTIFACT, unbound, auditAdapter({
+      items: [item('The minutes record only the vote.', ARTIFACT, 'core')],
+      align: (envelope) => ({
+        stage: 'align',
+        rubricVersion: 'humanities-v1',
+        findings: [],
+        targets: [],
+        alignment: envelope.items.map((entry: { extractedId: string }) => ({
+          extractedId: entry.extractedId,
+          claimIds: [],
+          relation: 'new',
+          rationale: 'unregistered',
+        })),
+      }),
+    })))
+    expect(again.alignRecord.artifactHash).toBe(sha256Hex(ARTIFACT))
+    expect(again.alignRecord.semanticHash).toBe(sha256Hex(ARTIFACT))
+  })
+
+  it('the reuse key follows the source: auditInputHash ignores the rendered hash (§4.4a)', () => {
+    const snapshot = makeSnapshot({ claims: [makeClaim('fact')] })
+    const base = {
+      snapshot,
+      artifact: { id: 'art_x', text: ARTIFACT },
+      records: [],
+      coreClaimIds: [],
+      contractHash: 'c'.repeat(64),
+      reviewerConfigHash: 'r'.repeat(64),
+      unitChars: 48_000,
+    }
+    const a = auditInputHash(base)
+    // A "different" rendered identity cannot split reuse: only the draft text enters.
+    const b = auditInputHash({ ...base, artifact: { id: 'art_x', text: ARTIFACT, artifactHash: renderedHash } })
+    expect(b).toBe(a)
+    const c = auditInputHash({ ...base, artifact: { id: 'art_x', text: `${ARTIFACT}\n` } })
+    expect(c).not.toBe(a)
+  })
+
+  it('recordSemanticHash prefers semanticHash with the legacy artifactHash fallback', () => {
+    const record = { artifactHash: 'a'.repeat(64), semanticHash: 'b'.repeat(64) } as ReviewRecord
+    expect(recordSemanticHash(record)).toBe('b'.repeat(64))
+    const legacy = { artifactHash: 'a'.repeat(64) } as ReviewRecord
+    expect(recordSemanticHash(legacy)).toBe('a'.repeat(64))
+    expect(recordSemanticHash({} as ReviewRecord)).toBeUndefined()
   })
 })

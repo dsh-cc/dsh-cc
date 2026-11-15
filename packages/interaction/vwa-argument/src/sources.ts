@@ -8,19 +8,20 @@
  * a same-session `write`/`edit` producing byte-identical bytes upgrades a
  * file source to `tool-event`, otherwise `unverified` — never guessed.
  *
- * Snapshots are exact copied bytes under `docs/vwa-sources/<projectId>/`:
+ * Snapshots are exact copied bytes under `.dsh/vwa/<projectId>/sources/`:
  * no added frontmatter, no changed line numbers (§14.1).
  *
  * @module @dsh-cc/vwa-argument/sources
  */
 
 import { randomUUID } from 'node:crypto'
-import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { sha256Hex, stableJson, authorDefValidator, ajvErrors } from './schema.ts'
 import type { ProjectSnapshot, Source } from './types.ts'
 import { VwaFail, fail, type ProjectStore, type Result, type StagedFile } from './store.ts'
+import { isRuntimeOutputPath, resolveRecordedPath, sourceSnapshotAbsolute, sourceSnapshotPath } from './paths.ts'
 import { rootBlocks } from './markdown-blocks.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 
@@ -174,7 +175,9 @@ const MAX_SOURCE_BYTES = 8 * 1024 * 1024
  * re-read before commit (INPUT_CHANGED on mismatch). Sources must never live
  * under the runtime's own output trees (`.dsh/vwa`, `docs/vwa-sources`,
  * `docs/vwa-reports`) — the report output being rescanned as evidence would
- * create a self-referential evidence loop (D22).
+ * create a self-referential evidence loop (D22). The trees are compared in
+ * their canonical form (`realpath(.dsh/vwa)`, §3.4), with a lexical fallback
+ * for trees that do not exist yet, so a symlinked `.dsh/vwa` still classifies.
  */
 export function readSourceBytes(root: string, path: string): { bytes: Buffer; text: string; hash: string } {
   if (!isAbsolute(path)) throw new VwaFail(fail('PATH_OUT_OF_BOUNDS', 'path must be absolute'))
@@ -182,11 +185,7 @@ export function readSourceBytes(root: string, path: string): { bytes: Buffer; te
   try {
     const resolvedRoot = realpathSync(root)
     resolved = realpathSync(path)
-    const segments = relative(resolvedRoot, resolved).split(sep)
-    if (
-      (segments[0] === '.dsh' && segments[1] === 'vwa') ||
-      (segments[0] === 'docs' && (segments[1] === 'vwa-sources' || segments[1] === 'vwa-reports'))
-    ) {
+    if (isRuntimeOutputPath(root, resolved)) {
       throw new VwaFail(
         fail('PATH_OUT_OF_BOUNDS', `path is inside the runtime output tree and cannot be a source (D22): ${path}`),
       )
@@ -220,6 +219,22 @@ export function readSourceBytes(root: string, path: string): { bytes: Buffer; te
 /** Raw-byte SHA-256 (§4: over the original bytes, no line-ending/Unicode normalization). */
 export function rawSha256(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+/**
+ * Workspace-relative POSIX path of a file, captured at registration as
+ * `Source.corpusPath` (render pipeline §5.2), or undefined when the file
+ * resolves outside the workspace. Both sides are REALPATHS, so a symlinked
+ * file records the in-workspace target the registration actually accepted.
+ */
+export function workspaceRelPosix(root: string, absolutePath: string): string | undefined {
+  try {
+    const rel = relative(realpathSync(root), realpathSync(absolutePath))
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return undefined
+    return rel.split(sep).join('/')
+  } catch {
+    return undefined
+  }
 }
 
 /** Lineage cluster: undirected connected components over parentSourceIds (§5.1). */
@@ -268,6 +283,10 @@ export function registerSourceApply(
     const reread = readSourceBytes(storeRootOf(store), input.path)
     if (reread.hash !== read.hash) throw new VwaFail(fail('INPUT_CHANGED', 'source changed between reads', true))
     const snapshotHash = read.hash
+    // §5.2: capture the workspace-relative POSIX path of the registered file.
+    // `gr:` citability is decided at citation time by `isWhitelistedRel(corpusPath)`
+    // — registration itself accepts any in-workspace UTF-8 file.
+    const corpusPath = workspaceRelPosix(store.root, input.path)
 
     // Completed metadata (§10.3): lineage/authenticity wrapped explicitly, no Ajv defaults.
     const metadata = {
@@ -307,9 +326,16 @@ export function registerSourceApply(
     const sourceId = existing?.id ?? `src_${crypto.randomUUID()}`
     const acquisition = captures.classify(input.path, read.bytes)
 
-    // Snapshot: exact copied bytes, no added headings (§14.1).
-    const snapshotPath = ['docs', 'vwa-sources', store.projectId, `${sourceId}.md`].join('/')
-    const absoluteSnapshot = resolve(store.snapshotDir, `${sourceId}.md`)
+    // Snapshot: exact copied bytes, no added headings (§14.1). The recorded
+    // `snapshotPath` is workspace-relative POSIX under the v2 state tree
+    // (§8.1); the bytes are staged in this same commit transaction (§14.2).
+    const snapshotPath = sourceSnapshotPath(store.projectId, sourceId)
+    const absoluteSnapshot = sourceSnapshotAbsolute(store.root, store.projectId, sourceId)
+    // A project created before the v2 layout has no `sources/` dir yet (its
+    // legacy snapshots stay under docs/vwa-sources/); create the parent so the
+    // staged temp file has a home — the snapshot itself is still committed only
+    // through `files` below.
+    mkdirSync(dirname(absoluteSnapshot), { recursive: true })
     const files: StagedFile[] = [{ path: absoluteSnapshot, bytes: read.bytes }]
 
     // Evidence excerpts in the same transaction; quote from the runtime (§10.3).
@@ -343,6 +369,7 @@ export function registerSourceApply(
       updatedAt: now,
       snapshotPath,
       snapshotHash,
+      ...(corpusPath === undefined ? {} : { corpusPath }),
       acquisition,
       ...metadata,
     }
@@ -356,7 +383,8 @@ export function registerSourceApply(
     snapshot.sources.push(source)
     // D.3: warn when an earlier source for the same original path/locator
     // registered different file content — the disk file drifted since that
-    // registration. The input path is not persisted on Source, so match on the
+    // registration. The input path itself is not persisted on Source (only the
+    // workspace-relative `corpusPath`), so match on the
     // stored `originalLocator` against either the incoming path or the incoming
     // locator metadata (the two ways callers identify the same document).
     // A dedup hit creates no new source, even when older versions remain registered.
@@ -387,7 +415,10 @@ export function registerSourceApply(
 const crypto = { randomUUID }
 
 function storeRootOf(store: ProjectStore): string {
-  return resolve(store.snapshotDir, '..', '..', '..')
+  // §8.3: the snapshot dir is no longer `docs/vwa-sources/<pid>` (three levels
+  // above the root-shaped snapshot dir), so the D22 comparison takes the
+  // store's own workspace root instead of counting segments above a path.
+  return store.root
 }
 
 /** Dedup key of a stored Source: snapshot hash + author metadata, minus capturedAt (§10.3). */
@@ -411,14 +442,15 @@ function sourceDedupKey(source: Source): string {
 /**
  * Mechanical currency check (§15): a source snapshot must never change; an
  * externally modified snapshot file is a mechanical failure, not staleness.
+ * `snapshotPath` is stored data (§8.1): the recorded value is resolved as-is,
+ * so a pre-migration record still reads its `docs/vwa-sources/<pid>` snapshot.
  */
 export function verifySnapshot(
   store: ProjectStore,
   source: { snapshotPath: string; snapshotHash: string },
 ): Result<{ hash: string }> {
-  const relative = source.snapshotPath.split('/').pop() ?? ''
   try {
-    const bytes = readFileSync(resolve(store.snapshotDir, relative))
+    const bytes = readFileSync(resolveRecordedPath(store.root, source.snapshotPath))
     const text = bytes.toString('utf8')
     if (!Buffer.from(text, 'utf8').equals(bytes)) {
       return fail('INVALID_ENCODING', 'snapshot is no longer valid UTF-8')

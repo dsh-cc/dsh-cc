@@ -7,7 +7,7 @@
  * @module tests/commands
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID, createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
@@ -174,6 +174,7 @@ describe('/vwa import (§10.2 re-verify + rebind)', () => {
   it('rejects when a bound artifact changed on disk; pointer unchanged', async () => {
     const made = initWorkspace()
     writePointer(made.root, made.projectId, 'x'.repeat(64))
+    mkdirSync(`${made.root}/docs`, { recursive: true })
     writeFileSync(`${made.root}/docs/a.md`, ARTIFACT, 'utf8')
     bind(made.root, made.projectId, made.store)
     writeFileSync(`${made.root}/docs/a.md`, 'tampered', 'utf8')
@@ -185,6 +186,7 @@ describe('/vwa import (§10.2 re-verify + rebind)', () => {
   it('a healthy project re-verifies and keeps the pointer', async () => {
     const made = initWorkspace()
     writePointer(made.root, made.projectId, 'x'.repeat(64))
+    mkdirSync(`${made.root}/docs`, { recursive: true })
     writeFileSync(`${made.root}/docs/a.md`, ARTIFACT, 'utf8')
     bind(made.root, made.projectId, made.store)
     const result = await run(made.root, 'import docs')

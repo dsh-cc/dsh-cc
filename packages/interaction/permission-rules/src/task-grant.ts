@@ -27,6 +27,7 @@ import { splitShellCommand } from './shell-segments.ts'
 import { firstShellToken, stripLeadingAssignments } from './shell-words.ts'
 import { parseTaskGrantGitInvocation } from './task-grant-git.ts'
 import type { PermissionRule, PermissionRuleSource } from './types.ts'
+import { VWA_BATCH_ROOT, VWA_STATE_ROOT, isVwaBatchPath, isVwaDraftPrefix, isVwaStatePath } from './vwa-paths.ts'
 
 /** The session event type carrying one task grant (payload = the grant). */
 export const TASK_GRANT_EVENT = 'permission/task-grant'
@@ -36,12 +37,6 @@ export const TASK_GRANT_EVENT = 'permission/task-grant'
 
 /** Grant rules are parsed into the highest-priority source: they are user-authored. */
 export const TASK_GRANT_RULE_SOURCE: PermissionRuleSource = 'session'
-
-/** The workspace-relative VWA state root that writePaths may never cover (§3.2). */
-export const VWA_STATE_ROOT = '.dsh/vwa'
-
-/** The only VWA state subtree writable under a grant (batch scratch space). */
-export const VWA_BATCH_ROOT = '.dsh/vwa/batches'
 
 /** How a grant ends (§3.2). */
 export type GrantExpiry = { kind: 'session-end' } | { kind: 'goal-complete'; goalId: string } | { kind: 'manual' }
@@ -100,16 +95,6 @@ export class GrantValidationError extends Error {
     super(message)
     this.name = 'GrantValidationError'
   }
-}
-
-/** Whether a root-relative path is the VWA state root or under it. */
-function underVwaState(path: string): boolean {
-  return path === VWA_STATE_ROOT || path.startsWith(`${VWA_STATE_ROOT}/`)
-}
-
-/** Whether a root-relative path is the exempt batch subtree (or the VWA root itself). */
-function underVwaBatches(path: string): boolean {
-  return path === VWA_BATCH_ROOT || path.startsWith(`${VWA_BATCH_ROOT}/`)
 }
 
 /** Normalize one root-relative write path to its canonical POSIX form. */
@@ -210,11 +195,16 @@ export function validateDescriptor(descriptor: TaskGrantDescriptor): {
   descriptor.tools.forEach(validateToolEntry)
   const writePaths = descriptor.writePaths.map(normalizeWritePath)
   for (const path of writePaths) {
-    if (underVwaState(path) && !underVwaBatches(path)) {
-      throw new GrantValidationError(
-        `writePaths: "${path}" is authoritative VWA state; only ${VWA_BATCH_ROOT}/** is writable under a grant`,
-      )
-    }
+    // The state tree is off limits except its two carve-outs (§3.2/§3.3): the
+    // physical batches subtree and a drafts PREFIX that names a well-formed
+    // `prj_` project segment. Project authorization is carried by that literal
+    // segment (the descriptor has no project-list field), so the ancestor
+    // prefixes `.dsh/vwa` and `.dsh/vwa/<projectId>` stay rejected.
+    if (!isVwaStatePath(path) || isVwaBatchPath(path) || isVwaDraftPrefix(path)) continue
+    throw new GrantValidationError(
+      `writePaths: "${path}" is authoritative VWA state; only ${VWA_BATCH_ROOT}/** and ` +
+      `${VWA_STATE_ROOT}/<projectId>/drafts/** are writable under a grant`,
+    )
   }
   const modeCeiling = descriptor.modeCeiling ?? 'workspace-write'
   if (modeCeiling !== 'workspace-write' && modeCeiling !== 'danger-full-access') {

@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 1,
+  "design": "docs/plans/2026-11-15-vwa-autonomous-render-pipeline.md 3.2",
+  "contract": "Shared fixture corpus for the canonical draft-path predicates. @dsh-cc/permission-rules owns the predicates (src/vwa-paths.ts) and @dsh-cc/vwa-evidence restates them (src/vwa-paths.ts) WITHOUT importing permission-rules; both packages load THIS file in their own tests and assert identical verdicts. The fixture is the contract: change it in the same commit as either matcher, never one side alone.",
+  "vocabulary": {
+    "rel": "workspace-relative POSIX path (never absolute, never backslash-separated)",
+    "draftFile": "expected isVwaDraftPath(rel) — the DRAFT_FILE_RE shape: .dsh/vwa/<projectId>/drafts/<name>.md",
+    "draftPrefix": "expected isVwaDraftPrefix(rel) — the DRAFT_PREFIX_RE shape granted writePaths use: .dsh/vwa/<projectId>/drafts(/**)?",
+    "projectId": "expected vwaProjectIdOfDraft(rel), null when the path is not a draft file"
+  },
+  "cases": [
+    {
+      "why": "draft file accepted: the canonical agent editing surface",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/notes.md",
+      "draftFile": true,
+      "draftPrefix": true,
+      "projectId": "prj_11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "why": "draft file accepted: single-character name is inside the 1..64 name budget",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": true,
+      "draftPrefix": true,
+      "projectId": "prj_11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "why": "draft file accepted: dots, underscores and hyphens are legal inside a name",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.b_c-d.md",
+      "draftFile": true,
+      "draftPrefix": true,
+      "projectId": "prj_11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "why": "draft file accepted: a 64-character name is the longest legal name",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md",
+      "draftFile": true,
+      "draftPrefix": true,
+      "projectId": "prj_11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "why": "draft file accepted: 'a.md' is the name and the suffix is the second '.md'",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md.md",
+      "draftFile": true,
+      "draftPrefix": true,
+      "projectId": "prj_11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "why": "draft file accepted: a name may start with a digit",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/0-notes.md",
+      "draftFile": true,
+      "draftPrefix": true,
+      "projectId": "prj_11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "why": "draft file accepted: any well-formed prj_ project segment is legal, not one fixed id",
+      "rel": ".dsh/vwa/prj_22222222-2222-4222-8222-222222222222/drafts/other.md",
+      "draftFile": true,
+      "draftPrefix": true,
+      "projectId": "prj_22222222-2222-4222-8222-222222222222"
+    },
+    {
+      "why": "grant prefix accepted without a trailing slash: the drafts directory itself",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "grant prefix accepted with a trailing slash (validateDescriptor strips it first)",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "grant prefix accepted: a deeper prefix is still a drafts prefix (and not a draft FILE)",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/sub/a.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "draft FILES never nest: a path below a draft file is a prefix only",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md/extra",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "an empty name segment is not a draft file (the prefix still covers the tree)",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts//a.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "traversal is not normalized here: callers normalize first, so the file predicate rejects and the lexical prefix still spans the subtree",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/../adjudications.json",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "sibling state file rejected: adjudications.json is authoritative state",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/adjudications.json",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "sibling report rejected: the reports tree is authoritative state, not a draft",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/reports/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "sibling source rejected: the sources tree is authoritative state, not a draft",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/sources/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "a drafts directory that is not directly under the project segment is not the drafts tree",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/other/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "a non-markdown sibling inside drafts is not a draft FILE",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/sources.json",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "symlink-escape-shaped relative path rejected: never anchored through an alias outside the state tree",
+      "rel": "docs/link/.dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "symlink-escape-shaped relative path rejected: a path climbing out of the workspace never claims drafts",
+      "rel": "../../.dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "ancestor prefix rejected: the whole state root is not a grant prefix",
+      "rel": ".dsh/vwa",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "ancestor prefix rejected: a trailing slash does not turn the state root into a drafts prefix",
+      "rel": ".dsh/vwa/",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "ancestor prefix rejected: the project directory itself spans state, not drafts",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "ancestor prefix rejected: .dsh itself covers the whole state tree",
+      "rel": ".dsh",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong project id rejected: 'prj_1' is not a prj_<uuid> segment",
+      "rel": ".dsh/vwa/prj_1/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong project id rejected: a placeholder id is not a prj_<uuid> segment",
+      "rel": ".dsh/vwa/prj_x/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong project id rejected: the prj_ prefix is mandatory",
+      "rel": ".dsh/vwa/11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong project id rejected: the uuid must be hyphenated 8-4-4-4-12",
+      "rel": ".dsh/vwa/prj_11111111111141118111111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong project id rejected: lowercase hex only",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-11111111111g/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong project id rejected: the last group is exactly 12 hex digits",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-1111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong project id rejected: uppercase PRJ_ prefix is not a project id",
+      "rel": ".dsh/vwa/PRJ_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "non-.md rejected: draft names end in .md",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.txt",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "non-.md rejected: the extension is case-sensitive",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.MD",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "name rejected: uppercase characters are outside the name pattern",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/Notes.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "name rejected: a name may not start with a hyphen",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/-leading.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "name rejected: a name may not start with a dot (no hidden drafts)",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/.hidden.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "name rejected: whitespace is outside the name pattern",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a b.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "name rejected: non-ASCII is outside the name pattern",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/é.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "name too long rejected: a 65-character name is one over the budget",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    },
+    {
+      "why": "absolute path rejected: the predicates take workspace-relative POSIX only",
+      "rel": "/tmp/ws/.dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "wrong depth rejected: a state tree nested under docs/ is not the workspace state root",
+      "rel": "docs/.dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "separator boundary rejected: '.dsh/vwaX' is not the state root",
+      "rel": ".dsh/vwaX/prj_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "backslash separators rejected: only POSIX separators are recognized",
+      "rel": ".dsh\\vwa\\prj_11111111-1111-4111-8111-111111111111\\drafts\\a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "unanchored path rejected: callers normalize './' away first",
+      "rel": "./.dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/a.md",
+      "draftFile": false,
+      "draftPrefix": false,
+      "projectId": null
+    },
+    {
+      "why": "drafts subtree without a file is a prefix only",
+      "rel": ".dsh/vwa/prj_11111111-1111-4111-8111-111111111111/drafts/sub",
+      "draftFile": false,
+      "draftPrefix": true,
+      "projectId": null
+    }
+  ]
+}

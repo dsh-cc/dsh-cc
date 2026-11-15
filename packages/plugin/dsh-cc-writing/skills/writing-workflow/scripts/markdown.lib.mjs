@@ -21,7 +21,9 @@ const HTML = /^ {0,3}<[A-Za-z!/]/
 
 const NUMBER_RE = /\d(?:[\d,]|\.(?=[\d.]))*(?:[A-Za-z%]*)/g
 const SOURCE_GROUP_RE = /〔([^〕]*)〕/g
-const SOURCE_MARKER_RE = /^src:ws:([^#;]+)#L(\d+)-L(\d+)$/
+// `ws:<path>` (live workspace file) or `gr:<sourceId>` (registered project
+// source snapshot) — render pipeline §5.1.
+const SOURCE_MARKER_RE = /^src:(?:ws|gr):([^#;]+)#L(\d+)-L(\d+)$/
 const FOOTNOTE_RE = /\[\^([^\]\s]+)\]/g
 const LINK_RE = /\[[^\]]*\]\(/g
 

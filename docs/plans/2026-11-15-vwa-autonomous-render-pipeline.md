@@ -1,12 +1,14 @@
 # VWA Autonomous Render Pipeline (vwa-draft-render)
 
-## Status: Design — three-lane blind review converged (r1 full review, r2 delta verification, r3
-## micro-confirmation; all seats GO or GO-WITH-CHANGES with every finding folded), formal-design
-## models verified, pending user sign-off. Not implemented.
+## Status: Implemented — slices 1–7 of §15 are in the tree on branch `worktree-vwa-autonomous`
+## (implementation tree `a93d2ccd`), PR pending. Design history: three-lane blind review converged
+## (r1 full review, r2 delta verification, r3 micro-confirmation; all seats GO or GO-WITH-CHANGES
+## with every finding folded), formal-design models verified, user sign-off given.
 
-All anchors cite tree `041cfe72`, verified 2026-11-15 by three read-only digests and two review 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕
+All anchors cite tree `041cfe72`, verified 2026-11-15 by three read-only digests and two review 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕
 rounds across three independent lanes (critic, codex, grok). This text supersedes every earlier
-plan or memory record that describes the same surfaces.
+plan or memory record that describes the same surfaces. Slice 7 re-verified every anchor fence
+against the implementation tree `a93d2ccd`; that doc's header carries both pins 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L7-L13〕.
 
 ## 1. Problem and goals
 
@@ -15,12 +17,12 @@ VWA mode mixes working state with published content and leaves two autonomy gaps
 1. **Marker teardown is manual.** `〔src:ws:…〕` and `〔claim:<id>〕` markers are load-bearing while
    authoring (coverage gate, audit extract/align, artifact binding) but must be stripped before
    publication. Today the only mechanism is a session-side regex (repeated incidents, including a
-   subagent backfilling ~800 fabricated markers) 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L265-L281〕. There is no verifiable compile step.
+   subagent backfilling ~800 fabricated markers) 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L322-L338〕. There is no verifiable compile step.
 2. **Derived artifacts live next to real content.** Snapshots go to `docs/vwa-sources/<projectId>/`
    (`sources.ts:311`), reports to `docs/vwa-reports/<projectId>/` (`report-tool.ts:75`) — inside
    `docs/`, the same tree as published articles.
 3. **Human adjudication is not durable.** `/vwa adjudicate … reject` does unstick a
-   REVIEWER_DISAGREEMENT today (`tests/disagreement-policy.spec.ts:65-84`; `accept` intentionally 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L12-L36〕
+   REVIEWER_DISAGREEMENT today (`tests/disagreement-policy.spec.ts:65-84`; `accept` intentionally 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L20-L48〕
    still blocks, `adjudicate.ts:176`). But `activeAdjudications` (`delivery-check.ts:80-91`) pins
    the decision to `projectDependencyDigest`, which hashes **every non-disagreement review record**
    (`delivery-check.ts:106-109`), so any later review anywhere voids the human decision; and the
@@ -92,7 +94,7 @@ which holds user-level state — `settings.json` (hot-read by the evidence layer
 installed skills, and the receipt ledger. The two never mix: VWA project state is workspace data (and
 committing it stays the user's choice, §8.1), while receipts are machine-local and stay where they
 are: `<dshHome>/vwa-receipts/<encodedSessionId>.jsonl` (`receipt.ts:168-171`), unchanged by this
-design 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L303-L324〕.
+design 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L359-L387〕.
 
 ```
 .dsh/vwa/<projectId>/
@@ -105,8 +107,8 @@ design 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L303-L324〕.
 ```
 
 - **Draft names are author-chosen**: `^[a-z0-9][a-z0-9._-]{0,63}$` (plus `.md`), so a draft can exist
-  before any artifact (the artifactId is minted only inside bind, `artifact.ts:66`) 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L63-L70〕.
-- **Unique draft ownership**: a bind is rejected (`SCHEMA_INVALID 'draft already bound to another 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L100-L115〕
+  before any artifact (the artifactId is minted only inside bind, `artifact.ts:66`) 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L74-L82〕.
+- **Unique draft ownership**: a bind is rejected (`SCHEMA_INVALID 'draft already bound to another 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L111-L130〕
   artifact'`) if any other artifact records the same `draft.path`. Without this, §5.5's
   one-route-per-draft rule has no foundation.
 - Deliverable paths may be anywhere except the state tree (§4.2 step 7).
@@ -145,7 +147,7 @@ DRAFT_PREFIX_RE= /^\.dsh\/vwa\/<PROJECT_ID_RE>\/drafts(\/.*)?$/          (grant 
 - `.dsh/vwa/**` stays **ASK** by default; exemptions are the physical `batches` subtree plus draft
   **files** matching `DRAFT_FILE_RE`. `VWA_STATE_ASK_REASON` becomes: "writes under .dsh/vwa are
   authoritative VWA state (use the VWA tools); only .dsh/vwa/batches/** and
-  .dsh/vwa/<projectId>/drafts/** are writable directly" 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L219-L230〕.
+  .dsh/vwa/<projectId>/drafts/** are writable directly" 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L248-L276〕.
 - **Four coupled sites, all in `permission-rules`**: `vwa-state.ts` (`isCanonicalVwaStateWrite`),
   `task-grant.ts` `validateDescriptor` — note it rejects via `underVwaState` (`task-grant.ts:106-108`,
   applied at `:213`), which does **not** route through `isCanonicalVwaStateWrite`, so widening that
@@ -177,7 +179,7 @@ lexical fallback for not-yet-existing paths. Pinned by a test that symlinks `.ds
 | `draft` | a new artifact, **or** an existing artifact (legacy or already draft-backed) — this is the conversion path | the draft at `draftPath` | rendered deliverable |
 | `inline` | an existing artifact with **no** `draft` field | the deliverable, as today | nothing (v1 verbatim) |
 
-Rules: `inline` on a draft-backed artifact is rejected (`SCHEMA_INVALID 'artifact is draft-backed; 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕
+Rules: `inline` on a draft-backed artifact is rejected (`SCHEMA_INVALID 'artifact is draft-backed; 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕
 bind with mode:"draft"'`); `draft` on a legacy artifact converts it (explicit by construction — no
 implicit conversion); omitting `mode` is a schema error.
 
@@ -218,7 +220,7 @@ does not justify destroying a user-authored file the graph never owned. Rule: re
 `sha256(currentBytes) !== artifact.contentHash` and `sha256(currentBytes) !== sha256(prevRender)`.
 The second disjunct lets recovery recognise its own provisional output (§7). Legacy conversion goes
 through the same gate — that is exactly the destructive case. Error:
-`SCHEMA_INVALID 'deliverable exists and is not owned by this artifact; pass overwrite:true to take 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L100-L115〕
+`SCHEMA_INVALID 'deliverable exists and is not owned by this artifact; pass overwrite:true to take 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L111-L130〕
 ownership'`.
 
 ### 4.4 Coordinate and text identity (normative)
@@ -272,7 +274,7 @@ New module `packages/interaction/vwa-argument/src/render.ts`.
 
 - Out-of-tree staged files use random-suffix temps in the same directory
   (`<deliverable>.<uuid>.tmp`, the `report-tool.ts:130-141` pattern) and are cleaned opportunistically:
-  any `*.tmp` sibling older than 24 h found while staging the same destination 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕. The store's
+  any `*.tmp` sibling older than 24 h found while staging the same destination 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕. The store's
   `recoverOrphans` (`store.ts:365-382`) walks the snapshot dir and state-tree dirs and is **not**
   extended — the temp sweep is local to the render staging path.
 - Silent clobbering of an external editor is intended for an owned deliverable (compile output); git
@@ -303,7 +305,7 @@ The second parser `markdown.lib.mjs:24` (`^src:ws:…`) becomes `^src:(?:ws|gr):
 
 ### 5.2 Trust boundary
 
-Source registration (`sources.ts:179-218`) accepts any UTF-8 regular file ≤8 MiB inside the workspace — 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L190-L210〕
+Source registration (`sources.ts:179-218`) accepts any UTF-8 regular file ≤8 MiB inside the workspace — 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L223-L240〕
 including `.ts` sources. Making all of them gr-citable would let an agent mechanically verify
 citations that `ws:` rejects, defeating the whitelist. Rule: **a `gr:` marker is valid only for a
 source whose registered path is corpus-class.**
@@ -391,8 +393,8 @@ resolveDisputes(snapshot, records): Dispute[]
   (`adjudicate.ts:70-93`), and `targetIds` are not stored on records as such (records carry
   `targetRefs`, `types.ts:282-305`; support/argument tasks use wider sets, `review-plan.ts:217-218`).
   Recovering `targetIds` from the persisted finding keeps the id independent of that difference.
-- The resolver asserts uniqueness of `disputeId` within a snapshot and fails `SCHEMA_INVALID duplicate 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L190-L210〕
-  disputeId` rather than merging 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕. Truncation to 16 hex chars is not claimed to be injective; the
+- The resolver asserts uniqueness of `disputeId` within a snapshot and fails `SCHEMA_INVALID duplicate 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L223-L240〕
+  disputeId` rather than merging 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕. Truncation to 16 hex chars is not claimed to be injective; the
   runtime check is the guarantee.
 
 ### 6.2 Liveness over the origin-run cohort
@@ -459,8 +461,8 @@ predicate was unreachable — three seats converged on this independently. Corre
 
 ### 7.1 Render intent (durable provenance before publication)
 
-Step 9 of §4.2 stages `renders/<requestId>.json` = `{requestId, projectId, artifactId 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕?, draftPath, 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕
-draftHash, renderedHash, target, at}` **before** the deliverable bytes 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L100-L115〕. HEAD adoption deletes it
+Step 9 of §4.2 stages `renders/<requestId>.json` = `{requestId, projectId, artifactId 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕?, draftPath, 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕
+draftHash, renderedHash, target, at}` **before** the deliverable bytes 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L111-L130〕. HEAD adoption deletes it
 (after read-back). It is the only evidence that the runtime — rather than a human — produced the bytes
 currently on disk.
 
@@ -501,7 +503,7 @@ crash, which (a) cannot see. **Legacy inline artifacts have no `draft` field ⇒
 - An unrelated transaction landing between the crash and the retry does not adopt the orphan; the
   deliverable stays `STALE_RENDER` until the owning bind runs.
 - `/vwa repair` restores graph state only (`store.ts:314-337`) and is documented as not touching
-  deliverables or intents; a repair pass may delete intents older than 24 h 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕.
+  deliverables or intents; a repair pass may delete intents older than 24 h 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕.
 - **Physical** re-writing is allowed to repeat (a retried request restages identical bytes). Replay
   recognition keys on the current HEAD operation id (`store.ts:420-423`), so after an intervening
   commit a retried request re-executes and may bump a second revision — acceptable, and stated:
@@ -563,7 +565,7 @@ Code:
 - `store.ts:214` (init mints the version — new projects mint 2), `feasibility.ts:262`,
   `schema.spec.ts:99-101` (rewrite to accept `{1,2}` on read and reject writes),
   `review-helpers.ts:82`, `review-cycle.spec.ts`, and any snapshot literal typed `schemaVersion: 1`.
-- path readers: `sources.ts:390` (root derivation), `sources.ts:419-421` (basename via snapshotDir), 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L190-L210〕
+- path readers: `sources.ts:390` (root derivation), `sources.ts:419-421` (basename via snapshotDir), 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L223-L240〕
   `tools.ts:349`, `delivery-check.ts:151`.
 - report path constants and both report writers (§8.1).
 
@@ -613,7 +615,7 @@ Invariants — each scoped to its publication state so it is a checkable stateme
 - **I2 NoMarkers** — a completed render contains none of the stripped sequences.
 - **I3 AgreementByState** — split by publication state, in the same precedence order as §7.2:
   (i) deliverable hash equals `contentHash` ⇒ `current`, even if an intent is present (the intent is
-  then stale bookkeeping, cleaned by the next adoption or the 24 h sweep); 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕
+  then stale bookkeeping, cleaned by the next adoption or the 24 h sweep); 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕
   (ii) deliverable hash is **neither** `contentHash` **nor** any provisional render (neither the
   `stripMarkers`-render of the current draft nor a recorded intent's `renderedHash`) ⇒ `INPUT_CHANGED`
   is correct;
@@ -621,8 +623,8 @@ Invariants — each scoped to its publication state so it is a checkable stateme
   `STALE_RENDER`, never `current`, never `INPUT_CHANGED`.
 - **I4 SpanSafety** — no persisted occurrence span intersects a removed marker range and every
   occurrence still matches its `exactText` in the draft.
-- **I5 ReplayContentStable** — for a fixed draft identity, replaying the same `(requestId, 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕
-  payloadHash)` never yields two adopted revisions with different `contentHash`; a retry after an 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L100-L115〕
+- **I5 ReplayContentStable** — for a fixed draft identity, replaying the same `(requestId, 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕
+  payloadHash)` never yields two adopted revisions with different `contentHash`; a retry after an 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L111-L130〕
   intervening commit may produce a second revision but with identical bytes. (Content-level, not
   revision-level.)
 - **I6 NoLostUserFile** — a bind without `overwrite:true` never replaces bytes that are neither this
@@ -630,16 +632,16 @@ Invariants — each scoped to its publication state so it is a checkable stateme
 
 ### 10.2 `specs/tla/vwa-adjudication-durability` (new)
 
-State: immutable review records (runId, originRunId, inputHash, stage, verdict), dispute set, human 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕
+State: immutable review records (runId, originRunId, inputHash, stage, verdict), dispute set, human 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕
 decisions, eligibility.
-Actions: `AddFreshJudgment`, `ReuseJudgment` (cached, new runId, same originRunId), `Reject`, 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L333-L339〕
+Actions: `AddFreshJudgment`, `ReuseJudgment` (cached, new runId, same originRunId), `Reject`, 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L395-L402〕
 `Accept`, `Recompute`, `Retire` (migration).
 
 Invariants:
-- **I7 Durability** — after `reject`, appending an unrelated judgment (different inputHash/stage) never 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕
+- **I7 Durability** — after `reject`, appending an unrelated judgment (different inputHash/stage) never 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕
   restores the needs-review force for that dispute nor re-adds its blocker count.
 - **I8 ExpiryOnFreshJudgment** — a fresh judgment joining the same dispute expires the decision; a
-  reused judgment (same originRunId) does not 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L333-L339〕.
+  reused judgment (same originRunId) does not 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L395-L402〕.
 - **I9 IdStabilityAndScope** — the dispute id is a pure function of `{inputHash, stage}`; the persisted
   marker and the minted finding carry the same id; the blocker count of I7 covers only the adjudicated
   dispute, not the project.
@@ -684,8 +686,9 @@ Rules:
   §4.1's mode field; a stale description here would reintroduce the jargon into every session.
 - Source comments and module docstrings are in scope (87 occurrences across the two packages at the
   time of writing), because they are what the next implementer reads first.
-- Files: `packages/preset/cc/tests/vwa-lane2.real-boot.spec.ts` →
-  `vwa-argument-lanes.real-boot.spec.ts`; `docs/vwa/lane2-validation.md` →
+- Files, renamed by #423 before this slice landed: `packages/preset/cc/tests/vwa-lane2.real-boot.spec.ts`
+  → `packages/preset/cc/tests/vwa-argument-review.real-boot.spec.ts` (NOT `vwa-argument-lanes.real-boot.spec.ts`,
+  which was the placeholder this section first proposed); `docs/vwa/lane2-validation.md` →
   `docs/vwa/argument-review-validation.md`, with the README references updated (`README.md:195`,
   `docs/vwa/humanities-guidance.md:12,30`).
 - Also updated: the six `vwa-argument/prompts/*.md` headers (each currently opens "VWA lane-2"),
@@ -705,7 +708,7 @@ Rules:
   overwritten on re-bind) from legacy inline (unchanged). `:22-36`: markers live in the draft and never
   reach the deliverable, so "removing them changes the artifact hash" no longer applies.
 - `skills/vwa-writing/SKILL.md` + `references/writing-rules.md:28`: edit draft → bind(render) → review.
-- `vwa-batch` SKILL/references/state-contract: writePaths guidance adds the drafts subtree 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕.
+- `vwa-batch` SKILL/references/state-contract: writePaths guidance adds the drafts subtree 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕.
 - Preset `agent.vwa.cordis.yml:18-22` persona sentence.
 - Capability manifest: audit `docs/claude-code-capabilities.yaml` entries for `vwa-argument`,
   `vwa-evidence`, `permission-rules`; regenerate the parity trio with `pnpm docs:parity`.
@@ -714,16 +717,16 @@ Rules:
 
 `vwa-argument`: `render.spec.ts` (strip cases, both maps, endpoint affinity, surrogate pairs, CRLF);
 `tools.spec.ts`/`graph.spec.ts` (mode gate, draft-path validation, duplicate-draft rejection,
-occurrence validation, overlap rejection, contentHash/draftHash, overwrite gate incl 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L100-L115〕. provisional
-render, legacy inline regression); `dispute.spec.ts` (id derivation, cohort with originRunId, duplicate 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L12-L36〕
+occurrence validation, overlap rejection, contentHash/draftHash, overwrite gate incl 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L111-L130〕. provisional
+render, legacy inline regression); `dispute.spec.ts` (id derivation, cohort with originRunId, duplicate 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L20-L48〕
 assertion); `disagreement-policy.spec.ts` (durability, expiry on fresh judgment, **no expiry on cache
 reuse**, no convergence branch, retired adjudications); `audit.spec.ts` + new identity cases
-(`artifactHash` rendered, `semanticHash` draft, reuse keyed on semanticHash); `report.spec.ts` / 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L100-L115〕
+(`artifactHash` rendered, `semanticHash` draft, reuse keyed on semanticHash); `report.spec.ts` / 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L111-L130〕
 `migration.spec.ts` (retirement counts, hash-verified staging, missing/corrupt snapshot failure,
 write gate + migration exception, new paths); crash-state cases for all three §7.2 series including
 legacy two-state.
 
-`vwa-evidence`: `verify.spec.ts` (`gr:` found / no project / unknown source / no corpusPath / 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L174-L181〕
+`vwa-evidence`: `verify.spec.ts` (`gr:` found / no project / unknown source / no corpusPath / 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L207-L215〕
 non-corpus / tampered / escaped / out-of-range; `ws:` pins unchanged); `delivery.spec.ts`
 (draft scan-set membership; deliverable excluded from window+pending+bound contributions;
 `STALE_RENDER` vs `INPUT_CHANGED` for each series; receipt `artifactHash` rendered and spans
@@ -734,12 +737,14 @@ symlink escape; descriptor validation of `prj_`-shaped prefixes (ancestor reject
 and match.
 
 Cross-package: shared fixture verdict test in `permission-rules` and `vwa-evidence`.
-`dsh-cc-writing`: `preservation.spec.ts` `gr:` case. `preset/cc`: renamed real-boot spec;
-`smoke:profile-boot`. Full battery: `check:size`, `check:capabilities`, `check:parity`.
+`dsh-cc-writing`: `preservation.spec.ts` `gr:` case. `preset/cc`:
+`packages/preset/cc/tests/vwa-argument-review.real-boot.spec.ts` (the spec #423 renamed from
+`vwa-lane2.real-boot.spec.ts`); `smoke:profile-boot`. Full battery: `check:size`,
+`check:capabilities`, `check:parity`.
 
 ## 14. Open questions
 
-1. **Retired-on-migration** (§6.3): accepting that a schemaVersion bump discards review currency is 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L290-L294〕
+1. **Retired-on-migration** (§6.3): accepting that a schemaVersion bump discards review currency is 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L346-L351〕
    the honest reading, but it means a migrated project must be re-reviewed end to end. Confirm this
    is acceptable versus building semantic identity migration.
 2. **`gr:` for non-corpus sources** — §5.2 forbids citing them and legacy sources cannot be backfilled;
@@ -770,7 +775,7 @@ the Grok lane. Every round was dispatched from the same brief; no lane saw anoth
 | r2 | delta verification of the v2 folds | critic GO-WITH-CHANGES, Grok NO-GO, Codex NO-GO | all three independently found the same blocker — the §7 crash classifier was logically unreachable — plus the audit-identity join and the cohort definition; v3 folded them |
 | r3 | micro-confirmation of the v3 folds, narrow scope | critic GO, Codex GO-WITH-CHANGES, Grok GO-WITH-CHANGES | six of six prior findings confirmed resolved; two cosmetic drifts plus two real gaps folded (the §10.1 I3 precedence and the `ReviewRecord` schema) |
 
-Convergence note: the r2 STALE_RENDER blocker was hit independently by all three lanes, which makes it the sole finding in this program treated as top-confidence and fixed without further adjudication〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L124-L165〕.
+Convergence note: the r2 STALE_RENDER blocker was hit independently by all three lanes, which makes it the sole finding in this program treated as top-confidence and fixed without further adjudication〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L138-L199〕.
 
 Formal design (screening in §10): four model directories, each with its own `design.md` screening
 record and `implementation.md` run lineage.

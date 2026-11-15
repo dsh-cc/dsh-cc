@@ -8,7 +8,10 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { activeAdjudications, evaluateDelivery } from '../src/delivery-check.ts'
+import { activeAdjudications, deliveryScope, evaluateDelivery } from '../src/delivery-check.ts'
+import { sha256Hex } from '../src/schema.ts'
+import { auditDependencyDigest, currentReviews } from '../src/review-current.ts'
+import { disputeId, resolveDisputes } from '../src/dispute.ts'
 import { applyReviewSettingsPatch } from '../src/review-settings-revision.ts'
 import { mergeFrozenReviewSettings } from '../src/init-tool.ts'
 import { freezeReviewSettings } from '../src/review-config.ts'
@@ -17,7 +20,7 @@ import { ReviewRunStore } from '../src/review-run-store.ts'
 import { appendAdjudication, currentDependencyDigest } from '../src/report.ts'
 import { executeVwa, parseVwaArgs, readPointer, writePointer } from '../src/commands.ts'
 import { initWorkspace } from './helpers.ts'
-import type { AdjudicationRecord, Id, ReviewRecord } from '../src/types.ts'
+import type { AdjudicationRecord, Id, ReviewRecord, Verdict } from '../src/types.ts'
 import {
   disagreementAdjudication,
   reviewedFixture,
@@ -35,9 +38,45 @@ const adjudication = disagreementAdjudication
 
 function evaluate(f: Fixture, records: ReviewRecord[], adjudications: AdjudicationRecord[], disagreementPolicy: 'blocking' | 'deferred', gates: GateEntry[]) {
   return evaluateDelivery({
-    root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+    root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
     records, pendingRunIds: [], adjudications, disagreementPolicy, gates,
   })
+}
+
+/** Re-pin the audit pair to the current judgment set (appending records moves its digest). */
+function repinAudit(f: Fixture, records: ReviewRecord[]): ReviewRecord[] {
+  const targets = deliveryScope(f.snapshot, f.artifactId, f.body).targets
+  const digest = auditDependencyDigest(f.snapshot, f.artifactId, currentReviews(f.snapshot, records, targets).records)
+  for (const record of records)
+    if (record.stage === 'extract' || record.stage === 'align') record.dependencyDigest = digest
+  return records
+}
+
+/**
+ * Append one more judgment over `record`'s task. Without `originRunId` it is a
+ * fresh judgment; with one it is a cached save carrying that provenance.
+ */
+function rerun(
+  record: ReviewRecord,
+  options: { runId: Id; originRunId?: Id; verdict?: Verdict },
+): ReviewRecord & { originRunId?: Id } {
+  const copy = structuredClone(record) as ReviewRecord & { kind?: 'disagreement'; originRunId?: Id }
+  delete copy.kind
+  copy.runId = options.runId
+  if (options.originRunId === undefined) delete copy.originRunId
+  else copy.originRunId = options.originRunId
+  if (copy.stage !== 'extract' && copy.response !== undefined && options.verdict !== undefined)
+    for (const target of copy.response.targets) for (const check of target.checks) check.result = options.verdict
+  return copy
+}
+
+/** The fixture's plain (marker-free) claims judgment. */
+function claimsJudgment(f: Fixture, records: ReviewRecord[], runId: Id): ReviewRecord {
+  const found = records.find(
+    (r) => r.stage === 'claims' && r.runId === runId && (r as { kind?: string }).kind !== 'disagreement',
+  )
+  if (found === undefined) throw new Error(`no claims judgment on run ${runId}`)
+  return found
 }
 
 describe('§4.3 disagreementPolicy post-pass quadrants', () => {
@@ -108,8 +147,96 @@ describe('§4.3 disagreementPolicy post-pass quadrants', () => {
   })
 })
 
-describe('§4.3 report rendering', () => {
-  it('renders the pending-adjudication section and superseded footnote', async () => {
+describe('§6.2 adjudication liveness over the origin-run cohort', () => {
+  it('a reject stays live when an unrelated review round is appended', async () => {
+    const f = await reviewedFixture()
+    const d = withDisagreement(f, f.records)
+    const adj = adjudication(f, d.records, d.findingId, 'reject', d.passRunId, d.failRunId)
+    const before = evaluate(f, repinAudit(f, [...d.records]), [adj], 'blocking', f.gates)
+    expect(before.checks.argument).toBe('pass')
+    // A different stage re-runs: record content (and thus the project dependency
+    // digest) changes, the disputed task's cohort does not.
+    const sources = d.records.find((r) => r.stage === 'sources')!
+    const records = repinAudit(f, [...d.records, rerun(sources, { runId: `run_${randomUUID()}` })])
+    expect(activeAdjudications(f.snapshot, records, [adj], [f.claim.id])).toHaveLength(1)
+    const after = evaluate(f, records, [adj], 'blocking', f.gates)
+    expect(after.checks).toEqual(before.checks)
+    expect(after.findingCounts).toEqual(before.findingCounts)
+    expect(after.eligibleForReviewed).toBe(before.eligibleForReviewed)
+    expect(after.checks.argument).toBe('pass')
+  })
+
+  it('expires only on a fresh judgment on the same dispute', async () => {
+    const f = await reviewedFixture()
+    const d = withDisagreement(f, f.records)
+    const adj = adjudication(f, d.records, d.findingId, 'reject', d.passRunId, d.failRunId)
+    expect(activeAdjudications(f.snapshot, d.records, [adj], [f.claim.id])).toHaveLength(1)
+    const fresh = rerun(claimsJudgment(f, d.records, d.passRunId), { runId: `run_${randomUUID()}`, verdict: 'fail' })
+    const records = repinAudit(f, [...d.records, fresh])
+    // The cohort widens, so the recorded decision goes inactive…
+    expect(activeAdjudications(f.snapshot, records, [adj], [f.claim.id])).toEqual([])
+    // …and the human is asked again: the marker force returns.
+    expect(evaluate(f, records, [adj], 'blocking', f.gates).checks.argument).toBe('needs-review')
+  })
+
+  it('does not expire on cache reuse: a copied judgment keeps its origin run', async () => {
+    const f = await reviewedFixture()
+    const d = withDisagreement(f, f.records)
+    const adj = adjudication(f, d.records, d.findingId, 'reject', d.passRunId, d.failRunId)
+    const reused = rerun(claimsJudgment(f, d.records, d.passRunId), {
+      runId: `run_${randomUUID()}`,
+      originRunId: d.passRunId,
+    })
+    const records = repinAudit(f, [...d.records, reused])
+    expect(resolveDisputes(f.snapshot, records).map((dispute) => dispute.originRunIds)).toEqual([
+      [d.passRunId, d.failRunId].sort(),
+    ])
+    expect(activeAdjudications(f.snapshot, records, [adj], [f.claim.id])).toHaveLength(1)
+    const check = evaluate(f, records, [adj], 'blocking', f.gates)
+    expect(check.checks.argument).toBe('pass')
+    expect(check.eligibleForReviewed).toBe(true)
+  })
+
+  it('has no convergence branch: a converged re-run keeps the dispute', async () => {
+    const f = await reviewedFixture()
+    const d = withDisagreement(f, f.records)
+    const adj = adjudication(f, d.records, d.findingId, 'reject', d.passRunId, d.failRunId)
+    // A fresh run that AGREES with the retained pass judgment joins the dispute.
+    const converged = rerun(claimsJudgment(f, d.records, d.passRunId), {
+      runId: 'run_ffffffff-ffff-4fff-8fff-ffffffffffff',
+      verdict: 'pass',
+    })
+    const records = repinAudit(f, [...d.records, converged])
+    // Appending a pass cannot erase the retained fail: the dispute still exists…
+    expect(resolveDisputes(f.snapshot, records).map((dispute) => ({
+      disputeId: dispute.disputeId,
+      originRunIds: dispute.originRunIds,
+    }))).toEqual([{
+      disputeId: disputeId(claimsJudgment(f, d.records, d.passRunId).inputHash, 'claims'),
+      originRunIds: [d.passRunId, d.failRunId, 'run_ffffffff-ffff-4fff-8fff-ffffffffffff'].sort(),
+    }])
+    // …and the fresh judgment expires the decision, so the marker is pending again.
+    const check = evaluate(f, records, [adj], 'deferred', f.gates)
+    expect(check.deferredDisagreements.map((marker) => marker.id)).toEqual([d.findingId])
+    expect(check.checks.argument).not.toBe('pass')
+  })
+
+  it('retired adjudications are inert: no decision outside a current dispute is live', async () => {
+    const f = await reviewedFixture()
+    const d = withDisagreement(f, f.records)
+    const live = adjudication(f, d.records, d.findingId, 'reject', d.passRunId, d.failRunId)
+    // §6.3: migration retires rows; their dispute is simply absent from the active set.
+    const retired = { ...live, dispute: { ...live.dispute!, disputeId: 'finding_dis_0000000000000000' } }
+    expect(activeAdjudications(f.snapshot, d.records, [retired], [f.claim.id])).toEqual([])
+    const baseline = evaluate(f, d.records, [], 'blocking', f.gates)
+    const withRetired = evaluate(f, d.records, [retired], 'blocking', f.gates)
+    expect(withRetired.checks).toEqual(baseline.checks)
+    expect(withRetired.findingCounts).toEqual(baseline.findingCounts)
+    expect(withRetired.eligibleForReviewed).toBe(baseline.eligibleForReviewed)
+  })
+})
+
+describe('§4.3 report rendering', () => {  it('renders the pending-adjudication section and superseded footnote', async () => {
     const f = await reviewedFixture()
     const d = withDisagreement(f, f.records)
     const deferred = evaluate(f, d.records, [], 'deferred', f.gates)
@@ -220,5 +347,24 @@ describe('§4.4 adjudicate grammar', () => {
       parsed(`adjudicate ${made.projectId} ${findingId} reject ${runs[0]} because`))
     expect(ok.kind).toBe('success')
     expect(currentDependencyDigest(made.root, made.projectId)).toBeDefined()
+  })
+
+  it('binds the dispute cohort instead of a dependency digest (§6.2)', async () => {
+    const made = initWorkspace()
+    const { findingId, runs } = seedDisagreement(made.root, made.projectId)
+    const ok = await executeVwa(deps as never, agentOf(made.root) as never,
+      parsed(`adjudicate ${made.projectId} ${findingId} reject ${runs[1]} because`))
+    expect(ok.kind).toBe('success')
+    const stored = JSON.parse(
+      readFileSync(join(made.root, '.dsh', 'vwa', made.projectId, 'adjudications.json'), 'utf8'),
+    ) as { adjudications: AdjudicationRecord[] }
+    const row = stored.adjudications[0]!
+    expect(row.dispute).toEqual({
+      disputeId: disputeId('i'.repeat(64), 'claims'),
+      inputHash: 'i'.repeat(64),
+      stage: 'claims',
+      runIdCohort: [...runs].sort(),
+    })
+    expect(row.dependencyDigest).toBeUndefined()
   })
 })

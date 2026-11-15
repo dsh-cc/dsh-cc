@@ -75,7 +75,7 @@ async function adjudicatedBatch(keepAdditionalFinding = false) {
   const { adjudications } = JSON.parse(readFileSync(
     join(workspace.root, '.dsh', 'vwa', workspace.projectId, 'adjudications.json'), 'utf8',
   )) as { adjudications: AdjudicationRecord[] }
-  return { ...workspace, snapshot, artifactId, text, records: outcome.records, findingId, adjudications }
+  return { ...workspace, snapshot, artifactId, semanticText: text, artifactHash: sha256Hex(text), records: outcome.records, findingId, adjudications }
 }
 
 describe('multi-target adjudications', () => {

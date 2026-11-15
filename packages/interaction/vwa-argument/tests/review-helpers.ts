@@ -14,9 +14,11 @@ import type {
   AdjudicationRecord, Adequacy, Claim, Evidence, EvidenceGroup, Id, ProjectSnapshot, ReviewRecord,
   ReviewResponse, Source, Support, Verdict,
 } from '../src/types.ts'
-import { initWorkspace } from './helpers.ts'
+import { initWorkspace, writeSnapshot } from './helpers.ts'
+import { sourceSnapshotPath } from '../src/paths.ts'
 import { sha256Hex } from '../src/schema.ts'
-import { defaultGates, deliveryScope, projectDependencyDigest } from '../src/delivery-check.ts'
+import { defaultGates, deliveryScope } from '../src/delivery-check.ts'
+import { resolveDisputes } from '../src/dispute.ts'
 import { auditDependencyDigest, currentReviews } from '../src/review-current.ts'
 import { semanticContractHash } from '../src/review-contract.ts'
 import { executeReviewRun } from '../src/review-runner.ts'
@@ -79,7 +81,8 @@ export function makeArgument(conclusionClaimId: string, premiseClaimIds: string[
 
 export function makeSnapshot(parts: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
   return {
-    schemaVersion: 1,
+    // §8.3: current graphs are schemaVersion 2 (v1 is pre-migration, read-only).
+    schemaVersion: 2,
     projectId: `prj_${uuid()}`,
     revision: 3,
     workspaceIdentity: 'b'.repeat(64),
@@ -249,8 +252,8 @@ export async function reviewedFixture() {
   const source = makeSource(),
     text = 'The council voted to close the port on 3 May.\n'
   source.snapshotHash = sha256Hex(text)
-  source.snapshotPath = `docs/vwa-sources/${made.projectId}/${source.id}.md`
-  writeFileSync(join(made.root, source.snapshotPath), text)
+  source.snapshotPath = sourceSnapshotPath(made.projectId, source.id)
+  writeSnapshot(made.root, source.snapshotPath, text)
   const evidence = makeEvidence(source)
   evidence.span = { start: 0, end: text.length }
   evidence.contextSpan = evidence.span
@@ -325,7 +328,7 @@ export async function reviewedFixture() {
     deps: {
       root: made.root, adapter, budget: BUDGET,
       contractHash: semanticContractHash(head.data.snapshot.contract),
-      readSnapshot: (id) => readFileSync(join(made.store.snapshotDir, `${id}.md`), 'utf8'),
+      readSnapshot: () => readFileSync(join(made.root, source.snapshotPath), 'utf8'),
     },
     runId: `run_${randomUUID()}`, requestId: randomUUID(),
     snapshot: head.data.snapshot, targetClaimIds: [claim.id],
@@ -366,7 +369,7 @@ export function withDisagreement(f: ReviewedFixture, records: ReviewRecord[]) {
 
 export type DisagreementFixture = ReturnType<typeof withDisagreement>
 
-/** One live §4.4 adjudication record over the fixture's disagreement. */
+/** One live §4.4 adjudication record over the fixture's disagreement (§6.2: bound to its dispute). */
 export function disagreementAdjudication(
   f: ReviewedFixture,
   records: ReviewRecord[],
@@ -375,9 +378,21 @@ export function disagreementAdjudication(
   prevailingRunId: Id,
   supersededRunId: Id,
 ): AdjudicationRecord {
+  const home = records.find(
+    (record) => record.stage !== 'extract' && record.response?.findings.some((finding) => finding.id === findingId),
+  )
+  const dispute = resolveDisputes(f.snapshot, records).find(
+    (candidate) => candidate.inputHash === home?.inputHash && candidate.stage === home?.stage,
+  )
+  if (dispute === undefined) throw new Error(`no dispute resolves for finding ${findingId}`)
   return {
     adjudicationId: `adj_${randomUUID()}`, findingId, decision, reason: 'human decision', signer: 'user', ts: NOW,
-    dependencyDigest: projectDependencyDigest(f.snapshot, records),
+    dispute: {
+      disputeId: dispute.disputeId,
+      inputHash: dispute.inputHash,
+      stage: dispute.stage,
+      runIdCohort: dispute.originRunIds,
+    },
     overrides: { ruleId: 'HIST-01', targetId: f.claim.id, runId: prevailingRunId, supersededRunId },
   }
 }

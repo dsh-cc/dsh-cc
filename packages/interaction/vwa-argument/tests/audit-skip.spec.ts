@@ -4,7 +4,7 @@
  * and the truthful report rendering that still succeeds.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -156,6 +156,7 @@ describe('§5.2 explicit audit skip', () => {
 
   it('a report with the skip in effect succeeds, renders SKIPPED, and is never reviewed-eligible', async () => {
     const made = initWorkspace()
+    mkdirSync(join(made.root, 'docs'), { recursive: true })
     writeFileSync(join(made.root, 'docs/a.md'), ARTIFACT, 'utf8')
     const artifactId = `art_${randomUUID()}`
     const artifactHash = createHash('sha256').update(ARTIFACT, 'utf8').digest('hex')

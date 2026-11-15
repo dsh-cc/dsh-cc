@@ -96,9 +96,11 @@ describe('author.schema.json (§5)', () => {
     expect(validateProjectSnapshot(short)).toBe(false)
   })
 
-  it('rejects a schemaVersion other than 1', () => {
-    const bad = { ...snapshot(), schemaVersion: 2 }
-    expect(validateProjectSnapshot(bad)).toBe(false)
+  it('accepts both readable snapshot versions and rejects an unknown one (§8.3)', () => {
+    // Reads accept {1,2}: a pre-migration snapshot must still validate.
+    expect(validateProjectSnapshot(snapshot())).toBe(true)
+    expect(validateProjectSnapshot({ ...snapshot(), schemaVersion: 2 })).toBe(true)
+    expect(validateProjectSnapshot({ ...snapshot(), schemaVersion: 3 })).toBe(false)
   })
 
   it('rejects a claim whose kind is not in the closed enum', () => {

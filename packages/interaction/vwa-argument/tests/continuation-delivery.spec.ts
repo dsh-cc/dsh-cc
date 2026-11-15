@@ -65,7 +65,7 @@ describe('continuation audit delivery', () => {
     const audit = second.records.find((r) => r.stage === 'extract')!
     expect.soft(audit.dependencyDigest).toBe(auditDependencyDigest(snapshot, artifact.id, selected))
     const report = evaluateDelivery({
-      root, snapshot, artifactId: artifact.id, text: artifact.text, records: history,
+      root, snapshot, artifactId: artifact.id, semanticText: artifact.text, artifactHash: sha256Hex(artifact.text), records: history,
       pendingRunIds: [], adjudications: [],
     })
     expect(report.checks.audit).toBe('pass')
@@ -89,7 +89,7 @@ describe('continuation audit delivery', () => {
     const latestAudit = fresh.records.find((r) => r.stage === 'extract')!
     expect(latestAudit.dependencyDigest).toBe(auditDependencyDigest(snapshot, artifact.id, selected))
     expect(evaluateDelivery({
-      root, snapshot, artifactId: artifact.id, text: artifact.text, records: allRecords(root, snapshot.projectId),
+      root, snapshot, artifactId: artifact.id, semanticText: artifact.text, artifactHash: sha256Hex(artifact.text), records: allRecords(root, snapshot.projectId),
       pendingRunIds: [], adjudications: [],
     }).checks.audit).toBe('pass')
   })

@@ -12,10 +12,12 @@ import { dirname, join } from 'node:path'
 import {
   EvaluationNotFoundError,
   EvaluationReadBackError,
+  InputChangedError,
   VwaArgumentService,
   type DeliveryCheck,
 } from './report.ts'
 import { fail, type Fail } from './store.ts'
+import { reviewReportPath } from './paths.ts'
 import { sha256Hex, stableJson, isPrefixedId, type JsonValue } from './schema.ts'
 import { RESULT_SCHEMA } from './tool-input.ts'
 import { defineTool, type ToolDefinition } from '@dsh-cc/tools'
@@ -72,7 +74,7 @@ export function reportTool(deps: ToolDeps): ToolDefinition {
         try {
           exec.signal.throwIfAborted()
           const service = deps.report?.(root, exec.agent) ?? new VwaArgumentService({ root })
-          const path = `docs/vwa-reports/${args.projectId}/${args.artifactId}.review.${args.format === 'json' ? 'json' : 'md'}`
+          const path = reviewReportPath(args.projectId, args.artifactId, args.format)
           let rendered: Rendered
           let revision: number
           let check: Pick<DeliveryCheck, 'eligibleForReviewed'>
@@ -117,9 +119,10 @@ export function reportTool(deps: ToolDeps): ToolDefinition {
           }
         } catch (error) {
           // §6.3: per-type pass-through — not every failure is a retryable
-          // input change. Anything else keeps today's INPUT_CHANGED folding.
+          // input change; §7.3: a provisional render carries its own code.
           if (error instanceof EvaluationReadBackError) return fail('STORE_CORRUPT', String(error))
           if (error instanceof EvaluationNotFoundError) return fail('REFERENCE_INVALID', String(error))
+          if (error instanceof InputChangedError && error.code === 'STALE_RENDER') return fail('STALE_RENDER', String(error), true)
           return fail('INPUT_CHANGED', String(error), true)
         }
       },

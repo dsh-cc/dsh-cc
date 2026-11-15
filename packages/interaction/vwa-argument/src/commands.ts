@@ -35,6 +35,13 @@ import { defaultContract } from './command-host.ts'
  *   adopt the NEWEST self-verifying candidate after chain re-verification
  *   (§14.2; the closed grammar has no candidate token, so selection is
  *   newest-first — every candidate is listed in the reply).
+ * - `/vwa repair <projectId> --migrate` — run the `schemaVersion 1 → 2`
+ *   migration (§8.3): it is the ONE operation allowed to write a v1 project.
+ *   Every source snapshot is hash-verified before anything is written, the
+ *   bytes are staged under `.dsh/vwa/<projectId>/sources/`, and the review
+ *   records + adjudications are retired into `retired/` (§6.3) — the project
+ *   then needs a full re-review. The graph-only repair path above is
+ *   unchanged and never touches deliverables.
  *
  * @module @dsh-cc/vwa-argument/commands
  */
@@ -49,6 +56,8 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 import { helpable } from '@dsh-cc/command-usage'
 import { sha256Hex, stableJson } from './schema.ts'
 import { ProjectStore } from './store.ts'
+import { migrateProject } from './migrate.ts'
+import { classifyStoredState } from './render-state.ts'
 import { verifySnapshot } from './sources.ts'
 import {
   appendSignature,
@@ -61,6 +70,9 @@ import type { Hash, Id } from './types.ts'
 /** The closed subcommand enum (§10.2). */
 export const VWA_SUBCOMMANDS = ['init', 'status', 'import', 'sign', 'adjudicate', 'repair'] as const
 export type VwaSubcommand = (typeof VWA_SUBCOMMANDS)[number]
+
+/** The one `/vwa repair` flag: run the `schemaVersion 1 → 2` migration (§8.3). */
+export const MIGRATE_FLAG = '--migrate'
 
 /** The current-project pointer shape (§10.2). */
 export interface CurrentProjectPointer {
@@ -89,6 +101,7 @@ export const VWA_USAGE = [
   '  /vwa sign <artifactId> <receiptHash>',
   '  /vwa adjudicate [projectId] <findingId> accept|reject [prevailingRunId] <reason>',
   '  /vwa repair <projectId>            list and adopt a STORE_CORRUPT recovery candidate',
+  '  /vwa repair <projectId> --migrate  migrate schemaVersion 1 → 2 (retires review records)',
 ].join('\n')
 
 export function parseVwaArgs(rawInput: string): ParsedVwaArgs {
@@ -106,7 +119,8 @@ export function parseVwaArgs(rawInput: string): ParsedVwaArgs {
     status: 0,
     import: 1,
     sign: 2,
-    repair: 1,
+    // repair: <projectId> [--migrate].
+    repair: 2,
     // adjudicate: [projectId] findingId decision [prevailingRunId] reason.
     adjudicate: 5,
   }
@@ -135,6 +149,10 @@ export function parseVwaArgs(rawInput: string): ParsedVwaArgs {
   const minima: Record<VwaSubcommand, number> = { init: 0, status: 0, import: 1, sign: 2, repair: 1, adjudicate: 3 }
   if (used.length < minima[sub as VwaSubcommand]) {
     return { ok: false, usage: `missing arguments for /vwa ${sub}.\n${VWA_USAGE}` }
+  }
+  // The closed grammar has one repair flag (§8.3); anything else is a usage error.
+  if (sub === 'repair' && used[1] !== undefined && used[1] !== MIGRATE_FLAG) {
+    return { ok: false, usage: `unknown /vwa repair flag "${used[1]}".\n${VWA_USAGE}` }
   }
   return { ok: true, sub: sub as VwaSubcommand, rest: used }
 }
@@ -184,7 +202,7 @@ export async function executeVwa(
       case 'import':
         return vwaImport(root, parsed.rest[0] ?? '')
       case 'repair':
-        return vwaRepair(root, parsed.rest[0] ?? '')
+        return vwaRepair(root, parsed.rest[0] ?? '', parsed.rest[1])
       case 'sign': {
         const pointer = readPointer(root)
         if (pointer === undefined)
@@ -318,8 +336,12 @@ function vwaImport(root: string, relativeDirectory: string): CommandResult {
       continue
     }
     const hash = sha256Hex(readFileSync(path, 'utf8'))
-    if (hash !== artifact.contentHash)
-      failures.push(`artifact ${artifact.id}: bytes changed after binding (re-bind required)`)
+    if (hash !== artifact.contentHash) {
+      // §7.2: a draft-backed artifact's provisional render is not user drift.
+      const state = classifyStoredState(root, pointer.projectId, artifact, hash)
+      const what = state === 'stale-render' ? 'deliverable is a stale provisional render (re-run the bind)' : 'bytes changed after binding (re-bind required)'
+      failures.push(`artifact ${artifact.id}: ${what}`)
+    }
   }
   if (failures.length > 0) {
     return {
@@ -372,12 +394,9 @@ export async function vwaSign(
     receipt.reviewerConfigHash !== check.reviewerConfigHash
   )
     return { kind: 'error', text: 'Receipt inputs are no longer current; generate a new receipt before signing.' }
-  try {
-    if (sha256Hex(readFileSync(join(root, receipt.report.path), 'utf8')) !== receipt.report.hash)
-      return { kind: 'error', text: 'The receipt report is missing or changed.' }
-  } catch {
-    return { kind: 'error', text: 'The receipt report is missing or changed.' }
-  }
+  let reportMatches = false
+  try { reportMatches = sha256Hex(readFileSync(join(root, receipt.report.path), 'utf8')) === receipt.report.hash } catch { /* unreadable */ }
+  if (!reportMatches) return { kind: 'error', text: 'The receipt report is missing or changed.' }
   if (check.findings.some((f) => f.code === 'EVID-01'))
     return { kind: 'error', text: 'Source integrity failed; the receipt cannot be signed.' }
   const signature: Signature = {
@@ -400,8 +419,36 @@ export async function vwaSign(
   }
 }
 
-function vwaRepair(root: string, projectId: string): CommandResult {
+/**
+ * `/vwa repair <projectId> --migrate` (§8.3): the v1 write gate's single
+ * exception. The reply states exactly what happened — staged counts, the
+ * retirement counts, and that the project now needs a full re-review.
+ */
+function vwaMigrate(store: ProjectStore, projectId: string): CommandResult {
+  const migrated = migrateProject(store)
+  if (!migrated.ok) {
+    return {
+      kind: 'error',
+      text: `migrating "${projectId}" to schemaVersion 2 FAILED (${migrated.code}): ${migrated.message}`,
+    }
+  }
+  const { retiredReviews, retiredAdjudications, stagedSources } = migrated.data
+  return {
+    kind: 'success',
+    text: [
+      `Migrated "${projectId}" to schemaVersion 2 — HEAD is now revision ${migrated.revision}.`,
+      `  - verified and staged ${stagedSources} source snapshot(s) under .dsh/vwa/${projectId}/sources/`,
+      '  - created drafts/, reports/, renders/, retired/',
+      `  - retired ${retiredReviews} review record(s) and ${retiredAdjudications} adjudication(s) into retired/ (retired-reason: state-tree-migration)`,
+      `  - legacy docs/vwa-sources/${projectId}/ left in place (immutable history)`,
+      'The project must be re-reviewed end to end: delivery reads not-run until then.',
+    ].join('\n'),
+  }
+}
+
+function vwaRepair(root: string, projectId: string, flag?: string): CommandResult {
   const store = new ProjectStore(root, projectId)
+  if (flag === MIGRATE_FLAG) return vwaMigrate(store, projectId)
   const candidates = store.recoveryCandidates()
   if (candidates.length === 0) {
     const head = store.readHead()
@@ -416,9 +463,7 @@ function vwaRepair(root: string, projectId: string): CommandResult {
   const list = candidates
     .map((candidate) => `  - revision ${candidate.revision} (${candidate.revisionPath})`)
     .join('\n')
-  if (newest === undefined) {
-    return { kind: 'error', text: `no self-verifying recovery candidates for "${projectId}".` }
-  }
+  if (newest === undefined) return { kind: 'error', text: `no self-verifying recovery candidates for "${projectId}".` }
   const repaired = store.repair(newest.revisionPath)
   if (!repaired.ok) {
     return {

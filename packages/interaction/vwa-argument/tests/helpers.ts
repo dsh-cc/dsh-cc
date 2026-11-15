@@ -7,9 +7,10 @@
 
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { ProjectStore, fail, type Fail } from '../src/store.ts'
+import { sourceSnapshotPath } from '../src/paths.ts'
 import type { ProjectContract, ProjectSnapshot, Source } from '../src/types.ts'
 
 export const PRJ_PREFIX = 'prj_'
@@ -54,6 +55,17 @@ export function expectFail<T>(result: { ok: true; data: T } | Fail, code: Fail['
 
 export const uuid = randomUUID
 
+/**
+ * Write exact snapshot bytes at the record's workspace-relative `snapshotPath`,
+ * creating the parent directory (a fixture may name either the v2 state-tree
+ * location or a legacy `docs/vwa-sources/` one — §8.1 keeps both readable).
+ */
+export function writeSnapshot(root: string, snapshotPath: string, text: string): void {
+  const absolute = join(root, ...snapshotPath.split('/'))
+  mkdirSync(dirname(absolute), { recursive: true })
+  writeFileSync(absolute, text, 'utf8')
+}
+
 /** Seed one registered source (with exact snapshot bytes) plus its snapshot text on disk. */
 export function seedSource(store: ProjectStore, text: string): Source {
   const sourceId = `src_${randomUUID()}`
@@ -63,7 +75,7 @@ export function seedSource(store: ProjectStore, text: string): Source {
   const { rawSha256 } = require0()
   const source: Source = {
     id: sourceId, entityVersion: 1, createdAt: '2026-10-16T00:00:00.000Z', updatedAt: '2026-10-16T00:00:00.000Z',
-    snapshotPath: `docs/vwa-sources/x/${sourceId}.md`, snapshotHash: rawSha256(Buffer.from(text, 'utf8')),
+    snapshotPath: sourceSnapshotPath(store.projectId, sourceId), snapshotHash: rawSha256(Buffer.from(text, 'utf8')),
     acquisition: { kind: 'unverified', capturedAt: '2026-10-16T00:00:00.000Z' },
     title: 'A source', creators: [], publication: 'unknown', originalLocator: 'loc', edition: 'unknown',
     language: 'en', origin: 'external', material: 'primary',

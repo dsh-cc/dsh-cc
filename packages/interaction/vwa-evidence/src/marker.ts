@@ -9,8 +9,10 @@
  * per-line inline-code-span scanner, both length-preserving so every span
  * stays a UTF-16 code-unit index into the ORIGINAL artifact text.
  *
- * v1 sourceId vocabulary: `ws:<posix path relative to workspace root>` only.
- * Multiple sources inside one marker join with `;`.
+ * sourceId vocabulary (design `2026-11-15-vwa-autonomous-render-pipeline.md`
+ * §5.1): `ws:<posix path relative to workspace root>` (v1, a live workspace
+ * file) and `gr:<sourceId>` (v2, a registered project source's frozen
+ * snapshot). Multiple sources inside one marker join with `;`.
  *
  * Claim detection is a frozen four-regex family, pinned by package tests:
  * (a) numbers with units/percentages, (b) ISO dates, (c) version strings,
@@ -147,13 +149,16 @@ export function parseMarkerInner(inner: string): SourceSpec[] | null {
   if (!inner.startsWith('src:')) return null
   const specs: SourceSpec[] = []
   for (const part of inner.slice(4).split(';')) {
-    const match = /^ws:(.+)#L(\d+)-L(\d+)$/.exec(part)
+    // §5.1 spec alternative: `ws:<posix rel path>#L<a>-L<b>` (v1, live file,
+    // whitelist applies) or `gr:<sourceId>#L<a>-L<b>` (v2, a registered
+    // project source snapshot). The `ws:` arm stays byte-identical.
+    const match = /^(ws|gr):(.+)#L(\d+)-L(\d+)$/.exec(part)
     if (match === null) return null
-    const [, sourceId, a, b] = match as unknown as [string, string, string, string]
+    const [, scheme, sourceId, a, b] = match as unknown as [string, string, string, string, string]
     const lineStart = Number(a)
     const lineEnd = Number(b)
     if (lineStart < 1 || lineEnd < lineStart) return null
-    specs.push({ sourceId: `ws:${sourceId}`, lineStart, lineEnd })
+    specs.push({ sourceId: `${scheme}:${sourceId}`, lineStart, lineEnd })
   }
   return specs.length > 0 ? specs : null
 }

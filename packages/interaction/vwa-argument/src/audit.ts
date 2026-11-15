@@ -9,7 +9,7 @@
  *   target; returned spans MUST fall inside the target block, except a
  *   boundary-crossing sentence at the unit's end may extend into the
  *   following context (§12).
- * - Lane-2 strips `〔claim:<id>〕` markers BEFORE extraction and keeps an
+ * - Argument review strips `〔claim:<id>〕` markers BEFORE extraction and keeps an
  *   offset map so spans stay valid against the ORIGINAL text (§19/D24).
  * - The extract response is stored independently as an `ExtractionRecord`
  *   (stage 'extract', response `{items}`); align returns the §11.4
@@ -104,7 +104,8 @@ function atomicExtractionId(taskId: string, span: Span, seq: number): Id {
 export async function executeAudit(input: {
   adapter: ReviewModelAdapter
   runId: Id
-  artifact: { id: Id; path: string; text: string }
+  /** text = the SEMANTIC text (the draft for draft-backed artifacts); artifactHash = rendered hash (§4.4a). */
+  artifact: { id: Id; path: string; text: string; artifactHash?: Hash }
   snapshot: ProjectSnapshot
   rubricVersion: string
   contractHash: Hash
@@ -122,7 +123,8 @@ export async function executeAudit(input: {
   const unitChars = auditUnitChars(input.maxUnitChars, input.caller?.maxContextChars)
   const units = extractionUnits(stripped.text, unitChars)
   const taskId = `task_${randomUUID()}`
-  const artifactHash = sha256Hex(artifact.text)
+  // §4.4a: the audit operates on the draft; records keep BOTH identities.
+  const semanticHash = sha256Hex(artifact.text)
   const effectiveCoreClaimIds = input.coreClaimIds ?? [
     ...computeCoreSet({
       index: buildReverseIndex(snapshot),
@@ -173,6 +175,9 @@ export async function executeAudit(input: {
 
   // ---- occurrence validation FIRST (§11.1: broken input never spends model budget) ----
   const boundArtifact = snapshot.artifacts.find((art) => art.id === artifact.id)
+  // §4.4a: artifactHash on records is the RENDERED deliverable hash (the
+  // bound contentHash at review time); delivery joins records on it.
+  const artifactHash = artifact.artifactHash ?? boundArtifact?.contentHash ?? semanticHash
   const occurrences = boundArtifact?.occurrences ?? []
   for (const occurrence of occurrences) {
     if (artifact.text.slice(occurrence.span.start, occurrence.span.end) !== occurrence.exactText) {
@@ -255,6 +260,7 @@ export async function executeAudit(input: {
     targetRefs: [{ id: artifact.id, entityVersion: boundArtifact?.entityVersion ?? 1 }],
     dependencyDigest: auditDependencyDigest(snapshot, artifact.id, input.records ?? []),
     artifactHash,
+    semanticHash,
     contractHash: input.contractHash,
     policyHash: input.policyHash,
     reviewerConfigHash: input.reviewerConfigHash,
@@ -356,6 +362,7 @@ export async function executeAudit(input: {
     targetRefs: [{ id: artifact.id, entityVersion: boundArtifact?.entityVersion ?? 1 }],
     dependencyDigest: auditDependencyDigest(snapshot, artifact.id, input.records ?? []),
     artifactHash,
+    semanticHash,
     contractHash: input.contractHash,
     policyHash: input.policyHash,
     reviewerConfigHash: input.reviewerConfigHash,

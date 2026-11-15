@@ -190,3 +190,58 @@ describe('task-grant tool + writePath matching (§3.4)', () => {
     expect(grantAdmitsExec(g, exec, context)).toBe(true)
   })
 })
+
+/** Well-formed `prj_<uuid>` project segments (§3.2). */
+const DRAFT_PROJECT = 'prj_11111111-1111-4111-8111-111111111111'
+const OTHER_PROJECT = 'prj_22222222-2222-4222-8222-222222222222'
+
+function draftsWorkspace(): string {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'grant-drafts-')))
+  mkdirSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts'), { recursive: true })
+  mkdirSync(join(root, '.dsh/vwa', OTHER_PROJECT, 'drafts'), { recursive: true })
+  mkdirSync(join(root, '.dsh/vwa/batches/b1'), { recursive: true })
+  return root
+}
+
+function draftsGrant(root: string, writePaths: string[]): TaskGrant {
+  return buildTaskGrant({
+    root,
+    branch: 'drafts',
+    goalId: null,
+    face: validateDescriptor({ rules: [], tools: [], writePaths, sandboxEscalation: false } as never),
+  })
+}
+
+describe('task-grant writePath matching with the drafts carve-out (§3.2/§3.3)', () => {
+  it('a drafts prefix of one project admits that project\'s draft files only', () => {
+    const root = draftsWorkspace()
+    const g = draftsGrant(root, [`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`)).toBe(true)
+    expect(grantAdmitsWritePath(g, join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts/notes.md'))).toBe(true)
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${OTHER_PROJECT}/drafts/notes.md`)).toBe(false)
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/adjudications.json`)).toBe(false)
+  })
+
+  it('a drafts prefix admits draft files through the Edit/Write tools', () => {
+    const root = draftsWorkspace()
+    const g = draftsGrant(root, [`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    expect(grantAdmitsExec(g, edit('write', join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts/notes.md')), context)).toBe(true)
+    expect(grantAdmitsExec(g, edit('edit', join(root, '.dsh/vwa', DRAFT_PROJECT, 'adjudications.json')), context)).toBe(false)
+  })
+
+  it('a broad .dsh prefix keeps batch scratch but never silently authorizes drafts', () => {
+    const root = draftsWorkspace()
+    const g = draftsGrant(root, ['.dsh'])
+    expect(grantAdmitsWritePath(g, '.dsh/vwa/batches/b1/input.json')).toBe(true)
+    // Project authorization is carried by the literal prj_ segment in the
+    // prefix (§3.2) — a prefix that names no project must not cover drafts.
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`)).toBe(false)
+  })
+
+  it('a draft-shaped target outside the state tree is an ordinary granted write', () => {
+    const root = draftsWorkspace()
+    const g = draftsGrant(root, ['docs'])
+    mkdirSync(join(root, 'docs', DRAFT_PROJECT, 'drafts'), { recursive: true })
+    expect(grantAdmitsWritePath(g, `docs/${DRAFT_PROJECT}/drafts/notes.md`)).toBe(true)
+  })
+})

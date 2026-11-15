@@ -260,7 +260,7 @@ describe('§4.6 — migration pins: audit reuse and receipt refusal', () => {
 
     const records: ReviewRecord[] = []
     const checkAt = (reviewerConfigHash: string) => evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifact.id, text: f.artifact.text,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifact.id, semanticText: f.artifact.text, artifactHash: sha256Hex(f.artifact.text),
       records, pendingRunIds: [], adjudications: [], reviewerConfigHash,
     })
     const receipt = buildReceiptV2({

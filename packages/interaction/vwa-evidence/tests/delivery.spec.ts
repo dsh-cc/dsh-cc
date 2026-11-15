@@ -326,6 +326,88 @@ describe('bound turn-end integration (§16.2)', () => {
   })
 })
 
+/**
+ * `gr:` citations end-to-end through the provider seam (§5.2/§5.3): the
+ * turn-end evaluator hands the vwa-argument registry to the verifier, which
+ * checks the FROZEN snapshot — the live file is never read.
+ */
+describe('gr: citations through the vwa-argument registry (§5.2/§5.3)', () => {
+  const PROJECT = 'prj_' + '7'.repeat(32)
+  const SOURCE = 'src_' + '8'.repeat(32)
+  const SNAPSHOT_TEXT = 'alpha\nbeta\n'
+  const SNAPSHOT_REL = `.dsh/vwa/${PROJECT}/sources/${SOURCE}.md`
+
+  function grProvider(corpusPath: string | undefined): VwaArgumentDeliveryProvider {
+    return {
+      listBoundArtifacts: () => [],
+      checkForDelivery: async () => {
+        throw new Error('not bound')
+      },
+      renderReport: async () => ({ text: '', reportHash: sha256Hex(''), bindingDigest: '' }),
+      listProjectSources: () => [
+        {
+          sourceId: SOURCE,
+          ...(corpusPath === undefined ? {} : { corpusPath }),
+          snapshotPath: SNAPSHOT_REL,
+          snapshotHash: sha256Hex(SNAPSHOT_TEXT),
+        },
+      ],
+    }
+  }
+
+  async function grEnv(): Promise<Env> {
+    const e = await env()
+    await bindProject(e.root, PROJECT)
+    await mkdir(join(e.root, '.dsh', 'vwa', PROJECT, 'sources'), { recursive: true })
+    await writeFile(join(e.root, ...SNAPSHOT_REL.split('/')), SNAPSHOT_TEXT, 'utf8')
+    await writeFile(join(e.root, 'docs', 'c.md'), `ships 42 files 〔src:gr:${SOURCE}#L1-L2〕 per run.`, 'utf8')
+    return e
+  }
+
+  const edit = (turn: number, path: string): EvalEvent => ({
+    type: 'tool/call',
+    data: { turn, name: 'edit', arguments: JSON.stringify({ file_path: path }) },
+  })
+
+  it('a corpus-class source verifies marked-ok from the frozen snapshot', async () => {
+    const e = await grEnv()
+    const { outcome } = await runTurn(e, [userEvent(), edit(1, 'docs/c.md'), assistantEvent(1)], grProvider('docs/corpus/letters.md'))
+    expect(outcome.action).toBe('receipts')
+    const rows = await readJsonl<ReceiptV2>(receiptLedgerPath(e.home, 'sess'))
+    const row = rows.find((candidate) => (candidate as { v?: unknown }).v === 1) as unknown as {
+      claims: { status: string; sourceId?: string }[]
+      overall: string
+    }
+    expect(row.claims[0]?.status).toBe('marked-ok')
+    expect(row.claims[0]?.sourceId).toBe(`gr:${SOURCE}`)
+    expect(row.overall).toBe('pass')
+  })
+
+  it('a non-corpus source fails closed with the exact §5.2 reason', async () => {
+    const e = await grEnv()
+    await runTurn(e, [userEvent(), edit(1, 'docs/c.md'), assistantEvent(1)], grProvider('src/index.ts'))
+    const rows = await readJsonl<{ v?: unknown; claims: { status: string; text: string }[] }>(
+      receiptLedgerPath(e.home, 'sess'),
+    )
+    const row = rows.find((candidate) => candidate.v === 1)
+    expect(row?.claims[0]?.status).toBe('invalid-marker')
+    expect(row?.claims[0]?.text).toContain('source corpus path is outside the citable corpus')
+  })
+
+  it('without the registry face the gr: marker never verifies (fail closed)', async () => {
+    const e = await grEnv()
+    const provider = grProvider('docs/corpus/letters.md')
+    delete (provider as { listProjectSources?: unknown }).listProjectSources
+    await runTurn(e, [userEvent(), edit(1, 'docs/c.md'), assistantEvent(1)], provider)
+    const rows = await readJsonl<{ v?: unknown; claims: { status: string; text: string }[] }>(
+      receiptLedgerPath(e.home, 'sess'),
+    )
+    const row = rows.find((candidate) => candidate.v === 1)
+    expect(row?.claims[0]?.status).toBe('invalid-marker')
+    expect(row?.claims[0]?.text).toContain('no active VWA project for gr: citation')
+  })
+})
+
 describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
   it('staleAgainst skips v2 rows; nudgeBudgetConsumed counts both versions (D20)', () => {
     const path = '/w/a.md'
@@ -431,5 +513,187 @@ describe('v1 reader compatibility (§16.1, D17/D20/D22)', () => {
     await mkdir(join(e.root, '.dsh', 'vwa'), { recursive: true })
     await writeFile(join(e.root, '.dsh/vwa/current-project.json'), 'not json', 'utf8')
     expect(readCurrentProject(e.root)).toBeUndefined()
+  })
+})
+
+describe('render pipeline: draft scan set + one route per draft (§5.5, §13)', () => {
+  const PID = 'prj_12345678-1234-4234-9234-1234567890ab'
+  const DRAFT_REL = `.dsh/vwa/${PID}/drafts/main.md`
+  const ART = 'art_' + '1'.repeat(32)
+  const RENDERED = 'The rendered, marker-free body.\n'
+
+  async function draftEnv(): Promise<Env & { draftAbs: string; deliverableAbs: string }> {
+    const e = await env()
+    await bindProject(e.root, PID)
+    const draftAbs = join(e.root, ...DRAFT_REL.split('/'))
+    const deliverableAbs = join(e.root, 'docs', 'article.md')
+    await mkdir(join(e.root, '.dsh', 'vwa', PID, 'drafts'), { recursive: true })
+    await writeFile(draftAbs, `# Draft\n\nThe body〔src:ws:docs/a.md#L1-L1〕.\n`, 'utf8')
+    await writeFile(deliverableAbs, RENDERED, 'utf8')
+    return { ...e, draftAbs, deliverableAbs }
+  }
+
+  function draftProvider(input: {
+    check?: DeliveryCheckLike
+    failCheckWith?: Error
+    withDraft?: boolean
+  }): VwaArgumentDeliveryProvider {
+    const check = input.check ?? makeCheck({ artifactId: ART, artifactHash: sha256Hex(RENDERED) })
+    return {
+      // withDraft:false models "no binding at all" for the draft.
+      listBoundArtifacts: () => input.withDraft === false ? [] : [{
+        artifactId: check.artifactId,
+        path: 'docs/article.md',
+        draftPath: DRAFT_REL,
+        artifactHash: check.artifactHash,
+      }],
+      checkForDelivery: async () => {
+        if (input.failCheckWith !== undefined) throw input.failCheckWith
+        return { evaluationId: 'eval_x', bindingDigest: 'd'.repeat(64), check }
+      },
+      renderReport: async () => ({ text: '# report\n', reportHash: sha256Hex('# report\n'), bindingDigest: 'd'.repeat(64) }),
+    }
+  }
+
+  const editEvent = (path: string): EvalEvent => ({
+    type: 'tool/call',
+    data: { name: 'edit', arguments: JSON.stringify({ file_path: path }) },
+  })
+
+  it('the draft is the scan-set member: the bound receipt is keyed on the draft path with the rendered hash', async () => {
+    const d = await draftEnv()
+    const provider = draftProvider({
+      check: makeCheck({
+        artifactId: ART,
+        artifactHash: sha256Hex(RENDERED),
+        assessments: [{
+          claimId: 'cl_x', supportGrade: 'A', opposition: 'none-found', disposition: 'supported',
+          reviewState: 'current', reviewRunIds: [], rationale: [],
+        }],
+        claimBindings: [{ claimId: 'cl_x', spans: [[10, 25]], sources: [] }],
+      }),
+    })
+    const { outcome } = await runTurn(d, [userEvent(), editEvent(DRAFT_REL), assistantEvent(1)], provider)
+    expect(outcome.receipts).toBe(1)
+    const rows = await v2Rows(d.home)
+    expect(rows).toHaveLength(1)
+    // §5.5.4: artifactPath = draft path, artifactHash = RENDERED hash.
+    expect(rows[0]!.artifactPath).toBe(d.draftAbs)
+    expect(rows[0]!.artifactHash).toBe(sha256Hex(RENDERED))
+    // Receipt claim spans are documented DRAFT coordinates (§4.4) and pass through.
+    expect(rows[0]!.claims).toHaveLength(1)
+    expect(rows[0]!.claims[0]!.spans).toEqual([[10, 25]])
+  })
+
+  it('the deliverable is excluded from window, pending and bound contributions (§5.5.3)', async () => {
+    const d = await draftEnv()
+    const provider = draftProvider({})
+    // Hand-edit the DELIVERABLE (never the draft): it must not scan standalone.
+    const { outcome } = await runTurn(d, [userEvent(), editEvent('docs/article.md'), assistantEvent(1)], provider)
+    const rows = await v2Rows(d.home)
+    for (const row of rows) {
+      expect(row.artifactPath).not.toBe(d.deliverableAbs)
+      // Only v2 (bound) rows — no v1 standalone row for the compile output.
+      expect((row as unknown as { v: number }).v).toBe(2)
+    }
+    expect(outcome.receipts).toBe(rows.length)
+  })
+
+  it('boundArtifactMap indexes the draft and excludes the deliverable', async () => {
+    const d = await draftEnv()
+    const { boundArtifactMap } = await import('../src/bound-eval.ts')
+    const bound = boundArtifactMap(
+      {
+        agent: { session: { header: { id: 'sess' }, snapshotEvents: () => [] } },
+        turn: 1, settings: d.settings, workspaceRoot: d.root, exec: passExec, dshHome: d.home,
+        state: d.state, debug: (m: string) => d.debug.push(m),
+        deliveryProvider: draftProvider({}),
+      },
+      [],
+      (m) => d.debug.push(m),
+    )
+    expect(bound.map.has(d.draftAbs)).toBe(true)
+    expect(bound.map.has(d.deliverableAbs)).toBe(false)
+    expect(bound.excludedDeliverables.has(d.deliverableAbs)).toBe(true)
+    expect(bound.map.get(d.draftAbs)?.draftPath).toBe(d.draftAbs)
+  })
+
+  it('a draft with no binding scans standalone through the citation checks', async () => {
+    const d = await draftEnv()
+    const { outcome } = await runTurn(
+      d,
+      [userEvent(), editEvent(DRAFT_REL), assistantEvent(1)],
+      draftProvider({ withDraft: false }),
+    )
+    // No bound entry for the draft and no deliverable scan: the DRAFT file
+    // itself satisfies insideWhitelist (§5.5.1) and takes the v1 path.
+    const raw = await readFile(receiptLedgerPath(d.home, 'sess'), 'utf8').catch(() => '')
+    const ledgerRows = raw.trim() === '' ? [] : raw.trim().split('\n').map((line) => JSON.parse(line) as { v: number; artifactPath: string })
+    expect(ledgerRows.some((row) => row.v === 1 && row.artifactPath === d.draftAbs)).toBe(true)
+    expect(ledgerRows.some((row) => row.artifactPath === d.deliverableAbs)).toBe(false)
+    expect(outcome.receipts).toBe(1)
+  })
+
+  it('the stale-binding nudge distinguishes STALE_RENDER from INPUT_CHANGED (§7.2)', async () => {
+    const stale = await draftEnv()
+    const staleError = Object.assign(new Error('deliverable is a provisional render from an unadopted bind; re-run the bind for this artifact'), { code: 'STALE_RENDER' })
+    await runTurn(stale, [userEvent(), assistantEvent(1)], draftProvider({ failCheckWith: staleError })).then(async ({ injected }) => {
+      expect(JSON.stringify(injected)).toContain('STALE provisional render')
+      expect(JSON.stringify(injected)).toContain('re-run the bind')
+    })
+
+    const drift = await draftEnv()
+    const driftError = Object.assign(new Error('artifact bytes changed after binding; re-bind and re-audit are required'), { code: 'INPUT_CHANGED' })
+    await runTurn(drift, [userEvent(), assistantEvent(1)], draftProvider({ failCheckWith: driftError })).then(async ({ injected }) => {
+      expect(JSON.stringify(injected)).toContain('is STALE')
+      expect(JSON.stringify(injected)).not.toContain('STALE provisional render')
+    })
+  })
+
+  it('presentation is still detected against the deliverable (§5.5.4 receipt identity)', async () => {
+    const d = await draftEnv()
+    const reportAbs = join(d.root, 'docs', 'vwa-reports', PID, `${ART}.review.md`)
+    const presented: EvalEvent = {
+      type: 'deliverables/presented',
+      data: { files: [{ path: d.deliverableAbs }, { path: reportAbs }] },
+    }
+    await mkdir(join(d.root, 'docs', 'vwa-reports', PID), { recursive: true })
+    await writeFile(reportAbs, '# report\n', 'utf8')
+    const { outcome } = await runTurn(
+      d,
+      [userEvent(), presented, assistantEvent(1)],
+      draftProvider({}),
+    )
+    expect(outcome.receipts).toBe(1)
+    const rows = await v2Rows(d.home)
+    expect(rows[0]!.artifactPath).toBe(d.draftAbs)
+    expect(rows[0]!.delivery).toBe('delivered-reviewed')
+  })
+
+  it('a draft resolves its project from the path segment, never the pointer (§5.4)', async () => {
+    // NO pointer anywhere (draftEnv/binding is deliberately avoided): only
+    // the draft's own `prj_` segment can name the project. The older
+    // readCurrentProject-only behavior fails closed here.
+    const e = await env()
+    const draftAbs = join(e.root, ...DRAFT_REL.split('/'))
+    const sourceId = 'src_' + '8'.repeat(32)
+    const snapshotPath = `.dsh/vwa/${PID}/sources/${sourceId}.md`
+    await mkdir(join(e.root, '.dsh', 'vwa', PID, 'drafts'), { recursive: true })
+    await mkdir(join(e.root, '.dsh', 'vwa', PID, 'sources'), { recursive: true })
+    await writeFile(join(e.root, ...snapshotPath.split('/')), 'alpha\nbeta\n', 'utf8')
+    await writeFile(draftAbs, `ships 42 files 〔src:gr:${sourceId}#L1-L2〕 per run.\n`, 'utf8')
+    const provider: VwaArgumentDeliveryProvider = {
+      listBoundArtifacts: () => [],
+      checkForDelivery: async () => { throw new Error('not bound') },
+      renderReport: async () => ({ text: '', reportHash: sha256Hex(''), bindingDigest: '' }),
+      listProjectSources: (projectId: string) => projectId === PID
+        ? [{ sourceId, corpusPath: 'docs/corpus/letters.md', snapshotPath, snapshotHash: sha256Hex('alpha\nbeta\n') }]
+        : [],
+    }
+    const { outcome } = await runTurn(e, [userEvent(), editEvent(DRAFT_REL), assistantEvent(1)], provider)
+    expect(outcome.receipts).toBe(1)
+    const rows = await readJsonl<{ v?: unknown; claims: { status: string }[] }>(receiptLedgerPath(e.home, 'sess'))
+    const row = rows.find((candidate) => candidate.v === 1)
+    expect(row?.claims[0]?.status).toBe('marked-ok')
   })
 })

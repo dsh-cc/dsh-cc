@@ -95,7 +95,11 @@ export interface ReceiptRow {
   nudge: { round: number }
 }
 
-/** One v2 claim entry: multi-source (§16.1) — spans/sources may be empty. */
+/**
+ * One v2 claim entry: multi-source (§16.1) — spans/sources may be empty.
+ * §4.4 (render pipeline): `spans` are DRAFT coordinates for draft-backed
+ * artifacts — consumers resolve them against the draft in the project tree.
+ */
 export interface ReceiptClaim {
   claimId: string
   spans: [number, number][]

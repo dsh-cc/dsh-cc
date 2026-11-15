@@ -280,6 +280,7 @@ export function admissionRequestRecord(input: {
     projectEstimatedCalls: estimate.estimatedWithRetries,
     // §5.2: the declaration binds to ONE artifact binding and is excluded from
     // every identity hash; an old declaration auto-expires after a rebind.
+    // §4.4a: `artifactHash` carries the SEMANTIC identity (the draft hash).
     ...(binding !== undefined && binding.entityVersion !== undefined
       ? { skipAudit: input.body.skipAudit === true, artifactHash: binding.artifactHash, entityVersion: binding.entityVersion }
       : {}),

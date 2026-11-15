@@ -28,7 +28,8 @@ import {
   type TaskGrant,
 } from './task-grant.ts'
 import type { PermissionRule } from './types.ts'
-import { isCanonicalVwaStateWrite } from './vwa-state.ts'
+import { isCanonicalVwaStateWrite, relativeStatePath } from './vwa-state.ts'
+import { isVwaDraftPath, isVwaDraftPrefix } from './vwa-paths.ts'
 
 /** The per-call host facts the matcher needs. */
 export interface GrantMatchContext {
@@ -128,15 +129,25 @@ export function grantAdmitsTool(grant: TaskGrant, toolName: string): boolean {
  * must stay inside the canonical workspace root. Authoritative VWA state never
  * matches, even through a broad prefix or a symlink retargeted since approval.
  * Prefixes and targets are resolved on every call before separator-aware matching.
+ *
+ * Draft files are the one writable part of a project state tree (§3.2/§3.3), and
+ * they are admitted only through the drafts prefix that names their OWN project
+ * segment: a broad `.dsh` prefix must not silently authorize every project's
+ * drafts, because project authorization is carried by that literal `prj_`
+ * segment in the prefix (the descriptor has no project-list field).
  */
 export function grantAdmitsWritePath(grant: TaskGrant, target: string): boolean {
   const normalizedRoot = normalizePath(grant.root)
   const normalizedTarget = normalizePath(resolve(grant.root, target))
   if (!isPathWithin(normalizedRoot, normalizedTarget)) return false
   if (isCanonicalVwaStateWrite(normalizedTarget, normalizedRoot)) return false
+  const relTarget = relativeStatePath(normalizedTarget, normalizedRoot)
+  const isDraftTarget = relTarget !== undefined && isVwaDraftPath(relTarget)
   return grant.writePaths.some(writePath => {
     const base = writePathBase(grant.root, writePath)
-    return isPathWithin(normalizedRoot, base) && isPathWithin(base, normalizedTarget)
+    if (!isPathWithin(normalizedRoot, base) || !isPathWithin(base, normalizedTarget)) return false
+    if (!isDraftTarget) return true
+    return isVwaDraftPrefix(writePath.replace(/\\/g, '/').replace(/\/+$/, ''))
   })
 }
 

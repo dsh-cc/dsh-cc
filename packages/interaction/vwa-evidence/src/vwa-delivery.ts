@@ -19,10 +19,12 @@
  * @module @dsh-cc/vwa-evidence/vwa-delivery
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import { sha256Hex, type AssessmentEntry, type MechanicalStatus, type ReceiptV2, type Verdict } from './receipt.ts'
 import type { EvalEvent } from './evaluator.ts'
+import type { GrSource } from './verify.ts'
 
 /** Minimal assessment face (mirrors the review schema Assessment). */
 export type AssessmentLike = AssessmentEntry
@@ -70,8 +72,18 @@ export interface DeliveryCheckLike {
  * cordis service `vwa-argument` implements this face when mounted.
  */
 export interface VwaArgumentDeliveryProvider {
-  /** Bound artifacts of the current project (artifactId + workspace-relative path). */
-  listBoundArtifacts(projectId: string): { artifactId: string; path: string }[]
+  /**
+   * Bound artifacts of the current project. §5.5: `draftPath` is the
+   * workspace-relative draft path (draft-backed artifacts only, absent for
+   * legacy inline) and `artifactHash` is the RENDERED hash (= contentHash).
+   */
+  listBoundArtifacts(projectId: string): { artifactId: string; path: string; draftPath?: string; artifactHash: string }[]
+  /**
+   * The project's registered sources for `gr:` citation checks (render
+   * pipeline §5.2/§5.3): the registered corpus path, the frozen snapshot path
+   * and hash. Optional — without it every `gr:` marker fails closed.
+   */
+  listProjectSources?(projectId: string): GrSource[]
   /** Freeze the current evaluation inputs and return the delivery check handle. */
   checkForDelivery(
     projectId: string,
@@ -179,13 +191,15 @@ export function deliveryState(input: {
   workspaceRoot: string
   events: readonly EvalEvent[]
   artifactPath: string
+  /** §5.5.4: presentation is detected against the DELIVERABLE when the row's identity is the draft. */
+  presentedArtifactPath?: string
   artifactHash: string
   reportPath: string
   reportHash: string
 }): ReceiptV2Delivery {
   let bodyPresented = false,
     reportPresented = false
-  const artifact = resolve(input.workspaceRoot, input.artifactPath)
+  const artifact = resolve(input.workspaceRoot, input.presentedArtifactPath ?? input.artifactPath)
   const report = resolve(input.workspaceRoot, input.reportPath)
   for (const file of presentedFiles(input.events)) {
     const absolute = resolve(input.workspaceRoot, file.path),
@@ -217,8 +231,15 @@ export function writeBoundReport(
   const relativePath = `docs/vwa-reports/${projectId}/${artifactId}.review.md`
   const absolute = join(workspaceRoot, relativePath)
   mkdirSync(absoluteDir, { recursive: true })
-  writeFileSync(absolute, text, 'utf8')
-  if (fileHash(absolute) !== sha256Hex(text)) throw new Error('report read-back failed')
+  // §8.1: temp + read-back + rename — a reader never sees a partial report
+  // (the report-tool.ts publication pattern).
+  const tmp = join(absoluteDir, `${artifactId}.review.md.${randomUUID()}.tmp`)
+  writeFileSync(tmp, text, 'utf8')
+  if (fileHash(tmp) !== sha256Hex(text)) {
+    rmSync(tmp, { force: true })
+    throw new Error('report read-back failed')
+  }
+  renameSync(tmp, absolute)
   return { path: relativePath, hash: sha256Hex(text) }
 }
 
@@ -234,6 +255,8 @@ export interface BuildReceiptV2Input {
   receiptId: string
   projectId: string
   artifactPath: string
+  /** §5.5.4: the deliverable path presentation is matched against (draft-backed rows). */
+  presentedArtifactPath?: string
   events: readonly EvalEvent[]
   workspaceRoot: string
   parentHash: string
@@ -307,6 +330,7 @@ export function buildReceiptV2(input: BuildReceiptV2Input): ReceiptV2 {
       workspaceRoot: input.workspaceRoot,
       events: input.events,
       artifactPath: input.artifactPath,
+      ...(input.presentedArtifactPath === undefined ? {} : { presentedArtifactPath: input.presentedArtifactPath }),
       artifactHash: check.artifactHash,
       reportPath: input.report.path,
       reportHash: input.report.hash,

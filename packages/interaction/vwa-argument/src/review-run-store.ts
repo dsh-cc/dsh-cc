@@ -104,6 +104,9 @@ export class ReviewRunStore {
       /**
        * §5.2: explicit audit-skip declaration, bound to ONE artifact binding by
        * artifactHash + entityVersion. Excluded from every identity hash.
+       * §4.4a (render pipeline): the stored hash is the binding's SEMANTIC
+       * identity (sha256 of the text the audit reads — the draft for
+       * draft-backed artifacts); the field name is the pre-split wire name.
        */
       skipAudit?: boolean
       artifactHash?: Hash

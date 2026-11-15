@@ -54,8 +54,39 @@ import {
 } from './receipt.ts'
 import { boundArtifactMap, evaluateBoundArtifact } from './bound-eval.ts'
 import type { VwaArgumentDeliveryProvider } from './vwa-delivery.ts'
-import { isWhitelistedRel } from './verify.ts'
+import { readCurrentProject } from './vwa-delivery.ts'
+import { isWhitelistedRel, type GrProjectSources } from './verify.ts'
+import { isVwaDraftPath, vwaProjectIdOfDraft } from './vwa-paths.ts'
 import type { VwaEvidenceSettings } from './settings.ts'
+
+/**
+ * §5.4 project resolution for `gr:` markers: the ACTIVE project's source
+ * registry, read through the same structurally-resolved vwa-argument provider
+ * that supplies bound-artifact discovery. No pointer, no provider, or no
+ * registry face ⇒ undefined, and every `gr:` marker fails closed with
+ * `no active VWA project for gr: citation`.
+ */
+export function projectSourceResolver(
+  provider: VwaArgumentDeliveryProvider | undefined,
+  workspaceRoot: string,
+  artifactPath?: string,
+): (() => Promise<GrProjectSources | undefined>) | undefined {
+  const list = provider?.listProjectSources
+  if (list === undefined) return undefined
+  return async () => {
+    // §5.4/§5.5.5: a draft names its project in its `prj_` path segment; the
+    // pointer is only a fallback for non-draft files.
+    const rel = artifactPath === undefined ? undefined : relative(workspaceRoot, artifactPath).split(sep).join('/')
+    const fromPath = rel === undefined ? undefined : vwaProjectIdOfDraft(rel)
+    const projectId = fromPath ?? readCurrentProject(workspaceRoot)
+    if (projectId === undefined) return undefined
+    try {
+      return { projectId, sources: list.call(provider, projectId) }
+    } catch {
+      return undefined
+    }
+  }
+}
 
 /**
  * Runtime editing tool names, lowercase (post-edit-verify wiring.ts:20 —
@@ -184,14 +215,19 @@ export function editedPaths(events: readonly EvalEvent[], start: number, end: nu
   return out
 }
 
-/** Whitelist ∩ inside-workspace filter (§4.3): realpath must stay under realpath(workspace). */
+/** Whitelist ∩ inside-workspace filter (§4.3): realpath must stay under
+ * realpath(workspace). §5.5.1 (render pipeline): a project DRAFT file is
+ * scannable too — drafts cite, drafts are checked; they are never citable as
+ * `ws:` (`isWhitelistedRel` itself stays untouched) and the reports/
+ * evaluations sibling trees stay excluded. */
 async function insideWhitelist(absolutePath: string, workspaceRoot: string): Promise<string | undefined> {
   const rootReal = await realpath(workspaceRoot).catch(() => workspaceRoot)
   const targetReal = await realpath(absolutePath).catch(() => undefined)
   if (targetReal === undefined) return undefined
   const rel = relative(rootReal, targetReal)
   if (rel === '' || rel.startsWith('..') || isAbsolute(rel) || rel.includes(sep + '..')) return undefined
-  return isWhitelistedRel(rel.split(sep).join('/')) ? targetReal : undefined
+  const relPosix = rel.split(sep).join('/')
+  return isWhitelistedRel(relPosix) || isVwaDraftPath(relPosix) ? targetReal : undefined
 }
 
 /** Realpath-deduped artifact set (§4.3); the ORIGINAL path is kept so artifactId
@@ -259,17 +295,28 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
     // Discriminated union read (§16.1): callers filter by row.v; nothing
     // here casts the whole ledger to v1.
     const rows = (await readJsonl<unknown>(ledgerPath).catch(() => [] as unknown[])) as AnyReceiptRow[]
-    // Bound argument-review artifacts (§16.2 step 2): editing paths ∪ project-bound
-    // artifacts ∪ pending, deduped by realpath. No pointer / provider ⇒ citation checks only.
+    // Bound argument-review artifacts (§16.2 step 2 + render pipeline §5.5):
+    // editing paths ∪ project-bound artifacts ∪ pending, deduped by realpath.
+    // The dispatch index is the DRAFT path for draft-backed artifacts; their
+    // deliverable is compile output and is excluded from the ENTIRE set
+    // (§5.5.3), window edits and pending replay included.
     const bound = boundArtifactMap(options, events, debug)
-    const windowArtifacts = await deriveArtifacts(windowEdits, options.workspaceRoot)
-    const pending = await pendingArtifacts(
+    const excluded = new Set(bound.excludedDeliverables)
+    for (const deliverable of bound.excludedDeliverables) {
+      excluded.add(await realpath(deliverable).catch(() => deliverable))
+    }
+    const windowArtifacts = await deriveArtifacts(
+      windowEdits.filter((path) => !bound.excludedDeliverables.has(path)),
+      options.workspaceRoot,
+    )
+    const pending = (await pendingArtifacts(
       editedPaths(events, 0, events.length - 1, options.workspaceRoot),
       new Set(windowEdits),
       rows,
-    )
+    )).filter((path) => !bound.excludedDeliverables.has(path))
+    const boundContribution = [...bound.map.values()].map((entry) => entry.draftPath ?? entry.absolutePath)
     const artifacts = await deriveArtifacts(
-      [...windowArtifacts, ...pending, ...[...bound.values()].map(entry => entry.absolutePath)],
+      [...windowArtifacts, ...pending, ...boundContribution],
       options.workspaceRoot,
     )
     if (artifacts.length === 0) return { action: 'skip', reason: 'no-artifacts' }
@@ -280,7 +327,9 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
     for (const artifactPath of artifacts) {
       options.signal?.throwIfAborted()
       const realKey = await realpath(artifactPath).catch(() => artifactPath)
-      const boundEntry = bound.get(realKey) ?? bound.get(artifactPath)
+      // §5.5.3, belt-and-suspenders: a draft-backed deliverable never scans.
+      if (excluded.has(artifactPath) || excluded.has(realKey)) continue
+      const boundEntry = bound.map.get(realKey) ?? bound.map.get(artifactPath)
       if (boundEntry !== undefined) {
         // §16.2 bound-artifact path: the vwa-argument provider owns the checks.
         const outcome = await evaluateBoundArtifact(options, {
@@ -297,6 +346,10 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
         debug(`vwa-evidence: artifact unreadable: ${artifactPath}: ${String(error)}`)
         continue
       }
+      // §5.3: `gr:` citation checks read the scanned artifact's own project
+      // registry (draft path segment first, pointer fallback) through the
+      // vwa-argument provider seam.
+      const projectSources = projectSourceResolver(options.deliveryProvider, options.workspaceRoot, artifactPath)
       let result: EvaluationResult
       try {
         result = await evaluateArtifact({
@@ -306,6 +359,7 @@ export async function evaluateTurnStopping(options: EvaluateTurnOptions): Promis
           workspaceRoot: options.workspaceRoot,
           exec: options.exec,
           gates: { timeoutMs: settings['gate-timeout-ms'] },
+          ...(projectSources === undefined ? {} : { verify: { projectSources } }),
           ...(options.now === undefined ? {} : { now: options.now() }),
         })
       } catch (error: unknown) {

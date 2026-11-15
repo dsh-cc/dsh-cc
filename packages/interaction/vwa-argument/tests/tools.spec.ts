@@ -5,12 +5,13 @@
  * (D05/D06 via the envelope), and artifact occurrence validation (D12).
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerArgumentTools, type ToolDefinition } from '../src/tools.ts'
 import type { ToolDeps } from '../src/tools.ts'
 import { CaptureRegistry } from '../src/sources.ts'
+import { readWorkspaceArtifact } from '../src/capture-wiring.ts'
 import { CONTRACT, initWorkspace, makeWorkspace, uuid } from './helpers.ts'
 import { sha256Hex, stableJson } from '../src/schema.ts'
 import { semanticContractHash } from '../src/review-contract.ts'
@@ -810,6 +811,7 @@ describe('argument.update (§10.5)', () => {
       requestId: 'bind-1',
       input: {
         op: 'bind-artifact',
+        mode: 'inline',
         path: 'report.md',
         occurrences: [{ claimId, span: { start: 4, end: 26 }, exactText: 'documented shift began' }],
         outline: [],
@@ -825,7 +827,7 @@ describe('argument.update (§10.5)', () => {
         projectId: other.workspace.projectId,
         expectedRevision: bound.data.head.revision,
         requestId: 'bind-2',
-        input: { op: 'bind-artifact', path: 'report.md', occurrences: [], outline: [] },
+        input: { op: 'bind-artifact', mode: 'inline', path: 'report.md', occurrences: [], outline: [] },
       })
       expect(bind2.ok).toBe(true)
     }
@@ -838,6 +840,7 @@ describe('argument.update (§10.5)', () => {
         requestId: 'bind-3',
         input: {
           op: 'bind-artifact',
+          mode: 'inline',
           path: 'report.md',
           occurrences: [{ claimId, span: { start: 4, end: 26 }, exactText: 'documented shift started' }],
           outline: [],
@@ -908,7 +911,7 @@ describe('argument.review continue with stage all (§A.2 audit reuse)', () => {
     deps.artifactTexts.set('report.md', 'The body states one fact.\n')
     const bind = await call(update, {
       projectId: workspace.projectId, expectedRevision: 2, requestId: `bind-${uuid()}`,
-      input: { op: 'bind-artifact', path: 'report.md', occurrences: occurrence(claimId), outline: [] },
+      input: { op: 'bind-artifact', mode: 'inline', path: 'report.md', occurrences: occurrence(claimId), outline: [] },
     })
     expect(bind.ok).toBe(true)
     return { revision: bind.revision as number, claimId }
@@ -992,7 +995,7 @@ describe('argument.review continue with stage all (§A.2 audit reuse)', () => {
     deps.artifactTexts.set('report.md', 'The body states one fact, more carefully.\n')
     const rebind = await call(tools.get('argument.update') as ToolDefinition, {
       projectId: workspace.projectId, expectedRevision: revision, requestId: 'rebind',
-      input: { op: 'bind-artifact', path: 'report.md', occurrences: occurrence(claimId), outline: [] },
+      input: { op: 'bind-artifact', mode: 'inline', path: 'report.md', occurrences: occurrence(claimId), outline: [] },
     })
     expect(rebind.ok).toBe(true)
     const next = await call(review, {
@@ -1310,6 +1313,7 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
       requestId: 'bind-cont',
       input: {
         op: 'bind-artifact',
+        mode: 'inline',
         path: 'report.md',
         occurrences: [{ claimId: claimIds[0]!, span: { start: 4, end: 26 }, exactText: 'documented shift began' }],
         outline: [],
@@ -1343,5 +1347,146 @@ describe('argument.review static budget feasibility (Feature C §C.2.1)', () => 
     })
     expect(result.ok).toBe(true)
     expect(result.data).toMatchObject({ completion: 'started' })
+  })
+})
+
+// ---- render pipeline: bind modes through the tool wire (§4.1/§7.3, §13) ----
+
+describe('bind modes through the tools (render pipeline §4/§7)', () => {
+  function headRev(workspace: ReturnType<typeof initWorkspace>): number {
+    const head = workspace.store.readHead()
+    if (!head.ok) throw new Error(head.message)
+    return head.data.head.revision
+  }
+  const DRAFT1 = '# Report\n\nThe shift began in 1789〔src:ws:docs/a.md#L1-L1〕.\n'
+  const DRAFT2 = '# Report\n\nThe shift began in 1790〔src:ws:docs/a.md#L1-L1〕.\n'
+  function seedDraft(workspace: ReturnType<typeof initWorkspace>, text: string): string {
+    const drafts = join(workspace.root, '.dsh', 'vwa', workspace.projectId, 'drafts')
+    mkdirSync(drafts, { recursive: true })
+    const draftPath = `.dsh/vwa/${workspace.projectId}/drafts/main.md`
+    writeFileSync(join(drafts, 'main.md'), text)
+    return draftPath
+  }
+  function bindArgs(
+    workspace: ReturnType<typeof initWorkspace>,
+    draftPath: string,
+    mode: unknown = 'draft',
+  ): Record<string, unknown> {
+    return {
+      op: 'bind-artifact', mode, path: 'docs/article.md',
+      occurrences: [], outline: [], draftPath,
+    }
+  }
+
+  it('argument.update rejects a bind without mode and with an unknown mode (§4.1)', async () => {
+    const { tools, workspace } = mount()
+    const draftPath = seedDraft(workspace, DRAFT1)
+    mkdirSync(join(workspace.root, 'docs'), { recursive: true })
+    for (const input of [
+      { op: 'bind-artifact', path: 'docs/article.md', occurrences: [], outline: [], draftPath },
+      { op: 'bind-artifact', mode: 'side', path: 'docs/article.md', occurrences: [], outline: [], draftPath },
+    ]) {
+      const result = await call(tools.get('argument.update') as ToolDefinition, {
+        projectId: workspace.projectId,
+        expectedRevision: headRev(workspace),
+        requestId: uuid(),
+        input,
+      })
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe('SCHEMA_INVALID')
+      expect(String(result.message)).toContain('bind-artifact requires mode')
+    }
+  })
+
+  it('argument.update draft bind writes the rendered deliverable inside the transaction (§4.2)', async () => {
+    const { tools, workspace } = mount()
+    const draftPath = seedDraft(workspace, DRAFT1)
+    mkdirSync(join(workspace.root, 'docs'), { recursive: true })
+    const before = headRev(workspace)
+    const first = await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: before,
+      requestId: uuid(),
+      input: bindArgs(workspace, draftPath),
+    })
+    expect(first.ok).toBe(true)
+    const rendered = readFileSync(join(workspace.root, 'docs', 'article.md'), 'utf8')
+    // …the full render, markers stripped
+    expect(rendered).toBe(DRAFT1.replace(/〔(?:src|claim):[^〕]*〕/g, ''))
+    expect(rendered).not.toContain('〔')
+    expect(headRev(workspace)).toBe(before + 1)
+    // Re-run with an edited draft re-renders (own output — no overwrite needed, §4.7).
+    seedDraft(workspace, DRAFT2)
+    const second = await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: headRev(workspace),
+      requestId: uuid(),
+      input: bindArgs(workspace, draftPath),
+    })
+    expect(second.ok).toBe(true)
+    expect(readFileSync(join(workspace.root, 'docs', 'article.md'), 'utf8')).toBe(DRAFT2.replace(/〔(?:src|claim):[^〕]*〕/g, ''))
+  })
+
+  const reviewingMount = () => mount({
+    // The gate must read REAL bytes — the artifactTexts map stays empty here.
+    readArtifact: readWorkspaceArtifact,
+    review: () => ({
+      adapter: fakeAdapter([() => { throw new Error('no task planned') }]),
+      budget: BUDGET,
+      tasks: {
+        start: () => true,
+        cancel: () => {},
+        get: () => 'settled',
+        emitProgress: () => {},
+      },
+    }),
+  })
+
+  it('argument.review classifies a provisional render as STALE_RENDER, retryable (§7.2 series a)', async () => {
+    const { tools, workspace } = reviewingMount()
+    const draftPath = seedDraft(workspace, DRAFT1)
+    mkdirSync(join(workspace.root, 'docs'), { recursive: true })
+    const bound = await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: headRev(workspace), requestId: uuid(),
+      input: bindArgs(workspace, draftPath),
+    })
+    expect(bound.ok).toBe(true)
+    // Simulate the crash window: the draft moved on and the deliverable now
+    // holds the render of the CURRENT draft, unadopted by the graph.
+    seedDraft(workspace, DRAFT2)
+    writeFileSync(
+      join(workspace.root, 'docs', 'article.md'),
+      DRAFT2.replace(/〔(?:src|claim):[^〕]*〕/g, ''),
+    )
+    const review = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: headRev(workspace),
+      requestId: uuid(),
+      input: { stage: 'claims' },
+    })
+    expect(review.ok).toBe(false)
+    expect(review.code).toBe('STALE_RENDER')
+    expect(review.retryable).toBe(true)
+  })
+
+  it('argument.review reports genuine drift as INPUT_CHANGED (§7.2 series 3)', async () => {
+    const { tools, workspace } = reviewingMount()
+    const draftPath = seedDraft(workspace, DRAFT1)
+    mkdirSync(join(workspace.root, 'docs'), { recursive: true })
+    const bound = await call(tools.get('argument.update') as ToolDefinition, {
+      projectId: workspace.projectId, expectedRevision: headRev(workspace), requestId: uuid(),
+      input: bindArgs(workspace, draftPath),
+    })
+    expect(bound.ok).toBe(true)
+    writeFileSync(join(workspace.root, 'docs', 'article.md'), 'hand-edited foreign bytes\n')
+    const review = await call(tools.get('argument.review') as ToolDefinition, {
+      projectId: workspace.projectId,
+      expectedRevision: headRev(workspace),
+      requestId: uuid(),
+      input: { stage: 'claims' },
+    })
+    expect(review.ok).toBe(false)
+    expect(review.code).toBe('INPUT_CHANGED')
+    expect(review.retryable).toBe(true)
   })
 })

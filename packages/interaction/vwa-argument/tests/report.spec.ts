@@ -9,7 +9,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { HONESTY, mapMechanical, renderReportJson, renderReportMarkdown, type ReportInput } from '../src/report-render.ts'
@@ -56,6 +56,7 @@ function headRevision(store: ProjectStore): number {
 
 function setup(): { root: string; projectId: string; artifactId: string; store: ProjectStore } {
   const made = initWorkspace()
+  mkdirSync(`${made.root}/docs`, { recursive: true })
   writeFileSync(`${made.root}/docs/a.md`, ARTIFACT, 'utf8')
   const head = made.store.readHead()
   if (!head.ok) throw new Error(head.message)

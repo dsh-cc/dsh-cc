@@ -20,7 +20,8 @@ import {
   BUDGET,
   claimsResponse,
 } from './review-helpers.ts'
-import { initWorkspace } from './helpers.ts'
+import { initWorkspace, writeSnapshot } from './helpers.ts'
+import { sourceSnapshotPath } from '../src/paths.ts'
 
 function fixture() {
   const made = initWorkspace(),
@@ -28,8 +29,8 @@ function fixture() {
   const source = makeSource(),
     text = 'The council voted to close the port on 3 May.\n'
   source.snapshotHash = sha256Hex(text)
-  source.snapshotPath = `docs/vwa-sources/${made.projectId}/${source.id}.md`
-  writeFileSync(join(made.root, source.snapshotPath), text)
+  source.snapshotPath = sourceSnapshotPath(made.projectId, source.id)
+  writeSnapshot(made.root, source.snapshotPath, text)
   const evidence = makeEvidence(source)
   evidence.span = { start: 0, end: text.length }
   evidence.contextSpan = evidence.span
@@ -145,7 +146,7 @@ function fixture() {
         adapter,
         budget: BUDGET,
         contractHash: semanticContractHash(head.data.snapshot.contract),
-        readSnapshot: (id) => readFileSync(join(made.store.snapshotDir, `${id}.md`), 'utf8'),
+        readSnapshot: () => readFileSync(join(made.root, source.snapshotPath), 'utf8'),
       },
       runId: `run_${randomUUID()}`,
       requestId: randomUUID(),
@@ -263,7 +264,7 @@ describe('delivery hard conditions', () => {
     const check = evaluateDelivery({
       root: f.root,
       snapshot: f.snapshot,
-      text: f.body,
+      semanticText: f.body, artifactHash: sha256Hex(f.body),
       artifactId: f.artifactId,
       records,
       pendingRunIds: [],

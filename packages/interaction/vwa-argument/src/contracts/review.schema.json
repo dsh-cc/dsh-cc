@@ -649,6 +649,12 @@
             "$ref": "#/$defs/ClaimId"
           },
           "maxItems": 1000
+        },
+        "semanticHash": {
+          "$ref": "#/$defs/Hash"
+        },
+        "originRunId": {
+          "$ref": "#/$defs/RunId"
         }
       }
     },
@@ -880,7 +886,6 @@
         "reason",
         "signer",
         "ts",
-        "dependencyDigest",
         "overrides"
       ],
       "properties": {
@@ -932,6 +937,31 @@
             },
             "supersededRunId": {
               "$ref": "#/$defs/RunId"
+            }
+          }
+        },
+        "dispute": {
+          "type": "object",
+          "description": "\u00a76.2: REVIEWER_DISAGREEMENT rows bind the dispute cohort instead of dependencyDigest.",
+          "additionalProperties": false,
+          "required": ["disputeId", "inputHash", "stage", "runIdCohort"],
+          "properties": {
+            "disputeId": {
+              "type": "string",
+              "pattern": "^finding_dis_[0-9a-f]{16}$"
+            },
+            "inputHash": {
+              "$ref": "#/$defs/Hash"
+            },
+            "stage": {
+              "enum": ["sources", "claims", "support", "arguments", "audit", "extract", "align"]
+            },
+            "runIdCohort": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RunId"
+              },
+              "maxItems": 1000
             }
           }
         }

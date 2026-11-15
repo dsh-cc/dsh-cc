@@ -159,7 +159,7 @@ describe('end-to-end identity pin: budget revision preserves completed-record re
     // Delivery and progress report CURRENTNESS over the reused records — a
     // missed comparison site would fail loudly here, not just in the ledger.
     const report = evaluateDelivery({
-      root: f.root, snapshot: revisedSnapshot, artifactId: f.artifact.id, text: f.artifact.text,
+      root: f.root, snapshot: revisedSnapshot, artifactId: f.artifact.id, semanticText: f.artifact.text, artifactHash: sha256Hex(f.artifact.text),
       records: allRecords(f.root, f.snapshot.projectId), pendingRunIds: [], adjudications: [],
     })
     expect(report.checks.audit).toBe('pass')

@@ -8,6 +8,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
+import { sha256Hex } from '../src/schema.ts'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -73,7 +74,7 @@ function call(target: ToolDefinition, args: Record<string, unknown>) {
 }
 
 const reportPath = (projectId: string, artifactId: string, format = 'markdown') =>
-  `docs/vwa-reports/${projectId}/${artifactId}.review.${format === 'json' ? 'json' : 'md'}`
+  `.dsh/vwa/${projectId}/reports/${artifactId}.review.${format === 'json' ? 'json' : 'md'}`
 
 describe('§6.2 step 1 — freeze (write:false) creates E and writes no report', () => {
   it('returns evaluationId + bindingDigest and leaves the report directory empty', async () => {
@@ -106,7 +107,11 @@ describe('§6.2 step 3 — as-of re-render', () => {
     expect(result.data.text).toContain('diverged: false')
     expect(result.data.text).not.toContain('artifact was modified after review')
     expect(result.data.text).toContain('adjudication overlay: applied at render time; all other inputs as-of E')
+    // §8.1: the report is published under the v2 state tree's reports dir.
+    expect(result.data.path).toBe(reportPath(projectId, artifactId))
+    expect(result.data.path.startsWith(`.dsh/vwa/${projectId}/reports/`)).toBe(true)
     expect(readFileSync(join(root, result.data.path), 'utf8')).toBe(result.data.text)
+    expect(readdirSync(join(root, '.dsh/vwa', projectId, 'reports')).filter((file) => file.endsWith('.tmp'))).toEqual([])
   })
 
   it('skips layer-B: a page fixed after the freeze renders as-of with diverged:true (no INPUT_CHANGED)', async () => {
@@ -173,7 +178,7 @@ describe('§6.3 — typed error pass-through and atomic publication', () => {
   it('a failure mid-render leaves the previous report intact and publishes no partial file', async () => {
     const { root, projectId, artifactId } = setup()
     const path = join(root, reportPath(projectId, artifactId))
-    mkdirSync(join(root, 'docs/vwa-reports', projectId), { recursive: true })
+    mkdirSync(join(root, '.dsh/vwa', projectId, 'reports'), { recursive: true })
     writeFileSync(path, 'previous report\n', 'utf8')
     const failing = {
       checkForDelivery: async () => ({ evaluationId: 'eval_x', bindingDigest: 'b'.repeat(64), check: { projectRevision: 1 } }),
@@ -187,7 +192,7 @@ describe('§6.3 — typed error pass-through and atomic publication', () => {
     const result = await call(tool(root, failing), { projectId, artifactId, format: 'markdown', write: true })
     expect(result).toMatchObject({ ok: false, code: 'INPUT_CHANGED' })
     expect(readFileSync(path, 'utf8')).toBe('previous report\n')
-    expect(readdirSync(join(root, 'docs/vwa-reports', projectId)).filter((file) => file.endsWith('.tmp'))).toEqual([])
+    expect(readdirSync(join(root, '.dsh/vwa', projectId, 'reports')).filter((file) => file.endsWith('.tmp'))).toEqual([])
   })
 })
 
@@ -202,7 +207,7 @@ describe('§6.2 step 3 — adjudication overlay over E’s frozen inputs', () =>
     const f = await reviewedFixture()
     const d = withDisagreement(f, f.records)
     const check = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: d.records, pendingRunIds: [], adjudications: [], disagreementPolicy: 'blocking', gates: f.gates,
     })
     const frozen: FrozenEvaluation = {
