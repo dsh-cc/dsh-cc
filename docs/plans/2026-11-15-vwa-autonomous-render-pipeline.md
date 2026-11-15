@@ -42,7 +42,7 @@ HEAD and revisions keep their current ASK/forbidden posture.
 - No change to the five-stage review pipeline, cache keys, budgets, or the grant protocol beyond the
   drafts write carve-out.
 - No cross-machine replay manifest (out of scope; do not implement).
-- No change to lane-1 claim detection families or the coverage threshold.
+- No change to the citation-check claim-detection families or the coverage threshold.
 - **No signature-durability work.** `/vwa sign` stays whole-graph bound (`commands.ts:368-391`).
 - Legacy inline artifacts keep working unchanged (§4.7).
 - No auto-commit to git.
@@ -658,18 +658,44 @@ the wrong design:
 Expected verdicts: `convention` verified in all four directories; every probe a counterexample on the
 named invariant. A probe that verifies has become unreachable and must be repaired.
 
-## 11. Terminology sweep (lane-1 / lane-2 → evidence layer / argument layer)
+## 11. Terminology sweep: delete the lane vocabulary
 
-Pure documentation rename; no `lane2` identifier is load-bearing.
-- User-facing terms: **evidence layer** (`vwa-evidence`), **argument layer** (`vwa-argument`);
-  "lane-1/lane-2" survives only in a historical-note paragraph under `docs/vwa/`.
-- Renames: `packages/preset/cc/tests/vwa-lane2.real-boot.spec.ts` →
+"Lane-1 / lane-2" names an internal build order, not a capability. A reader meeting "a VWA lane-2
+project" in a tool description cannot tell what the tool does or when to use it. The fix is not a
+prettier layer name — "evidence layer" and "argument layer" are just as unself-describing — it is to
+**name the feature by what it does**:
+
+| Old | New (prose, descriptions, docs) | What it actually does |
+| --- | --- | --- |
+| lane-1 | **citation checks** (`vwa-evidence`) | inline `〔src:ws:…〕` markers, claim detection, coverage gate, turn-end nudges |
+| lane-2 | **argument review** (`vwa-argument`) | the claim/argument graph, staged semantic review, human adjudication |
+| lane-2 path (§16.2 bound branch) | **bound-artifact evaluation** | project-bound evaluation at turn end |
+
+Rules:
+
+- The words "lane", "lane-1" and "lane-2" are **removed** from every prose surface. Package names,
+  settings keys (`vwa-evidence`, `vwa-argument`), tool names (`evidence.register`, `evidence.search_log`,
+  `argument.update`, `argument.review`, `argument.report`, `argument.init`), module paths and the
+  `isolate` realm key stay exactly as they are — no `lane` token is load-bearing, so nothing has to
+  move for the rename to be safe.
+- **Tool descriptions are the P0 surface, not an afterthought** — they are what the model reads on
+  every call: `tools.ts:148` ("Register a source snapshot … for a VWA lane-2 project"), `:179`, `:240`
+  and `:273` ("Run a lane-2 semantic review stage …"). All four are rewritten in the same commit as
+  §4.1's mode field; a stale description here would reintroduce the jargon into every session.
+- Source comments and module docstrings are in scope (87 occurrences across the two packages at the
+  time of writing), because they are what the next implementer reads first.
+- Files: `packages/preset/cc/tests/vwa-lane2.real-boot.spec.ts` →
   `vwa-argument-lanes.real-boot.spec.ts`; `docs/vwa/lane2-validation.md` →
-  `docs/vwa/argument-layer-validation.md` (README references updated).
-- Update: six `vwa-argument/prompts/*.md` headers, both package README pairs, plugin READMEs
-  (`dsh-cc-agents`, `dsh-cc-writing`), skill references (`vwa-writing/*`, `vwa-batch/*`), and the
-  `agent.vwa.cordis.yml:39` comment. Package names, settings keys, tool names, paths unchanged.
-  Historical `docs/plans/**` titles are not rewritten.
+  `docs/vwa/argument-review-validation.md`, with the README references updated (`README.md:195`,
+  `docs/vwa/humanities-guidance.md:12,30`).
+- Also updated: the six `vwa-argument/prompts/*.md` headers (each currently opens "VWA lane-2"),
+  both package README pairs, plugin READMEs (`dsh-cc-agents`, `dsh-cc-writing`), skill references
+  (`vwa-writing/*`, `vwa-batch/*`), and the `agent.vwa.cordis.yml:39` comment.
+- One **historical note** paragraph in `docs/vwa/` keeps the mapping ("what used to be called lane-1 /
+  lane-2 is now citation checks / argument review") so old design records stay readable. Historical
+  `docs/plans/**` titles are not rewritten.
+- Acceptance: `grep -rIni 'lane[ -]?[12]'` returns only that historical note plus this section, and
+  no `lane` token appears in any tool description or settings schema text.
 
 ## 12. Documentation, preset, capability updates
 
