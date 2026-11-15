@@ -84,6 +84,16 @@ normative per-consumer table; §7 owns the crash states.
 
 ### 3.1 Layout (v2 state tree)
 
+**Base directory — read this first.** Every path below is relative to the **session workspace root**,
+i.e. `<workspace>/.dsh/vwa/<projectId>/`. That is the `root` the store already receives
+(`store.ts:171` joins `root + '.dsh' + 'vwa' + projectId`, and every caller passes
+`workspaceRoot(agent)`). It is deliberately **not** the harness home directory `~/.dsh` (`<dshHome>`),
+which holds user-level state — `settings.json` (hot-read by the evidence layer, `settings.ts:98-101`),
+installed skills, and the receipt ledger. The two never mix: VWA project state is workspace data (and
+committing it stays the user's choice, §8.1), while receipts are machine-local and stay where they
+are: `<dshHome>/vwa-receipts/<encodedSessionId>.jsonl` (`receipt.ts:168-171`), unchanged by this
+design 〔src:ws:docs/plans/2026-11-15-vwa-render-code-anchors.md#L303-L324〕.
+
 ```
 .dsh/vwa/<projectId>/
   drafts/<name>.md                       NEW  agent editing surface
@@ -501,7 +511,8 @@ crash, which (a) cannot see. **Legacy inline artifacts have no `draft` field ⇒
 
 ### 8.1 Paths
 
-- `store.snapshotDir` → `join(root, '.dsh/vwa', projectId, 'sources')` (`store.ts:172-174`);
+- `store.snapshotDir` → `join(root, '.dsh/vwa', projectId, 'sources')` (`store.ts:172-174`), where
+  `root` is the session workspace root as above (not `dshHome`);
   `Source.snapshotPath` stays **workspace-relative** (`sources.ts:311`) with the new value
   `.dsh/vwa/<projectId>/sources/<sourceId>.md`.
 - Reports → `.dsh/vwa/<projectId>/reports/<artifactId>.review.{md,json}` (`report-tool.ts:75`); keep
