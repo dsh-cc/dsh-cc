@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-render-commit-probes",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "FALSE",
+        "MisclassifyStale": "FALSE",
+        "AllowOverlap": "FALSE",
+        "OverwriteForeign": "FALSE",
+        "AdoptWithoutRender": "FALSE",
+        "SkipIntent": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoFaults",
+        "NoTornOutput",
+        "MarkerFreeByConstruction",
+        "AgreementWhenQuiescent",
+        "ProvisionalIsStale",
+        "SpanSafety",
+        "ReplayContentStable",
+        "NoLostUserFile"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-non-atomic",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "TRUE",
+        "MisclassifyStale": "FALSE",
+        "AllowOverlap": "FALSE",
+        "OverwriteForeign": "FALSE",
+        "AdoptWithoutRender": "FALSE",
+        "SkipIntent": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoTornOutput"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-misclassify-stale",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "FALSE",
+        "MisclassifyStale": "TRUE",
+        "AllowOverlap": "FALSE",
+        "OverwriteForeign": "FALSE",
+        "AdoptWithoutRender": "FALSE",
+        "SkipIntent": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ProvisionalIsStale"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-span-overlap",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "FALSE",
+        "MisclassifyStale": "FALSE",
+        "AllowOverlap": "TRUE",
+        "OverwriteForeign": "FALSE",
+        "AdoptWithoutRender": "FALSE",
+        "SkipIntent": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SpanSafety"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-overwrite-foreign",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "FALSE",
+        "MisclassifyStale": "FALSE",
+        "AllowOverlap": "FALSE",
+        "OverwriteForeign": "TRUE",
+        "AdoptWithoutRender": "FALSE",
+        "SkipIntent": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "NoLostUserFile"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-adopt-without-render",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "FALSE",
+        "MisclassifyStale": "FALSE",
+        "AllowOverlap": "FALSE",
+        "OverwriteForeign": "FALSE",
+        "AdoptWithoutRender": "TRUE",
+        "SkipIntent": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "MarkerFreeByConstruction",
+        "AgreementWhenQuiescent"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-skip-intent",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRev": "3",
+        "NonAtomicWrite": "FALSE",
+        "MisclassifyStale": "FALSE",
+        "AllowOverlap": "FALSE",
+        "OverwriteForeign": "FALSE",
+        "AdoptWithoutRender": "FALSE",
+        "SkipIntent": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "ProvisionalIsStale"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

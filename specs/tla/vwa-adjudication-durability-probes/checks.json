@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-adjudication-durability-probes",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxRuns": "3",
+        "LegacyContentDigest": "FALSE",
+        "RandomId": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SemanticsPinned"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-content-digest",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRuns": "3",
+        "LegacyContentDigest": "TRUE",
+        "RandomId": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SemanticsPinned"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-random-id",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "MaxRuns": "3",
+        "LegacyContentDigest": "FALSE",
+        "RandomId": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SemanticsPinned"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

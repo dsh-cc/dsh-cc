@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "modelId": "vwa-adjudication-durability",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "MaxRuns": "3",
+        "LegacyContentDigest": "FALSE",
+        "RandomId": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SemanticsPinned"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}
