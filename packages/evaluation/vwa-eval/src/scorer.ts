@@ -1,5 +1,5 @@
 /**
- * Frozen semantic scorer `humanities-scorer@1` (VWA lane-2 design
+ * Frozen semantic scorer `humanities-scorer@1` (VWA argument-review design
  * docs/plans/2026-10-16-vwa-evidence-argument.md §22.2).
  *
  * Pure functions only — no fs, no model calls, no imports from the
@@ -20,8 +20,8 @@ export const SUPPORT_CLASSES = ['direct', 'inferential', 'partial', 'contradicte
 export type SupportClass = (typeof SUPPORT_CLASSES)[number]
 
 /**
- * Lane-1 sampling label → lane-2 Support enum mapping (§22.2, frozen with
- * the scorer). Note `inferential` has no lane-1 source and `unknown` is
+ * Citation-check sampling label → argument-review Support enum mapping (§22.2, frozen with
+ * the scorer). Note `inferential` has no citation-check source and `unknown` is
  * never a gold class.
  */
 export const LANE1_SUPPORT_MAP: Record<'supported' | 'partially' | 'unsupported' | 'irrelevant', SupportClass> = {

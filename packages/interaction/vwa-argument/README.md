@@ -1,6 +1,6 @@
 # @dsh-cc/vwa-argument
 
-Verifiable Workspace Agent (VWA) lane-2 argumentation (design:
+Verifiable Workspace Agent (VWA) argument review (design:
 `docs/plans/2026-10-16-vwa-evidence-argument.md`). The package provides contracts, store/graph, review pipeline, author and report tools, the `/vwa` command, v2 receipts, and the report renderer. Semantic quality remains experimental until the human gold set and live-model acceptance are completed; deterministic integration tests do not establish semantic accuracy. Semantic review stays
 **default-off** (`vwa-argument.semantic-enabled: false`, §13); when it is
 disabled the semantic tools are not registered (the `/vwa` command still
@@ -95,4 +95,4 @@ A completed call is not a passed review. Delivery selects records matching the c
 
 Mechanical gates inspect the caller's actual workspace files. Optional unavailable style checks are disclosed separately; link checks and used executable-code checks remain required. Snapshot/hash/quote failures block semantic delivery. Reports retain current assessments, explicit warrants and premises, limitations, unresolved issues, and the experimental calibration status. Only presentation of both exact body/report paths with current hashes advances delivery; a report failure cannot produce a success receipt. Signatures require a matching existing receipt from the user's session, and human adjudication expires when its bound inputs change.
 
-See `docs/vwa/lane2-validation.md` for acceptance coverage and the remaining human calibration requirements. The package test suite includes a real Cordis mount through `all`, report/receipt checks, and unpacked npm-package asset loading. The semantic feature remains default-off.
+See `docs/vwa/argument-review-validation.md` for acceptance coverage and the remaining human calibration requirements. The package test suite includes a real Cordis mount through `all`, report/receipt checks, and unpacked npm-package asset loading. The semantic feature remains default-off.

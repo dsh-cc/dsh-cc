@@ -1,5 +1,5 @@
 /**
- * VWA preset lane-2 real boot (VWA split plan docs/plans/2026-10-16-vwa-evidence-argument.md
+ * VWA preset argument-review real boot (VWA split plan docs/plans/2026-10-16-vwa-evidence-argument.md
  * §13/§16.2, Appendix A): mount the vwa-evidence + vwa-argument rows exactly
  * as agent.vwa.cordis.yml declares them — inside their group, under the
  * group's `isolate` realm — on a host carrying the real dsh-llm, dsh-tools
@@ -7,7 +7,7 @@
  *
  * Asserts the preset mount gate (no process-global service leak, the same
  * check agent-preset-registry's mountPreset runs), mount-order safety of the
- * vwa-evidence → vwa-argument service read, and an end-to-end lane-2 flow:
+ * vwa-evidence → vwa-argument service read, and an end-to-end argument-review flow:
  * read → evidence.register → argument.update → argument.review (model faked
  * ONLY at the provider boundary) → vwa-evidence's delivery provider sees the
  * completed review run for the bound artifact.
@@ -41,8 +41,8 @@ const vwaRows = yaml.load(readFileSync(new URL('../agent.vwa.cordis.yml', import
 const PLUGINS: Record<string, unknown> = { '@dsh-cc/vwa-evidence': VwaEvidence, '@dsh-cc/vwa-argument': VwaArgument }
 const PROVIDER = 'fake-provider'
 
-/** The group row hosting the lane-2 plugins, as declared. */
-function lane2Group(): { isolate: Record<string, unknown>; rows: { id: string; name: string }[] } {
+/** The group row hosting the argument-review plugins, as declared. */
+function argumentReviewGroup(): { isolate: Record<string, unknown>; rows: { id: string; name: string }[] } {
   const group = vwaRows.find(
     (row) =>
       row.name === 'cordis:group' &&
@@ -190,12 +190,12 @@ async function mountGroup(
   root: Context,
   order: 'declared' | 'reversed',
 ): Promise<{ group: Context; fiber: FiberLike }> {
-  const { isolate, rows } = lane2Group()
+  const { isolate, rows } = argumentReviewGroup()
   const ordered = order === 'declared' ? rows : [...rows].reverse()
   let group = root
   for (const key of Object.keys(isolate)) group = group.isolate(key)
   const fiber = await group.plugin({
-    name: 'vwa-lane2-group',
+    name: 'vwa-argument-review-group',
     async apply(ctx: Context) {
       for (const row of ordered) await ctx.plugin(PLUGINS[row.name] as never)
     },
@@ -203,12 +203,12 @@ async function mountGroup(
   return { group, fiber: fiber as unknown as FiberLike }
 }
 
-describe('agent.vwa.cordis.yml lane-2 group (semantic-enabled real boot)', () => {
+describe('agent.vwa.cordis.yml argument-review group (semantic-enabled real boot)', () => {
   it('hosts vwa-evidence and vwa-argument in ONE group isolating the vwa-argument service', () => {
-    const { isolate, rows } = lane2Group()
+    const { isolate, rows } = argumentReviewGroup()
     expect(rows.map((row) => row.name)).toEqual(['@dsh-cc/vwa-evidence', '@dsh-cc/vwa-argument'])
     expect(isolate['vwa-argument']).toBe(true)
-    // No lane-2 row is left at top level.
+    // No argument-review row is left at top level.
     expect(vwaRows.some((row) => row.name === '@dsh-cc/vwa-argument' || row.name === '@dsh-cc/vwa-evidence')).toBe(
       false,
     )
@@ -409,7 +409,7 @@ describe('agent.vwa.cordis.yml lane-2 group (semantic-enabled real boot)', () =>
       expect(reviewer.calls.map((call) => [call.provider, call.model])).toEqual(
         Array(stage === 'all' ? 5 : 1).fill([PROVIDER, 'reviewer-model']),
       )
-      // vwa-evidence's §16.2 lane-2 path, resolved from the group realm for this workspace.
+      // vwa-evidence's §16.2 bound-artifact path, resolved from the group realm for this workspace.
       const provider = VwaEvidence.resolveDeliveryProvider(group, workspaceRoot)
       if (provider === undefined) throw new Error('delivery provider not resolvable from the vwa group')
       const [artifact] = provider.listBoundArtifacts(projectId)

@@ -10,7 +10,7 @@ export interface ToolArgs {
 }
 
 /**
- * Output envelope for all five lane-2 tools, as a ValueSchemaSpec (compiled by
+ * Output envelope for all five argument-review tools, as a ValueSchemaSpec (compiled by
  * defineTool). Success = {ok, projectId, revision, data}; Fail = {ok:false,
  * code, message, retryable} plus optional details. `data` assumes an object
  * shape (all current call sites); widen to {type:'json'} if a replayed scalar
@@ -39,7 +39,7 @@ export const COMMON_PARAMS = {
     type: 'object',
     additionalProperties: true,
     required: true,
-    description: 'Operation body (per the VWA lane-2 tool contract)',
+    description: 'Operation body (per the VWA tool contract)',
   },
 } as const
 

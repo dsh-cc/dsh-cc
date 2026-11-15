@@ -57,7 +57,7 @@ export interface VwaDeps {
   /**
    * The vwa-argument delivery provider (§16.2), resolved per dispatch via
    * cordis duck-typing (§3 cycle-break; the service may mount after this
-   * plugin). Undefined ⇒ lane-1-only turns.
+   * plugin). Undefined ⇒ citation-check-only turns.
    */
   deliveryProvider?(): unknown
 }

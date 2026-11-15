@@ -99,7 +99,7 @@ export interface VwaArgumentDeliveryHost {
  * Duck-typed resolution of the `vwa-argument` service (§16.2), bound to the
  * caller's workspace root. Returns undefined when the service is absent or
  * lacks the host/provider face — the artifact then stays on the v1 path
- * (fail-soft; lane 1 is unchanged). Resolved per dispatch, so mount order of
+ * (fail-soft; the citation checks are unchanged). Resolved per dispatch, so mount order of
  * vwa-evidence vs vwa-argument does not matter (same isolate realm).
  */
 export function resolveDeliveryProvider(
@@ -124,7 +124,7 @@ export function resolveDeliveryProvider(
 /**
  * The current-project pointer (§10.2): `<workspaceRoot>/.dsh/vwa/
  * current-project.json` = `{schemaVersion:1, projectId, workspaceIdentity}`.
- * Fail-soft: missing/corrupt ⇒ undefined (lane-1-only turn, no error).
+ * Fail-soft: missing/corrupt ⇒ undefined (citation-check-only turn, no error).
  */
 export function readCurrentProject(workspaceRoot: string): string | undefined {
   let text: string

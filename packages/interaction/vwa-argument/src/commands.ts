@@ -271,7 +271,7 @@ function vwaStatus(root: string): CommandResult {
   if (pointer === undefined) {
     return {
       kind: 'success',
-      text: 'No current VWA project pointer (`.dsh/vwa/current-project.json` is missing or corrupt); lane-1 evaluation only.',
+      text: 'No current VWA project pointer (`.dsh/vwa/current-project.json` is missing or corrupt); citation checks only.',
     }
   }
   const head = new ProjectStore(root, pointer.projectId).readHead()
@@ -444,7 +444,7 @@ export function registerVwaCommand(
   ctx.commands.register(
     helpable({
       name: 'vwa',
-      description: 'VWA lane-2 project commands (init/status/import/sign/adjudicate/repair)',
+      description: 'VWA project commands (init/status/import/sign/adjudicate/repair)',
       handler: async (invocation: CommandInvocation): Promise<CommandResult> => {
         const parsed = parseVwaArgs(invocation.rawInput)
         if (!parsed.ok) return { kind: 'error', text: parsed.usage }

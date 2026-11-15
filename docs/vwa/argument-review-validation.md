@@ -1,12 +1,12 @@
-# Lane-2 acceptance and remaining semantic calibration
+# Argument-review acceptance and remaining semantic calibration
 
-Design: `docs/plans/2026-10-16-vwa-evidence-argument.md`. Lane 2 remains default-off. A deterministic reviewed result applies only to the current registered material, extractor output and review rules; it is not a guarantee that no factual or interpretive error exists.
+Design: `docs/plans/2026-10-16-vwa-evidence-argument.md`. The argument review remains default-off. A deterministic reviewed result applies only to the current registered material, extractor output and review rules; it is not a guarantee that no factual or interpretive error exists.
 
 ## Automated acceptance
 
 | Requirement | Executed regression coverage |
 | --- | --- |
-| Full review can produce a bound report and a read-back v2 reviewed receipt | `delivery-invariants.spec.ts`; preset `vwa-lane2.real-boot.spec.ts` runs `all` through real Cordis, tools, LLM runtime and local jobs; only provider output is faked |
+| Full review can produce a bound report and a read-back v2 reviewed receipt | `delivery-invariants.spec.ts`; preset `vwa-argument-review.real-boot.spec.ts` runs `all` through real Cordis, tools, LLM runtime and local jobs; only provider output is faked |
 | Extract records cannot crash delivery; extraction uses strict JSON and safe UTF-16 spans | `review-regressions.spec.ts`, `extraction-contract.spec.ts`, `audit.spec.ts` |
 | Missing stages and needs-review checks cannot become passed layers | `delivery-invariants.spec.ts`, `review-regressions.spec.ts` |
 | Unreviewed paths are not current; related input changes stale previous judgments | `review-regressions.spec.ts`, graph/dependency fixtures, real workspace mounts |
@@ -47,3 +47,13 @@ The remaining acceptance work is to supply legally usable cases and source snaps
 Project initialization stores a runtime-owned `reviewSettings` extension in the project contract. Research-contract edits preserve it. Enablement and model route selection remain host settings; actual prepared model options, schema and prompt versions enter review identity. Unavailable optional style rules remain disclosed, while required link and used executable-code gates block eligibility when unrun.
 
 `argument.report` writes derived output to `docs/vwa-reports/<projectId>/<artifactId>.review.md` or `.json`. The turn-end writer uses the same Markdown path, then appends and reads back the receipt. Delivery requires the host's real `deliverables/presented` event for both exact paths; the implementation never fabricates that event.
+
+## Historical note on the naming
+
+The two VWA packages were built as "lane-1" and "lane-2", and that vocabulary is still what the
+earlier design records under `docs/plans/` call them. The current names describe what each one does:
+**citation checks** (`@dsh-cc/vwa-evidence` — inline `〔src:ws:…〕` markers, claim detection, the
+coverage gate) and **argument review** (`@dsh-cc/vwa-argument` — the claim and argument graph, the
+staged semantic review, human adjudication). The old names survive only in those historical records
+and in the file names they reference; nothing in the code, the tool descriptions or the current
+documentation uses them.

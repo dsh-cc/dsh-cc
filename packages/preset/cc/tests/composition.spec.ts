@@ -991,7 +991,7 @@ describe('agent.vwa.cordis.yml composition', () => {  const vwaDoc = expandInclu
   })
 
   it('carries the vwa-argument row ONLY in the vwa closure (VWA split plan §23)', () => {
-    // The lane-2 argumentation plugin mounts only in VWA mode, inside the
+    // The argument-review plugin mounts only in VWA mode, inside the
     // vwa-lanes group whose isolate realm covers its `vwa-argument` service
     // (default-off settings keep it inert until enabled, §13).
     expect(flat(vwaDoc).some((r) => r.id === 'vwa-argument' && r.name === '@dsh-cc/vwa-argument')).toBe(true)

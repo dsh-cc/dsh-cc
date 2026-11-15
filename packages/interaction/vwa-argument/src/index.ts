@@ -1,5 +1,5 @@
 /**
- * @dsh-cc/vwa-argument — VWA lane-2 argumentation contracts (design
+ * @dsh-cc/vwa-argument — VWA argument-review contracts (design
  * docs/plans/2026-10-16-vwa-evidence-argument.md). DEFAULT-OFF (§13): with
  * `semantic-enabled: false`, `apply` registers only the settings namespace
  * and the /vwa command. When enabled it adds the author tools, the
@@ -244,13 +244,13 @@ export const inject: string[] = []
 /**
  * Mount the plugin: the settings namespace and /vwa plus, only when
  * `vwa-argument.semantic-enabled` is true in the raw settings file, the
- * lane-2 tools, capture wiring and delivery service. cc/lane-1 is unchanged.
+ * argument-review tools, capture wiring and delivery service. cc mode and the citation checks are unchanged.
  * @param ctx - the plug context.
  */
 export function apply(ctx: Context): void {
   registerSettings(ctx)
   // The /vwa command is USER-SURFACE (§10.2): it is registered regardless of
-  // the semantic-enabled tool gate — /vwa init is how a user starts lane 2.
+  // the semantic-enabled tool gate — /vwa init is how a user starts an argument review.
   // Tools stay gated below.
   try {
     const workspaceRootOf = (agent: unknown): string | undefined => {

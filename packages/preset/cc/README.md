@@ -18,7 +18,7 @@ These rows previously lived in the global `cc-shell` patch (`packages/bundle/cc-
 
 ## VWA mode
 
-The package also ships and declares the `vwa` preset (`agent.vwa.cordis.yml`, order 6): the same shared row body plus a VWA persona turned toward verifiable workspace deliverables — technical documents and research artifacts whose claims cite workspace files. It adds the `/vwa` command (init/status/import/sign/adjudicate/repair — user-surface, mounted regardless of the semantic gate) and mounts `@dsh-cc/vwa-evidence` (the lane-1 evidence gate) and `@dsh-cc/vwa-argument` (the argumentation lane) only in this preset; both stay inert behind their off-valves `vwa-evidence.enabled` and `vwa-argument.semantic-enabled` (default off).
+The package also ships and declares the `vwa` preset (`agent.vwa.cordis.yml`, order 6): the same shared row body plus a VWA persona turned toward verifiable workspace deliverables — technical documents and research artifacts whose claims cite workspace files. It adds the `/vwa` command (init/status/import/sign/adjudicate/repair — user-surface, mounted regardless of the semantic gate) and mounts `@dsh-cc/vwa-evidence` (the citation-check gate) and `@dsh-cc/vwa-argument` (the argument-review package) only in this preset; both stay inert behind their off-valves `vwa-evidence.enabled` and `vwa-argument.semantic-enabled` (default off).
 
 ## Install
 

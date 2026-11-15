@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dsh-cc.dev/schemas/vwa-argument/author.schema.json",
-  "title": "VWA lane-2 author contract (design docs/plans/2026-10-16-vwa-evidence-argument.md §4/§5)",
+  "title": "VWA argument-review author contract (design docs/plans/2026-10-16-vwa-evidence-argument.md §4/§5)",
   "$defs": {
     "Hash": {
       "type": "string",

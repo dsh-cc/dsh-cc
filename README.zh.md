@@ -138,7 +138,7 @@ dsh web
 
 `vwa-writing` skill 可用于撰写新文章或审查已有文章，负责组织证据、主张、论证、审查和交付流程。
 
-请使用包含第二层工具的 dsh-cc 构建。其他 Claude 兼容宿主可能能够加载 skill，但缺少所需工具。
+请使用包含论证审查工具的 dsh-cc 构建。其他 Claude 兼容宿主可能能够加载 skill，但缺少所需工具。
 
 1. 按上文安装或更新 `dsh-cc-agents`。
 2. 将以下设置加入 `$DSH_HOME/settings.json`；默认目录为 `~/.dsh`。
@@ -192,7 +192,7 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 
 语义审查仍处于实验阶段。60 例人工标注评估和真实模型验收尚未完成，评级不是事实正确性证书。
 
-详见[插件指南](packages/plugin/dsh-cc-agents/README.zh.md#vwa-writing)和[验收记录](docs/vwa/lane2-validation.md)。
+详见[插件指南](packages/plugin/dsh-cc-agents/README.zh.md#vwa-writing)和[验收记录](docs/vwa/argument-review-validation.md)。
 
 ## 为什么使用 dsh-cc？
 

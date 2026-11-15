@@ -130,7 +130,7 @@ This workflow is optional for coding, translation, and copy editing. Use it if y
 
 The skill does not enable VWA. CC is the default preset.
 
-Use a dsh-cc build with the lane-2 delivery tools. Other clients can load the skill without those tools.
+Use a dsh-cc build with the argument-review delivery tools. Other clients can load the skill without those tools.
 
 1. Add the following entries to `$DSH_HOME/settings.json`. The default directory is `~/.dsh`.
 

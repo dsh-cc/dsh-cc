@@ -1,5 +1,5 @@
 /**
- * The §16.2 lane-2 (bound-artifact) turn-end branch of the evaluator
+ * The §16.2 bound-artifact turn-end branch of the evaluator
  * (design docs/plans/2026-10-16-vwa-evidence-argument.md): frozen-check
  * evaluation, the closed nudge trigger, v2 receipt assembly + read-back,
  * the stale-binding nudge, and the synchronous inject. Split from
@@ -57,7 +57,7 @@ export function boundArtifactMap(
       }
     }
   } catch (error: unknown) {
-    debug(`vwa-evidence: bound-artifact discovery failed (lane-1-only turn): ${String(error)}`)
+    debug(`vwa-evidence: bound-artifact discovery failed (citation-check-only turn): ${String(error)}`)
   }
   return map
 }
@@ -210,7 +210,7 @@ function injectBoundNudge(
   debug: (m: string) => void,
 ): void {
   const parts = [
-    `VWA lane-2 review: ${check.artifactId} does not fully verify (mechanical ${check.checks.mechanical}, evidence ${check.checks.evidence}, argument ${check.checks.argument}, audit ${check.checks.audit}).`,
+    `VWA argument review: ${check.artifactId} does not fully verify (mechanical ${check.checks.mechanical}, evidence ${check.checks.evidence}, argument ${check.checks.argument}, audit ${check.checks.audit}).`,
     ...boundNudgeTargets(projectId, check, neverRun),
     'Self-repair once, then continue. (vwa-evidence)',
   ]

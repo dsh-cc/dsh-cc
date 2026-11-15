@@ -68,7 +68,7 @@ markdown 交付物转成机器可查证证据回执的纯函数模块。
 `vwa-argument` 项目绑定的产物（`src/bound-eval.ts`、`src/vwa-delivery.ts`）。
 服务按每次分派用 `ctx.get('vwa-argument')` 做结构化解析（`resolveDeliveryProvider`）；
 本包从不 import `@dsh-cc/vwa-argument`。服务缺失或不具备 provider 接口时，产物仍走上述
-lane-1 路径（fail-soft）。
+引用检查路径（fail-soft）。
 
 - **先报告，后回执。** 评审报告写入 `docs/vwa-reports/<projectId>/<artifactId>.review.md`
   （`writeBoundReport`），随后向同一会话台账追加引用报告哈希的 **v:2 回执行**
@@ -77,7 +77,7 @@ lane-1 路径（fail-soft）。
   delivered-unverified | delivered-reviewed`。
 - **交付事件。** 唯一被接受的交付事件是宿主的 `deliverables/presented` 会话事件；
   哈希在检查时按已呈现文件的当前字节计算，并与绑定比对。事件从不伪造。
-- **claim 标记。** `〔claim:<id>〕` 作者辅助标记在 lane-1 表面上按普通文本处理：被跳过
+- **claim 标记。** `〔claim:<id>〕` 作者辅助标记在引用检查表面上按普通文本处理：被跳过
   （不产生 source spec，也不产生 `invalid-marker`），所有字符偏移保持有效
   （`isClaimMarkerInner`，`src/marker.ts`）。
 - nudge 仍走唯一的 `vwa-evidence` inject 来源；绑定过期会产生单独的 nudge。
