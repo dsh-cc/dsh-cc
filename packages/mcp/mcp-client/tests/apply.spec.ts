@@ -204,6 +204,15 @@ describe('apply (plugin lifecycle)', () => {
     await fiber.dispose()
   })
 
+  it('rejects a serverName ending with `_` at mount (ambiguous mcp__<server>__ boundary)', async () => {
+    // Design D2 rule 3: `(server=a_, raw=run)` and `(server=a, raw=_run)` both
+    // spell `mcp__a___run`, so a trailing `_` is rejected loudly at mount.
+    await expect(apply(ctx, { ...stdioConfig, serverName: 'trailing_' })).rejects.toThrow(
+      /serverName "trailing_" must not end with "_"/,
+    )
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
   it('rejects a duplicate serverName at load and leaves the first instance intact', async () => {
     await apply(ctx, stdioConfig)
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()

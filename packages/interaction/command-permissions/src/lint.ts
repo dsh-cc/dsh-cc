@@ -10,6 +10,7 @@
 
 import {
   PERMISSION_SETTINGS_NAMESPACE,
+  isServerWideMcpRule,
   parseRuleSafe,
   ruleString,
   ruleSubsumes,
@@ -51,9 +52,13 @@ type SettingsProviderLike = {
 const BEHAVIORS = ['allow', 'deny', 'ask'] as const
 type ListKey = (typeof BEHAVIORS)[number]
 
-/** Whether a tool name is known to the harness or the CC vocabulary. */
+/** Whether a tool name is known to the harness, the CC vocabulary, or the MCP server-wide form. */
 function isKnownTool(toolName: string): boolean {
-  return ccToolAliases(toolName).some(alias => KNOWN_HARNESS_TOOLS.has(alias))
+  // A bare `mcp__<server>` rule is a whole-server grant in Claude Code, so it
+  // is a known tool form even though it matches no alias (exact
+  // `mcp__<server>__<rawName>` names stay outside the known vocabulary).
+  return isServerWideMcpRule(toolName)
+    || ccToolAliases(toolName).some(alias => KNOWN_HARNESS_TOOLS.has(alias))
 }
 
 /** Whether a rule is a bare whole-tool `Bash` allow (a broad persistent grant). */

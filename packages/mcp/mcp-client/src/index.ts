@@ -57,8 +57,9 @@ export interface StdioConfig {
   transport: 'stdio'
   /**
    * Stable local namespace for this server's model-facing tool names
-   * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}` and be
-   * unique across live mcp-client instances.
+   * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}`, must
+   * not END with `_` (that would make the `mcp__<server>__` boundary
+   * ambiguous), and must be unique across live mcp-client instances.
    */
   serverName: string
   /** Executable used to start the server. */
@@ -89,8 +90,9 @@ export interface StreamableHttpConfig {
   transport: 'streamable-http'
   /**
    * Stable local namespace for this server's model-facing tool names
-   * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}` and be
-   * unique across live mcp-client instances.
+   * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}`, must
+   * not END with `_` (that would make the `mcp__<server>__` boundary
+   * ambiguous), and must be unique across live mcp-client instances.
    */
   serverName: string
   /** MCP endpoint URL. */
@@ -119,8 +121,9 @@ export interface SseConfig {
   transport: 'sse'
   /**
    * Stable local namespace for this server's model-facing tool names
-   * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}` and be
-   * unique across live mcp-client instances.
+   * (`mcp__<serverName>__<rawName>`). Must match `[A-Za-z0-9_-]{1,32}`, must
+   * not END with `_` (that would make the `mcp__<server>__` boundary
+   * ambiguous), and must be unique across live mcp-client instances.
    */
   serverName: string
   /** MCP SSE endpoint URL. */
@@ -207,6 +210,17 @@ export const Config = z.union([
  * @returns startup readiness after connection and initial tool discovery settle.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  // Namespace contract (design D2 rule 3): a serverName ending with `_` would
+  // make the `mcp__<server>__` boundary ambiguous — `(server=a_, raw=run)` and
+  // `(server=a, raw=_run)` both spell `mcp__a___run`, so a server-wide
+  // `mcp__a` rule could not be matched unambiguously. Server names are
+  // config-authored, so fail loud here rather than lossy-normalize later.
+  if (config.serverName.endsWith('_')) {
+    throw new Error(
+      `mcp-client: serverName "${config.serverName}" must not end with "_" — it would make the mcp__<server>__ boundary ambiguous`,
+    )
+  }
+
   // Fail loud at load: reconnect misconfiguration (including programmatic
   // construction that bypassed Schemastery) rejects THIS instance before any
   // effect registers.

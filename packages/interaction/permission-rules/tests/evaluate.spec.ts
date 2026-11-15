@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseRule } from '../src/parser.ts'
 import { evaluatePermission, evaluateShell, mergeRuleSets } from '../src/evaluate.ts'
+import { isServerWideMcpRule, ruleMatchesTool } from '../src/matchers.ts'
 import { splitShellCommand } from '../src/shell-segments.ts'
 import { PLAN_READONLY_REASON } from '../src/types.ts'
 import type { EvaluationInput, PermissionDecision, PermissionRuleSet } from '../src/types.ts'
@@ -334,6 +335,79 @@ describe('CC-vs-harness tool-name alias matching', () => {
       sandboxedBashExempt: true,
     }))
     expect(decision).toMatchObject({ kind: 'allow' })
+  })
+})
+
+describe('MCP server-wide rules (D6a, PR-1)', () => {
+  const rule = (raw: string, behavior: 'allow' | 'deny' | 'ask' = 'allow') => parseRule(raw, behavior, 'userSettings')
+
+  it('a bare `mcp__serena` rule matches every mcp__serena__* call', () => {
+    expect(ruleMatchesTool(rule('mcp__serena'), 'mcp__serena__find_symbol')).toBe(true)
+    expect(ruleMatchesTool(rule('mcp__serena'), 'mcp__serena__replace_content')).toBe(true)
+    // Its own spelling still matches (whole-tool identity).
+    expect(ruleMatchesTool(rule('mcp__serena'), 'mcp__serena')).toBe(true)
+    // A different server — and a mere shared prefix — never matches.
+    expect(ruleMatchesTool(rule('mcp__serena'), 'mcp__other__find_symbol')).toBe(false)
+    expect(ruleMatchesTool(rule('mcp__serena'), 'mcp__serena2__find_symbol')).toBe(false)
+  })
+
+  it('an exact three-segment mcp tool rule never prefix-matches', () => {
+    const exact = rule('mcp__serena__find_symbol')
+    expect(ruleMatchesTool(exact, 'mcp__serena__find_symbol')).toBe(true)
+    expect(ruleMatchesTool(exact, 'mcp__serena__find_symbol__anything')).toBe(false)
+    // The bare server form of the same name is a different rule.
+    expect(ruleMatchesTool(exact, 'mcp__serena__replace_content')).toBe(false)
+  })
+
+  it('content rules on mcp tools and every non-mcp rule keep exact-name semantics', () => {
+    // A content-bearing mcp rule is NOT server-wide (D6a: the discriminator
+    // only applies to content-less rules).
+    expect(ruleMatchesTool(rule('mcp__serena(arg)'), 'mcp__serena__find_symbol')).toBe(false)
+    expect(ruleMatchesTool(rule('Bash'), 'bash')).toBe(true)
+    expect(ruleMatchesTool(rule('Bash'), 'bashful')).toBe(false)
+  })
+
+  it('the server-form discriminator is the `__` segment count', () => {
+    expect(isServerWideMcpRule('mcp__serena')).toBe(true)
+    expect(isServerWideMcpRule('mcp__serena__find_symbol')).toBe(false)
+    expect(isServerWideMcpRule('mcp__')).toBe(true)
+    expect(isServerWideMcpRule('serena')).toBe(false)
+    expect(isServerWideMcpRule('Bash')).toBe(false)
+    expect(isServerWideMcpRule('xmcp__serena')).toBe(false)
+  })
+
+  it('waterfall: a settings allow rule `mcp__serena` allows an mcp__serena__find_symbol exec', () => {
+    const decision = evaluatePermission(input({
+      toolName: 'mcp__serena__find_symbol',
+      rules: rules({ allow: [rule('mcp__serena')] }),
+    }))
+    expect(decision).toEqual({ kind: 'allow' })
+  })
+
+  it('waterfall: server-wide deny and ask rules fire like their whole-tool counterparts', () => {
+    const denied = evaluatePermission(input({
+      toolName: 'mcp__serena__find_symbol',
+      rules: rules({ deny: [rule('mcp__serena', 'deny')] }),
+    }))
+    expect(denied).toMatchObject({ kind: 'deny' })
+
+    expect(evaluatePermission(input({
+      toolName: 'mcp__serena__find_symbol',
+      rules: rules({ ask: [rule('mcp__serena', 'ask')] }),
+    }))).toMatchObject({ kind: 'ask' })
+
+    // A server-wide deny also beats a more specific whole-tool allow elsewhere.
+    expect(evaluatePermission(input({
+      toolName: 'mcp__serena__find_symbol',
+      rules: rules({ deny: [rule('mcp__serena', 'deny')], allow: [rule('mcp__serena__find_symbol')] }),
+    }))).toMatchObject({ kind: 'deny' })
+  })
+
+  it('waterfall: content-rule mcp behavior is unchanged (no subject ⇒ no content match)', () => {
+    expect(evaluatePermission(input({
+      toolName: 'mcp__serena__find_symbol',
+      rules: rules({ allow: [rule('mcp__serena__find_symbol(arg)')], deny: [rule('mcp__serena(nope)')] }),
+    }))).toEqual({ kind: 'passthrough' })
   })
 })
 

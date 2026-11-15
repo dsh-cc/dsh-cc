@@ -82,6 +82,17 @@ describe('lintRuleSet', () => {
       expect.objectContaining({ toolName: 'Frobnicate' }),
     ])
   })
+  it('treats a server-wide `mcp__<server>` rule as a known tool (D6a)', () => {
+    const rules: PermissionRuleSet = {
+      allow: [parsed('mcp__serena', 'allow', 'userSettings')],
+      deny: [], ask: [], bypassImmune: [],
+    }
+    expect(lintRuleSet(rules)).toEqual([])
+    // The raw user-layer path shares the same predicate.
+    const lint = lintUserSection({ allow: ['mcp__serena'], defaultMode: 'default' })
+    expect(lint.findings.filter(f => f.kind === 'unknownTool')).toEqual([])
+    expect(lint.after.allow).toEqual(['mcp__serena'])
+  })
   it('reports nothing on a clean rule set', () => {
     const rules: PermissionRuleSet = {
       allow: [parsed('Bash(git )', 'allow', 'config'), parsed('read', 'allow', 'config')],

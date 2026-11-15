@@ -52,6 +52,15 @@ describe('session-scoped allowlist', () => {
     expect(allowlist.matches(String(sess.id), 'Bash', undefined)).toBe(false)
   })
 
+  it('matches a server-wide `mcp__serena` grant against every mcp__serena__* call (D6a)', () => {
+    const allowlist = new SessionAllowlist()
+    const sess = session()
+    allowlist.add(sess, 'mcp__serena')
+    expect(allowlist.matches(String(sess.id), 'mcp__serena__find_symbol', undefined)).toBe(true)
+    expect(allowlist.matches(String(sess.id), 'mcp__serena', undefined)).toBe(true)
+    expect(allowlist.matches(String(sess.id), 'mcp__other__find_symbol', undefined)).toBe(false)
+  })
+
   it('add is idempotent per rule', () => {
     const allowlist = new SessionAllowlist()
     const sess = session()
