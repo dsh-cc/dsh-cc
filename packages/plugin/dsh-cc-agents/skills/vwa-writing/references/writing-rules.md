@@ -26,8 +26,12 @@ Answer the required questions in the body.
 Put necessary conditions and uncertainty next to the affected statement.
 Discuss material objections in the body, not only in the final report.
 Use `〔src:ws:<path>#La-Lb〕` source markers where applicable.
+Use `〔src:gr:<sourceId>#La-Lb〕` to cite a registered source snapshot.
+A source is `gr:`-citable only when its registered path is corpus-class (`docs/…` or `.md`/`.mdx`); sources registered without a corpus path must be re-registered first.
 An optional `〔claim:<id>〕` marker is an author aid, not a source citation.
-If you remove a claim marker, bind and review the changed body again.
+Write the body into the project draft (`.dsh/vwa/<projectId>/drafts/<name>.md`) and bind it with `mode: "draft"`.
+The deliverable is the rendered output. Never edit it.
+Editing the draft does not change the deliverable until you bind, and re-binding is what clears a stale delivery state.
 
 A high grade applies only to the checked claim, scope, evidence, and argument.
 Do not present a model grade as an objective truth certificate.

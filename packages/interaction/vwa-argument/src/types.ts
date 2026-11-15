@@ -48,6 +48,13 @@ export interface Scope {
 export interface Source extends Entity {
   snapshotPath: string
   snapshotHash: Hash
+  /**
+   * Workspace-relative POSIX path of the registered file, captured at
+   * registration (render pipeline §5.2). Absent on sources registered before
+   * the field existed and on migrated v1 records: those are NOT `gr:`-citable
+   * until re-registered.
+   */
+  corpusPath?: string
   acquisition: { kind: 'tool-event' | 'user-file' | 'unverified'; capturedAt: string; eventRef?: string }
   title: string
   creators: string[]
@@ -150,6 +157,12 @@ export interface Artifact extends Entity {
   contentHash: Hash
   occurrences: Occurrence[]
   outline: { section: string; goal: string; claimIds: Id[]; argumentIds: Id[]; qualifications: string[] }[]
+  /**
+   * §3.1/§4.2: the draft this artifact is rendered from (`draft.path` is the
+   * authoring surface, `draftHash` = sha256 of the draft bytes, `contentHash`
+   * = sha256 of the RENDERED deliverable). Absent on legacy inline artifacts.
+   */
+  draft?: { path: string; draftHash: Hash }
 }
 
 export interface ProjectContract {
@@ -161,11 +174,18 @@ export interface ProjectContract {
   requiredQuestions: { id: string; text: string }[]
   plannedCorpus: string[]
   expectedCoreTopics: string[]
+  // Contract mode: whether delivery requires the `/vwa sign` attestation
+  // ('reviewed') or not ('draft'). NOT the same concept as the bind
+  // mutation's `mode` ('draft' | 'inline', §4.1) — the pun is historical.
   mode: 'draft' | 'reviewed'
 }
 
 export interface ProjectSnapshot {
-  schemaVersion: 1
+  /**
+   * `1` = pre-migration (legacy `docs/vwa-sources/<pid>/` snapshots, read-only);
+   * `2` = v2 state tree (design §8.2/§8.3). Reads accept both; writes only 2.
+   */
+  schemaVersion: 1 | 2
   projectId: Id
   revision: number
   workspaceIdentity: Hash
@@ -292,6 +312,13 @@ export interface SemanticReviewRecord {
   promptHash: Hash
   inputHash: Hash
   responseHash?: Hash
+  /** Draft-side semantic identity (§4.4); the audit reuse key joins on it. */
+  semanticHash?: Hash
+  /**
+   * §6.2: the run that PRODUCED this judgment. Differs from `runId` when the
+   * record is a cache reuse saved under a fresh run; absent means `runId`.
+   */
+  originRunId?: Id
   kind?: 'disagreement'
   coreClaimIds?: Id[]
   response?: ReviewResponse
@@ -327,6 +354,10 @@ export interface ExtractionRecord {
   runId: Id
   stage: 'extract'
   artifactHash?: Hash
+  /** Draft-side semantic identity (§4.4); the audit reuse key joins on it. */
+  semanticHash?: Hash
+  /** §6.2 provenance, carried on a cached save (absent means `runId`). */
+  originRunId?: Id
   kind?: 'disagreement'
   coreClaimIds?: Id[]
   targetRefs: Ref[]
@@ -370,6 +401,21 @@ export interface StageProgress {
   budgetErrors: number
 }
 
+/**
+ * §6.2: the dispute a `REVIEWER_DISAGREEMENT` adjudication resolves. It replaces
+ * the full-record `dependencyDigest`: liveness is the ORIGIN-run cohort, so an
+ * appended review round cannot expire a human decision while a fresh judgment
+ * on the same `{inputHash, stage}` does.
+ */
+export interface AdjudicationDispute {
+  /** 'finding_dis_' + sha256(stableJson({inputHash, stage})).slice(0,16) */
+  disputeId: Id
+  inputHash: Hash
+  stage: ReviewStage
+  /** Sorted cohort the decision was made against. */
+  runIdCohort: Id[]
+}
+
 export interface AdjudicationRecord {
   adjudicationId: Id
   findingId: Id
@@ -377,7 +423,10 @@ export interface AdjudicationRecord {
   reason: string
   signer: 'user'
   ts: string
-  dependencyDigest: Hash
+  /** Legacy (non-disagreement) rows only: the graph state the decision bound. */
+  dependencyDigest?: Hash
+  /** §6.2: REVIEWER_DISAGREEMENT rows bind the dispute cohort instead. */
+  dispute?: AdjudicationDispute
   overrides: { ruleId: string; targetId: Id; runId: Id; supersededRunId?: Id }
 }
 

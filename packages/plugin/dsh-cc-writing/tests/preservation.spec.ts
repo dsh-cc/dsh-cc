@@ -154,6 +154,19 @@ describe('citations and links', () => {
     expect(sourceMarkers('〔claim:c1〕 and 〔src:bad〕')).toEqual([])
   })
 
+  // §5.1 (render pipeline): the spec alternative is `ws:<path>` OR
+  // `gr:<sourceId>` — a gr: citation is a preserved citation too. This
+  // scanner's `;`-joined groups repeat the `src:` prefix per part (the
+  // existing ws: fixture above), so the gr: part carries it too.
+  it('extracts gr: registered-source markers alongside ws: ones', () => {
+    expect(sourceMarkers('see 〔src:gr:src_abc#L1-L2〕')).toEqual(['〔src:gr:src_abc#L1-L2〕'])
+    expect(sourceMarkers('〔src:ws:a.md#L1-L2;src:gr:src_abc#L3-L4〕')).toEqual([
+      '〔src:ws:a.md#L1-L2〕',
+      '〔src:gr:src_abc#L3-L4〕',
+    ])
+    expect(sourceMarkers('〔src:gs:src_abc#L1-L2〕')).toEqual([])
+  })
+
   it('extracts link destinations with balanced parens and escapes', () => {
     expect(linkDestinations('[a](https://x.test/a_(b))')).toEqual(['https://x.test/a_(b)'])
     expect(linkDestinations('![img](p\\(x\\).png)')).toEqual(['p\\(x\\).png'])

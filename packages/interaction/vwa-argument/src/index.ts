@@ -89,7 +89,15 @@ export {
   type Mutation,
   type MutationOutcome,
 } from './graph.ts'
-export { applyBindArtifact, validateArtifactPath } from './artifact.ts'
+export { applyBindArtifact, validateArtifactPath, type BindDeps } from './artifact.ts'
+export { intersectsRemoved, stripMarkers, type RenderResult, type RemovedRange } from './render.ts'
+export {
+  classifyRenderState,
+  readRenderIntents,
+  STALE_RENDER_MESSAGE,
+  type RenderIntent,
+  type RenderState,
+} from './render-state.ts'
 export { computeDeletionClosure, findReferencesDetailed, type ReferenceInfo } from './references.ts'
 export { acquireLock, lockHeld, releaseLock } from './lock.ts'
 export {
@@ -134,6 +142,32 @@ export {
   type StoreOptions,
   type TransactionInput,
 } from './store.ts'
+// Feature A/§8.1 path constants: the v2 state tree, the recorded
+// `snapshotPath` shape, and the D22 canonical-tree classification (§3.4).
+export {
+  LEGACY_REPORTS_ROOT,
+  LEGACY_SOURCES_ROOT,
+  PROJECT_ID_RE,
+  VWA_STATE_ROOT,
+  canonicalStateRoot,
+  canonicalTree,
+  isRuntimeOutputPath,
+  parseSourceSnapshotPath,
+  projectReportsDir,
+  projectRendersDir,
+  projectRetiredDir,
+  projectSourcesDir,
+  projectStateDir,
+  resolveRecordedPath,
+  reviewReportPath,
+  runtimeOutputTrees,
+  sourceSnapshotAbsolute,
+  sourceSnapshotPath,
+  stateRoot,
+} from './paths.ts'
+// Feature D §6.1/§6.2: the canonical dispute resolver (one identity for evaluation,
+// adjudication lookup and liveness) plus origin-run provenance.
+export { disputeId, originOf, resolveDisputes, type Dispute } from './dispute.ts'
 // Feature 4 §5.1/§5.2: the batch layer shares the project ledger and skip predicate.
 export { projectUsage } from './review-cycle.ts'
 export { auditSkipForArtifact, auditSkipInEffect, type AuditSkip } from './audit-skip.ts'

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { grantAdmitsWritePath } from '../src/task-grant-match.ts'
@@ -117,5 +117,76 @@ describe('task-grant canonical write boundary', () => {
     expect(grantAdmitsWritePath(g, 'storage/vwa/current-project.json')).toBe(false)
     expect(isVwaStateWrite('.dsh/vwa/batches/b1/input.json', root)).toBe(false)
     expect(grantAdmitsWritePath(g, '.dsh/vwa/batches/b1/input.json')).toBe(true)
+  })
+})
+
+/** Well-formed `prj_<uuid>` project segments (§3.2). */
+const DRAFT_PROJECT = 'prj_11111111-1111-4111-8111-111111111111'
+const OTHER_PROJECT = 'prj_22222222-2222-4222-8222-222222222222'
+
+function draftsRoot(): string {
+  const root = workspace()
+  mkdirSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts'), { recursive: true })
+  mkdirSync(join(root, '.dsh/vwa', OTHER_PROJECT, 'drafts'), { recursive: true })
+  writeFileSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'adjudications.json'), '{}')
+  return root
+}
+
+describe('task-grant canonical write boundary: the drafts carve-out (§3.2/§3.3)', () => {
+  it('exempts a draft FILE of a well-formed project and keeps every other project path asking', () => {
+    const root = draftsRoot()
+    const g = grant(root, [`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    expect(isVwaStateWrite(`.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`, root)).toBe(false)
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`)).toBe(true)
+    // A non-markdown neighbour, a nested path and a sibling state file are state.
+    for (const target of [
+      `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.json`,
+      `.dsh/vwa/${DRAFT_PROJECT}/drafts/sub/notes.md`,
+      `.dsh/vwa/${DRAFT_PROJECT}/adjudications.json`,
+    ]) {
+      expect(isVwaStateWrite(target, root), target).toBe(true)
+      expect(grantAdmitsWritePath(g, target), target).toBe(false)
+    }
+    // Another project's draft file needs no approval (§3.3 keys the exemption on
+    // the path shape), but this grant names no segment of that project.
+    expect(isVwaStateWrite(`.dsh/vwa/${OTHER_PROJECT}/drafts/notes.md`, root)).toBe(false)
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${OTHER_PROJECT}/drafts/notes.md`)).toBe(false)
+  })
+
+  it('a draft-file symlink into authoritative state is judged on its destination', () => {
+    const root = draftsRoot()
+    const drafts = join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts')
+    symlinkSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'adjudications.json'), join(drafts, 'notes.md'))
+    const g = grant(root, [`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    expect(isVwaStateWrite(`.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`, root)).toBe(true)
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`)).toBe(false)
+  })
+
+  it('a drafts directory symlinked out of the state tree is an ordinary in-root write', () => {
+    const root = draftsRoot()
+    const drafts = join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts')
+    rmSync(drafts, { recursive: true })
+    mkdirSync(join(root, 'docs/reports'), { recursive: true })
+    symlinkSync(join(root, 'docs/reports'), drafts)
+    const g = grant(root, [`docs/reports`])
+    expect(isVwaStateWrite(`.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`, root)).toBe(false)
+    // The physical destination is the granted (non-state) prefix.
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`)).toBe(true)
+  })
+
+  it('a drafts prefix cannot be retargeted onto another project\'s state after approval', () => {
+    const root = draftsRoot()
+    const drafts = join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts')
+    rmSync(drafts, { recursive: true })
+    symlinkSync(join(root, '.dsh/vwa', OTHER_PROJECT, 'drafts'), drafts)
+    const g = grant(root, [`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    // The alias resolves to the other project's drafts directory: the write is
+    // a draft file there, so it asks for nobody and the grant's prefix (which
+    // resolves to the same physical directory) admits it.
+    expect(isVwaStateWrite(`.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`, root)).toBe(false)
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`)).toBe(true)
+    // A non-draft file through the same alias is still authoritative state.
+    expect(isVwaStateWrite(`.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.json`, root)).toBe(true)
+    expect(grantAdmitsWritePath(g, `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.json`)).toBe(false)
   })
 })

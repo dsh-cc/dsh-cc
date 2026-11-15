@@ -4,6 +4,7 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { vwaAdjudicate } from '../src/adjudicate.ts'
+import { sha256Hex } from '../src/schema.ts'
 import { effectiveReviewRecords } from '../src/delivery-adjudication.ts'
 import { deliveryScope, evaluateDelivery } from '../src/delivery-check.ts'
 import { auditDependencyDigest, currentReviews } from '../src/review-current.ts'
@@ -28,7 +29,7 @@ function evaluate({ f, d }: Awaited<ReturnType<typeof fixture>>, prevailing = d.
   const digest = auditDependencyDigest(f.snapshot, f.artifactId, currentReviews(f.snapshot, d.records, targets).records)
   for (const r of d.records) if (r.stage === 'extract' || r.stage === 'align') r.dependencyDigest = digest
   const adj = disagreementAdjudication(f, d.records, d.findingId, 'reject', prevailing, prevailing === d.passRunId ? d.failRunId : d.passRunId)
-  return evaluateDelivery({ root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body, records: d.records, pendingRunIds: [], adjudications: [adj], gates: f.gates })
+  return evaluateDelivery({ root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body), records: d.records, pendingRunIds: [], adjudications: [adj], gates: f.gates })
 }
 
 describe('disagreement adjudication slot identity', () => {
@@ -143,7 +144,7 @@ describe('effective superseded findings', () => {
 it('uses frozen runtime findings, skip absence and source hashes without consulting the workspace', async () => {
   const f = await reviewedFixture()
   const sourceByteHashes = f.snapshot.sources.map((s) => s.snapshotHash)
-  const input = { root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body, records: f.records, pendingRunIds: [], adjudications: [], gates: f.gates }
+  const input = { root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body), records: f.records, pendingRunIds: [], adjudications: [], gates: f.gates }
   const before = evaluateDelivery(input)
   for (const s of f.snapshot.sources) writeFileSync(join(f.root, s.snapshotPath), 'corrupted after freeze')
   const store = new ReviewRunStore(f.root, f.projectId)

@@ -7,9 +7,15 @@
 # this manifest is the CC-parity ledger. Capabilities exclusive to the VWA
 # agent preset (packages/preset/cc/agent.vwa.cordis.yml — verifiable workspace
 # deliverables with ws: source-marker evidence receipts) have no Claude Code
-# counterpart and deliberately stay OUT of this manifest.
+# counterpart and deliberately stay OUT of this manifest. The render pipeline's
+# own surfaces are audited the same way and stay out too: the
+# `.dsh/vwa/<projectId>/drafts/` editing surface, the `gr:<sourceId>` marker
+# alternative, and the `/vwa repair <projectId> --migrate` command grammar are
+# all VWA-preset-only. The one piece that does cross into this ledger is the
+# task-grant write-path carve-out that lets a grant name a drafts prefix, so it
+# is recorded on `commands.permissions`.
 #
-# Coverage note (VWA lane one, same design doc): this ledger is machine-read
+# Coverage note (VWA citation checks, same design doc): this ledger is machine-read
 # data, not prose. The frozen four-family detector scores its upstream
 # retrieval dates and its harness version/identifier data lines as claims whose
 # only legal ws: marker would be the external Claude Code docs — and external
@@ -17,7 +23,7 @@
 # 〔src:ws:docs/vwa/writing-guidance.md#L37-L39〕. Markers are therefore
 # backfilled only where a workspace file genuinely carries the claim (the
 # compaction-pinning entry below, every marker read back verified); coverage
-# for this artifact stays far below the lane-one threshold, so it is handed
+# for this artifact stays far below the citation-check threshold, so it is handed
 # over as delivered-unverified instead of papered with citations that do not
 # support it.
 manifest_version: 1
@@ -2484,7 +2490,13 @@ capabilities:
           `--apply` cleans the user settings layer only, via the
           settings-cascade raw user-layer edit seam. Task grants are explicitly
           confirmed by the user, scoped to canonical workspace paths and runtime
-          execution tokens, and revalidated before execution. Markdown-only Git
+          execution tokens, and revalidated before execution. A grant's
+          write-path list may name the physical `.dsh/vwa/batches/**` scratch
+          tree or one project's `.dsh/vwa/<projectId>/drafts/**` editing
+          surface; the descriptor validator rejects every other path under the
+          authoritative VWA state tree, and rejects the ancestor prefixes
+          `.dsh/vwa` and `.dsh/vwa/<projectId>` outright (the literal `prj_…`
+          segment is what authorizes a project). Markdown-only Git
           grants require separate foreground add, commit, and push operations;
           unsupported commit flags and compound publication require approval.
       ux: full
@@ -2968,7 +2980,7 @@ capabilities:
         with relevance and prerequisite evidence. The `cc` and `vwa` presets
         mount it as a dark row, so the tool is present while
         `cc-skill-recommendation.mode` defaults to `off`.
-        〔src:ws:packages/preset/cc/agent.shared.cordis.yml#L114-L128〕
+        〔src:ws:packages/skill/skill-recommender/README.md#L5-L5〕
         〔src:ws:packages/skill/skill-recommender/README.md#L49-L57〕
         It is a read-only consumer of the catalog: it never reads a body
         (`ctx.skills.get` is never called), never executes or invokes a skill,

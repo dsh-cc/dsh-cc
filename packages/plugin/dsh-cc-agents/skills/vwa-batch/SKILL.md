@@ -30,8 +30,15 @@ The batch lives in `.dsh/vwa/batches/<batchId>/`, where `batchId` is
    `skipAuditFallback`.
 2. Write `grant-descriptor.json` with capability-face fields only. Derive
    `writePaths` from the page list plus `docs/vwa-reports/` and
-   `.dsh/vwa/batches/` — nothing else, and never another path under
-   `.dsh/vwa/`. Do not put host-derived fields in it; the host derives those.
+   `.dsh/vwa/batches/`. The one other shape the validator accepts is a
+   project's drafts prefix, `.dsh/vwa/<projectId>/drafts/` — the page's
+   editing surface in the render pipeline — and it needs the literal
+   `prj_…` project id, so it can only be listed when that id is already
+   known. A batch mints its project ids per page at checkpoint 1, after the
+   descriptor is fixed, so a batch descriptor normally carries none. Never
+   add any other path under `.dsh/vwa/`, and never `.dsh/vwa` or
+   `.dsh/vwa/<projectId>` themselves. Do not put host-derived fields in it;
+   the host derives those.
 3. Ask the user to run:
 
    ```text
@@ -62,9 +69,14 @@ separately.
    (`reviewSettings.disagreementPolicy`, `projectBudget`). Record the returned
    `projectId`. A replay with the same requestId returns the same projectId;
    never write a second `initRequestId` for a page that has one.
-2. **graphBound** — bind the page through `argument.update`
-   (`op: "bind-artifact"`), keeping exact occurrence text and valid spans.
-   Verify the reported occurrences cover the page.
+2. **graphBound** — write the page body into the project's draft at
+   `.dsh/vwa/<projectId>/drafts/<name>.md`, then bind it through
+   `argument.update` with `op: "bind-artifact"`, `mode: "draft"`, the page
+   path and that `draftPath`. The bind renders the page (markers stripped)
+   and keeps occurrence spans in draft coordinates. The page path is compile
+   output: never edit it. Take over a page file this pipeline never produced
+   only with `overwrite: true`. Verify the reported occurrences cover the
+   draft.
 3. **reviewCompleted** — run `argument.review`, wait for the terminal host job,
    then read the current results. The checkpoint passes when every semantic
    stage is current and audit is current, OR the skip-audit predicate is in
@@ -74,9 +86,9 @@ separately.
    call `argument.report` with `write: false` for this artifact and record the
    returned `evaluationId`. This freezes the review-time state; skipping it
    makes the as-of re-render impossible for this page.
-5. **reportWritten** — fix the page, then call `argument.report` with
-   `evaluationId: <frozen id>` and `write: true`. Record `reportHash` of the
-   written report file. Do not commit yet.
+5. **reportWritten** — fix the page in its draft and re-bind it, then call
+   `argument.report` with `evaluationId: <frozen id>` and `write: true`. Record
+   `reportHash` of the written report file. Do not commit yet.
 6. **committed** — one commit carrying the page fix and the report. When the
    review found nothing actionable, `kind: "none"` is allowed and the report
    file alone forms the commit. Record the sha.

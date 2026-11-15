@@ -35,31 +35,55 @@ export interface BoundEntry {
   projectId: string
   artifactId: string
   absolutePath: string
+  /** §5.5: the artifact's DRAFT absolute path (draft-backed only) — the second index key. */
+  draftPath?: string
 }
 
-/** Bound artifacts of the current project (§16.2 step 2); empty without a provider + valid pointer. */
+/** The turn-end bound-artifact discovery result (§5.5). */
+export interface BoundDiscovery {
+  /**
+   * Dispatch index keyed by absolute path: the DELIVERABLE for legacy inline
+   * artifacts, the DRAFT for draft-backed ones (§5.5.2/§5.5.4 — one route per
+   * draft; the deliverable is compile output and never scans).
+   */
+  map: Map<string, BoundEntry>
+  /**
+   * Deliverable absolutes of draft-backed artifacts — excluded from the
+   * ENTIRE turn-end artifact set (§5.5.3: a hand-edited deliverable must not
+   * scan standalone and yield a permanent unmarked verdict).
+   */
+  excludedDeliverables: Set<string>
+}
+
+/** Bound artifacts of the current project (§16.2 step 2 + §5.5 draft index); empty without a provider + valid pointer. */
 export function boundArtifactMap(
   options: EvaluateTurnOptions,
   _events: readonly EvalEvent[],
   debug: (message: string) => void,
-): Map<string, BoundEntry> {
+): BoundDiscovery {
   const map = new Map<string, BoundEntry>()
+  const excludedDeliverables = new Set<string>()
   const provider = options.deliveryProvider
-  if (provider === undefined) return map
+  if (provider === undefined) return { map, excludedDeliverables }
   try {
     const projectId = readCurrentProject(options.workspaceRoot)
-    if (projectId === undefined) return map
+    if (projectId === undefined) return { map, excludedDeliverables }
     for (const artifact of provider.listBoundArtifacts(projectId)) {
       const absolutePath = isAbsolute(artifact.path) ? artifact.path : join(options.workspaceRoot, artifact.path)
-      // realpath-unknown here (sync context); the consumer re-resolves.
-      if (!map.has(absolutePath)) {
-        map.set(absolutePath, { projectId, artifactId: artifact.artifactId, absolutePath })
+      const entry: BoundEntry = { projectId, artifactId: artifact.artifactId, absolutePath }
+      if (artifact.draftPath !== undefined) {
+        entry.draftPath = isAbsolute(artifact.draftPath) ? artifact.draftPath : join(options.workspaceRoot, artifact.draftPath)
+        excludedDeliverables.add(absolutePath)
+        if (!map.has(entry.draftPath)) map.set(entry.draftPath, entry)
+        continue
       }
+      // realpath-unknown here (sync context); the consumer re-resolves.
+      if (!map.has(absolutePath)) map.set(absolutePath, entry)
     }
   } catch (error: unknown) {
     debug(`vwa-evidence: bound-artifact discovery failed (citation-check-only turn): ${String(error)}`)
   }
-  return map
+  return { map, excludedDeliverables }
 }
 
 export interface BoundEvalContext {
@@ -79,7 +103,7 @@ export interface BoundOutcome {
 }
 
 /**
- * Lane-2 turn-end evaluation (§16.2 step 4–7): the provider freezes the
+ * Bound-artifact turn-end evaluation (§16.2 step 4–7): the provider freezes the
  * check, the report is written first (§16.1a), then the v2 receipt row is
  * appended and read back by (receiptId, receiptHash). Never-run / pending
  * reviews ⇒ `overall:abstained` + pendingRunIds and NO nudge; the closed
@@ -131,7 +155,11 @@ export async function evaluateBoundArtifact(
     ts: options.now?.() ?? Date.now(),
     receiptId: `rec_${randomUUID()}`,
     projectId: ctx.boundEntry.projectId,
+    // §5.5.4: receipt identity for a draft-backed artifact is the DRAFT path
+    // (ctx.artifactPath already is the dispatched key); presentation is still
+    // detected against the DELIVERABLE + the rendered hash.
     artifactPath: ctx.artifactPath,
+    ...(ctx.boundEntry.draftPath === undefined ? {} : { presentedArtifactPath: ctx.boundEntry.absolutePath }),
     events: ctx.events,
     workspaceRoot: options.workspaceRoot,
     parentHash,
@@ -184,9 +212,15 @@ async function nudgeStaleBinding(
   options.state.perArtifact.add(artifactKey)
   options.state.perTurn.set(ctx.turnKey, (options.state.perTurn.get(ctx.turnKey) ?? 0) + 1)
   options.state.latch.set(ctx.sessionId, Math.max(options.state.latch.get(ctx.sessionId) ?? 0, sessionSpent) + 1)
+  // §7.2: a provisional render (STALE_RENDER) asks for a bind re-run; genuine
+  // drift (INPUT_CHANGED) still asks for a re-bind.
+  const code = (error as { code?: unknown })?.code
+  const label = code === 'STALE_RENDER' ? 'has a STALE provisional render (unadopted bind)' : 'is STALE'
   const parts = [
-    `VWA evidence: bound artifact ${ctx.boundEntry.artifactId} is STALE — ${error instanceof Error ? error.message : String(error)}`,
-    `suggested: re-bind the artifact in project ${ctx.boundEntry.projectId}, then run argument.review for it. (vwa-evidence)`,
+    `VWA evidence: bound artifact ${ctx.boundEntry.artifactId} ${label} — ${error instanceof Error ? error.message : String(error)}`,
+    code === 'STALE_RENDER'
+      ? `suggested: re-run the bind for this artifact in project ${ctx.boundEntry.projectId} (the provisional output is owned); then run argument.review for it. (vwa-evidence)`
+      : `suggested: re-bind the artifact in project ${ctx.boundEntry.projectId}, then run argument.review for it. (vwa-evidence)`,
   ]
   try {
     options.agent.inject?.(

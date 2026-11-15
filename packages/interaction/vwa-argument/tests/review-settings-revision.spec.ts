@@ -33,7 +33,7 @@ function failOf(run: () => unknown): { code: string; message: string } {
 /** A snapshot with real frozen settings (identical to what store.init freezes). */
 function graphWithSettings(settings = freezeReviewSettings()): GraphContext {
   const snapshot: ProjectSnapshot = {
-    schemaVersion: 1, projectId: 'prj_x', revision: 3, workspaceIdentity: 'b'.repeat(64),
+    schemaVersion: 2, projectId: 'prj_x', revision: 3, workspaceIdentity: 'b'.repeat(64),
     contract: {
       question: 'q?', language: 'en', domain: 'history', requiredQuestions: [],
       plannedCorpus: [], expectedCoreTopics: [], mode: 'draft', reviewSettings: settings,

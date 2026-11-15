@@ -90,6 +90,22 @@ describe('marker syntax (full-width brackets §4.2)', () => {
   it.each(['ws:a.md#L2-L1', 'src:a.md#L1-L2', 'ws:a.md#L0-L2', 'ws:a.md#L1-L0'])('rejects malformed: %s', inner => {
     expect(parseMarkerInner(inner)).toBeNull()
   })
+  // §5.1: the spec alternative gains `gr:<sourceId>#L<a>-L<b>`; `ws:` is unchanged.
+  it('parses gr: registered-source specs with line ranges', () => {
+    expect(parseMarkerInner('src:gr:src_abc#L3-L9')).toEqual([{ sourceId: 'gr:src_abc', lineStart: 3, lineEnd: 9 }])
+  })
+  it('mixes ws: and gr: specs in one compound marker', () => {
+    expect(parseMarkerInner('src:ws:docs/a.md#L1-L2;gr:src_abc#L4-L6')).toEqual([
+      { sourceId: 'ws:docs/a.md', lineStart: 1, lineEnd: 2 },
+      { sourceId: 'gr:src_abc', lineStart: 4, lineEnd: 6 },
+    ])
+  })
+  it.each(['gr:#L1-L2', 'gr:src_abc#L2-L1', 'gr:src_abc#L0-L2', 'gs:src_abc#L1-L2'])(
+    'rejects malformed gr: forms: %s',
+    inner => {
+      expect(parseMarkerInner(inner)).toBeNull()
+    },
+  )
   it('finds markers only in prose (mask)', () => {
     const text = 'prose 〔src:ws:docs/a.md#L1-L2〕 here\n```\ncode 〔src:ws:docs/a.md#L1-L2〕\n```\n`code 〔src:ws:docs/a.md#L1-L2〕` tail'
     const found = findMarkers(proseMask(text))

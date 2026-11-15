@@ -23,10 +23,11 @@
  * @module @dsh-cc/vwa-argument/report
  */
 
-import { randomUUID, createHash } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { sha256Hex, stableJson } from './schema.ts'
+import { computeBindingDigest } from './binding-digest.ts'
 import {
   disagreementContextOf,
   freezeDeliveryRuntime,
@@ -48,6 +49,9 @@ import {
   deliveryScope,
 } from './delivery-check.ts'
 import { ProjectStore } from './store.ts'
+import { InputChangedError, materializeDeliverable } from './render-state.ts'
+// §7.3: InputChangedError carries the crash-classified code; re-exported for importers.
+export { InputChangedError } from './render-state.ts'
 
 import { ReviewRunStore } from './review-run-store.ts'
 import {
@@ -74,6 +78,7 @@ import type {
 
 export { HONESTY, REPORT_TEMPLATE, mapMechanical, renderReportMarkdown, renderReportJson } from './report-render.ts'
 export type { GateEntry, ReportInput } from './report-render.ts'
+export { computeBindingDigest } from './binding-digest.ts'
 
 export interface DeliveryCheck {
   artifactId: Id
@@ -128,6 +133,8 @@ export interface FrozenEvaluation {
   artifactText: string
   /** §6.2 step 1: the frozen record set the check was computed from (as-of overlay input). */
   records: StoredRecords
+  /** §4.4: the draft (semantic) text this evaluation was computed over (absent only on legacy rows). */
+  semanticText?: string
   /** Filesystem observations frozen with E (absent only on legacy rows). */
   runtime?: FrozenRuntime
   reviewerConfigHashInput?: Hash
@@ -143,14 +150,8 @@ export interface VwaArgumentServiceDeps {
   currentReviewerConfigHash?(projectId: Id): Promise<Hash>
 }
 
-/** A stale-handle / changed-input condition (Appendix A). */
-export class InputChangedError extends Error {
-  readonly code = 'INPUT_CHANGED'
-  constructor(message: string) {
-    super(message)
-    this.name = 'InputChangedError'
-  }
-}
+// §7.3: InputChangedError's crash-classified code (STALE_RENDER vs
+// INPUT_CHANGED) lives with the classifier in render-state.ts.
 
 /**
  * §6.3: the frozen evaluation failed its hash read-back → the store is corrupt
@@ -159,10 +160,7 @@ export class InputChangedError extends Error {
  * working; the two are distinguished by class in report-tool.
  */
 export class EvaluationReadBackError extends InputChangedError {
-  constructor(message: string) {
-    super(message)
-    this.name = 'EvaluationReadBackError'
-  }
+  constructor(message: string) { super(message); this.name = 'EvaluationReadBackError' }
 }
 
 /**
@@ -170,10 +168,7 @@ export class EvaluationReadBackError extends InputChangedError {
  * retryable (an as-of render can never fall back to a live evaluation).
  */
 export class EvaluationNotFoundError extends InputChangedError {
-  constructor(message: string) {
-    super(message)
-    this.name = 'EvaluationNotFoundError'
-  }
+  constructor(message: string) { super(message); this.name = 'EvaluationNotFoundError' }
 }
 
 /** Distinguish "no such evaluation" from "the row failed read-back" (§6.3). */
@@ -183,36 +178,41 @@ function evaluationLoadFailure(root: string, projectId: Id, evaluationId: Id): I
     : new EvaluationNotFoundError(`evaluation ${evaluationId} does not exist in project ${projectId}`)
 }
 
-/** bindingDigest = SHA256(stableJson({…})) per §16.1a. */
-export function computeBindingDigest(
-  check: Omit<DeliveryCheck, 'eligibleForReviewed' | 'pendingRunIds'>,
-  adjudications: AdjudicationRecord[],
-): Hash {
-  return sha256Hex(
-    stableJson({
-      artifactHash: check.artifactHash,
-      graphHash: check.graphHash,
-      dependencyDigest: check.dependencyDigest,
-      policyHash: check.policyHash,
-      reviewerConfigHash: check.reviewerConfigHash,
-      reviewRecordHashes: check.reviewRunIds,
-      checks: check.checks,
-      metrics: check.metrics,
-      findingCounts: check.findingCounts,
-      activeAdjudicationHashes: adjudications.map((record) => sha256Hex(stableJson(record))).sort(),
-    }),
-  )
-}
-
 /** The Appendix A service; registered as the cordis service `vwa-argument`. */
 export class VwaArgumentService {
   constructor(private readonly deps: VwaArgumentServiceDeps) {}
 
-  /** Bound artifacts of one project (artifactId + path). */
-  listBoundArtifacts(projectId: Id): { artifactId: Id; path: string }[] {
+  /**
+   * Bound artifacts of one project (artifactId + path). §5.5 adds the draft
+   * path (draft-backed only) and the rendered hash = contentHash, so the
+   * turn-end evaluator can index one route per draft.
+   */
+  listBoundArtifacts(projectId: Id): { artifactId: Id; path: string; draftPath?: string; artifactHash: Hash }[] {
     const head = new ProjectStore(this.deps.root, projectId).readHead()
     if (!head.ok) return []
-    return head.data.snapshot.artifacts.map((artifact) => ({ artifactId: artifact.id, path: artifact.path }))
+    return head.data.snapshot.artifacts.map((artifact) => ({
+      artifactId: artifact.id,
+      path: artifact.path,
+      artifactHash: artifact.contentHash,
+      ...(artifact.draft === undefined ? {} : { draftPath: artifact.draft.path }),
+    }))
+  }
+
+  /**
+   * The project's registered sources for `gr:` citation checks (render
+   * pipeline §5.2/§5.3): the registered corpus path (absent for sources
+   * registered before it was captured — those stay not gr-citable), the
+   * recorded snapshot path and the frozen hash. Read-only.
+   */
+  listProjectSources(projectId: Id): { sourceId: Id; corpusPath?: string; snapshotPath: string; snapshotHash: Hash }[] {
+    const head = new ProjectStore(this.deps.root, projectId).readHead()
+    if (!head.ok) return []
+    return head.data.snapshot.sources.map((source) => ({
+      sourceId: source.id,
+      ...(source.corpusPath === undefined ? {} : { corpusPath: source.corpusPath }),
+      snapshotPath: source.snapshotPath,
+      snapshotHash: source.snapshotHash,
+    }))
   }
 
   /**
@@ -232,12 +232,11 @@ export class VwaArgumentService {
       throw new InputChangedError(`artifact ${artifactId} is not bound in project ${projectId}`)
     const absolute = join(this.deps.root, artifact.path)
     if (!existsSync(absolute)) throw new InputChangedError(`artifact file ${artifact.path} is missing`)
-    const text = artifactText(this.deps.root, artifact.path)
-    const artifactHash = createHash('sha256').update(text, 'utf8').digest('hex')
-    if (artifactHash !== artifact.contentHash) {
-      // D16 (store level): bytes changed after binding → re-bind/re-audit required.
-      throw new InputChangedError('artifact bytes changed after binding; re-bind and re-audit are required')
-    }
+    // D16 + §7.2: mismatched bytes classify by the three crash series — a
+    // provisional render is STALE_RENDER (retryable), never "re-audit" drift.
+    const { renderedText, semanticText } = materializeDeliverable(
+      this.deps.root, projectId, artifact, () => artifactText(this.deps.root, artifact.path),
+    )
 
     const records = readAllRecords(this.deps.root, projectId)
     const gates =
@@ -245,14 +244,15 @@ export class VwaArgumentService {
     const reviewerConfigHash = (await this.deps.currentReviewerConfigHash?.(projectId)) ?? this.deps.reviewerConfigHash
     const adjudications = activeAdjudications(
       snapshot, records, readAdjudications(this.deps.root, projectId),
-      deliveryScope(snapshot, artifactId, text).targets, reviewerConfigHash,
+      deliveryScope(snapshot, artifactId, semanticText).targets, reviewerConfigHash,
     )
-    const runtime = freezeDeliveryRuntime(this.deps.root, snapshot, artifactId, text)
+    const runtime = freezeDeliveryRuntime(this.deps.root, snapshot, artifactId, semanticText)
     const check = evaluateDelivery({
       root: this.deps.root,
       snapshot,
       artifactId,
-      text,
+      semanticText,
+      artifactHash: sha256Hex(renderedText),
       records,
       adjudications,
       pendingRunIds: pendingRuns(this.deps.root, projectId),
@@ -274,7 +274,8 @@ export class VwaArgumentService {
       snapshot,
       adjudications,
       gates,
-      artifactText: text,
+      artifactText: renderedText,
+      semanticText,
       records,
       runtime,
       ...(reviewerConfigHash === undefined ? {} : { reviewerConfigHashInput: reviewerConfigHash }),
@@ -407,9 +408,7 @@ export function appendAdjudication(root: string, projectId: string, record: Adju
     try {
       prior = JSON.parse(readFileSync(path, 'utf8')) as { adjudications?: AdjudicationRecord[] }
       if (!Array.isArray(prior.adjudications)) prior = { adjudications: [] }
-    } catch {
-      prior = { adjudications: [] }
-    }
+    } catch { prior = { adjudications: [] } }
   }
   prior.adjudications = [...(prior.adjudications ?? []), record]
   mkdirSync(join(root, '.dsh', 'vwa', projectId), { recursive: true })
@@ -436,9 +435,7 @@ export function appendSignature(root: string, projectId: string, signature: Sign
     try {
       prior = JSON.parse(readFileSync(path, 'utf8')) as { signatures?: Signature[] }
       if (!Array.isArray(prior.signatures)) prior = { signatures: [] }
-    } catch {
-      prior = { signatures: [] }
-    }
+    } catch { prior = { signatures: [] } }
   }
   prior.signatures = [...(prior.signatures ?? []), signature]
   mkdirSync(join(root, '.dsh', 'vwa', projectId), { recursive: true })

@@ -178,3 +178,45 @@ describe('task grant storage + lifecycle (§3.2/§3.3)', () => {
     }
   })
 })
+
+/** A well-formed `prj_<uuid>` segment: the drafts carve-out is keyed on it (§3.2). */
+const DRAFT_PROJECT = 'prj_11111111-1111-4111-8111-111111111111'
+const OTHER_PROJECT = 'prj_22222222-2222-4222-8222-222222222222'
+
+describe('§3.2/§3.3 writePaths drafts carve-out (descriptor validation)', () => {
+  it('accepts a drafts prefix whose project segment is a well-formed prj_<uuid>', () => {
+    expect(face({ writePaths: [`.dsh/vwa/${DRAFT_PROJECT}/drafts`] }).writePaths)
+      .toEqual([`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    // Trailing slash is normalized away, exactly like every other writePath.
+    expect(face({ writePaths: [`.dsh/vwa/${DRAFT_PROJECT}/drafts/`] }).writePaths)
+      .toEqual([`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    expect(face({ writePaths: [`.dsh/vwa/${OTHER_PROJECT}/drafts`] }).writePaths)
+      .toEqual([`.dsh/vwa/${OTHER_PROJECT}/drafts`])
+  })
+
+  it('still rejects the ancestor prefixes .dsh/vwa and .dsh/vwa/<projectId>', () => {
+    // `.dsh` itself is not state-shaped lexically; the proposal gate rejects it
+    // for COVERING the state root (task-grant-descriptor-path.spec.ts).
+    for (const ancestor of ['.dsh/vwa', '.dsh/vwa/', `.dsh/vwa/${DRAFT_PROJECT}`, `.dsh/vwa/${DRAFT_PROJECT}/`]) {
+      expect(() => face({ writePaths: [ancestor] }), ancestor).toThrow(/authoritative VWA state/)
+    }
+    expect(face({ writePaths: ['.dsh'] }).writePaths).toEqual(['.dsh'])
+  })
+
+  it('rejects drafts-looking prefixes whose project segment is not prj_<uuid>', () => {
+    for (const bad of [
+      '.dsh/vwa/prj_1/drafts',
+      '.dsh/vwa/prj_x/drafts',
+      `.dsh/vwa/${DRAFT_PROJECT}/drafts-evil`,
+      `.dsh/vwa/${DRAFT_PROJECT}/reports`,
+      '.dsh/vwa/drafts',
+    ]) {
+      expect(() => face({ writePaths: [bad] }), bad).toThrow(/authoritative VWA state/)
+    }
+  })
+
+  it('the rejection message names both carve-outs', () => {
+    expect(() => face({ writePaths: ['.dsh/vwa'] })).toThrow(/\.dsh\/vwa\/batches\/\*\*/)
+    expect(() => face({ writePaths: ['.dsh/vwa'] })).toThrow(/drafts/)
+  })
+})

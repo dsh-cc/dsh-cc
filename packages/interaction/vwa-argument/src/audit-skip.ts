@@ -4,9 +4,12 @@
  *
  * A skip declaration lives on the admission request record (`skipAudit`), bound
  * to one artifact binding by `artifactHash` + `entityVersion` (excluded from
- * every identity hash). It takes effect when the most recent admission for
- * that artifact whose record carries the SAME binding declared the skip, and
- * no complete audit run (extract + align in one run, matching artifactHash)
+ * every identity hash). §4.4a (render pipeline): the request field's value is
+ * the binding's SEMANTIC hash (sha256 of the text the audit reads — the
+ * draft for draft-backed artifacts), so the skip follows the source, never
+ * the render. It takes effect when the most recent admission for that
+ * artifact whose record carries the SAME binding declared the skip, and no
+ * complete audit run (extract + align in one run, matching semanticHash)
  * exists AFTER the declaration. A later complete audit or a later non-skip
  * admission flips it back.
  *
@@ -15,7 +18,7 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { validateExtractionRecord, validateReviewRecord, sha256Hex } from './schema.ts'
-import { AUDIT_RULE_IDS } from './audit-reuse.ts'
+import { AUDIT_RULE_IDS, recordSemanticHash } from './audit-reuse.ts'
 import { ReviewRunStore, recordReusable } from './review-run-store.ts'
 import type { Hash, Id, ProjectSnapshot } from './types.ts'
 
@@ -38,7 +41,11 @@ function requestOrder(request: Request): string {
   return `${request.startedAt}\u0000${request.runId}`
 }
 
-/** `{artifactHash, entityVersion}` of the current binding of one artifact. */
+/**
+ * `{artifactHash, entityVersion}` of the current binding of one artifact.
+ * `artifactHash` here is the SEMANTIC identity (§4.4a): sha256 of the text
+ * the audit reads — the draft for draft-backed artifacts.
+ */
 export function artifactBinding(
   snapshot: ProjectSnapshot,
   artifact: { id: Id; text: string },
@@ -56,7 +63,7 @@ export function auditSkipInEffect(
   root: string,
   projectId: Id,
   artifactId: Id,
-  artifactHash: Hash,
+  semanticHash: Hash,
   entityVersion: number | undefined,
 ): AuditSkip | undefined {
   const store = new ReviewRunStore(root, projectId)
@@ -68,7 +75,7 @@ export function auditSkipInEffect(
     .filter(
       (request) =>
         request.artifactId === artifactId &&
-        request.artifactHash === artifactHash &&
+        request.artifactHash === semanticHash &&
         request.entityVersion === entityVersion,
     )
     .sort((a, b) => requestOrder(a).localeCompare(requestOrder(b)))
@@ -80,7 +87,7 @@ export function auditSkipInEffect(
     if (request === undefined || requestOrder(request) <= declaredAt) continue
     const records = store.readRecords(runId).filter((record) =>
       record.runId === runId && record.status === 'completed' && record.kind !== 'disagreement' &&
-      record.artifactHash === artifactHash && record.targetRefs?.some((ref) =>
+      recordSemanticHash(record) === semanticHash && record.targetRefs?.some((ref) =>
         ref.id === artifactId && ref.entityVersion === entityVersion))
     const extracts = records.filter((record) => record.stage === 'extract' && validateExtractionRecord(record))
     if (records.some((record) => record.stage === 'align' && validateReviewRecord(record) &&

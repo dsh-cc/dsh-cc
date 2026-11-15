@@ -34,13 +34,15 @@ export function freezeDeliveryRuntime(
   root: string,
   snapshot: FrozenEvaluation['snapshot'],
   artifactId: Id,
-  text: string,
+  semanticText: string,
 ): FrozenRuntime {
   const artifact = snapshot.artifacts.find((candidate) => candidate.id === artifactId)!
-  const auditSkip = auditSkipInEffect(root, snapshot.projectId, artifactId, sha256Hex(text), artifact.entityVersion)
+  // §4.4a: the audit-skip key is the semantic (draft) hash; occurrences are
+  // checked against the draft too (§4.4 span space).
+  const auditSkip = auditSkipInEffect(root, snapshot.projectId, artifactId, sha256Hex(semanticText), artifact.entityVersion)
   return {
     ...(auditSkip === undefined ? {} : { auditSkip }),
-    mechanicalFindings: mechanicalFindings(root, snapshot, artifactId, text),
+    mechanicalFindings: mechanicalFindings(root, snapshot, artifactId, semanticText),
     sourceByteHashes: snapshot.sources.map((source) => {
       try {
         return sha256Hex(readFileSync(join(root, source.snapshotPath), 'utf8'))
@@ -173,7 +175,9 @@ export function applyAdjudicationOverlay(
     root,
     snapshot: frozen.snapshot,
     artifactId: frozen.artifactId,
-    text: frozen.artifactText,
+    // §4.4: replay over the frozen DRAFT text (legacy rows predate the split).
+    semanticText: frozen.semanticText ?? frozen.artifactText,
+    artifactHash: frozen.check.artifactHash,
     records,
     pendingRunIds: frozen.check.pendingRunIds,
     adjudications,

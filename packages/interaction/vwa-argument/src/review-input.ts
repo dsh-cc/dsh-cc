@@ -67,6 +67,15 @@ export function deduplicateBySemanticHash(records: ReviewRecord[]): ReviewRecord
     return true
   })
 }
+/**
+ * §6.2: `originRunId` is runtime provenance, not review content. It must not
+ * reach the model envelope: a reused copy has to present the SAME judgment the
+ * original run presented, byte for byte.
+ */
+function withoutProvenance(record: ReviewRecord): ReviewRecord {
+  const { originRunId: _originRunId, ...rest } = record
+  return rest as ReviewRecord
+}
 export function taskDependencyDigest(index: ReverseIndex, task: ReviewTask, records: ReviewRecord[]): Hash {
   return sha256Hex(
     stableJson({
@@ -208,7 +217,7 @@ export function reviewContext(input: {
     searches: input.snapshot.searches.filter((s) => ids.has(s.id)),
     // Persisted reuse copies remain available for provenance, but must not
     // consume model context repeatedly under the same semantic cache key.
-    currentReviews: deduplicateBySemanticHash(upstreamRecords(index, input.task, input.records)),
+    currentReviews: deduplicateBySemanticHash(upstreamRecords(index, input.task, input.records)).map(withoutProvenance),
   }
   if (input.task.stage === 'sources' && input.readSnapshot && input.maxContextChars !== undefined) {
     const envelopeWith = (sources: SourceEnvelopeEntry[]) => {

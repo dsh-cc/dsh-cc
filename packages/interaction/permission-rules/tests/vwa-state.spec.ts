@@ -7,7 +7,7 @@ import { decideCallVerbose } from '../src/decide.ts'
 import type { DecideDeps } from '../src/decide.ts'
 import { parseRule } from '../src/parser.ts'
 import { EMPTY_RULE_SET, type PermissionRuleSet } from '../src/types.ts'
-import { isVwaStateWrite } from '../src/vwa-state.ts'
+import { isVwaStateWrite, VWA_STATE_ASK_REASON } from '../src/vwa-state.ts'
 
 function workspace(): string {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'vwa-state-')))
@@ -105,5 +105,47 @@ describe('§3.7 authoritative VWA state default-ask', () => {
     expect(decideCallVerbose(deps(), fakeExec('read', { file_path: join(root, '.dsh/vwa/prj_1/adjudications.json') }, root)).decision.kind)
       .not.toBe('ask')
     expect(decideCallVerbose(deps(), fakeExec('Bash', { command: 'ls' }, root)).decision.kind).toBe('passthrough')
+  })
+})
+
+/** A well-formed `prj_<uuid>` project segment: the drafts carve-out is keyed on it (§3.2). */
+const DRAFT_PROJECT = 'prj_11111111-1111-4111-8111-111111111111'
+
+function draftsWorkspace(): string {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'vwa-drafts-')))
+  mkdirSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts'), { recursive: true })
+  writeFileSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'adjudications.json'), '{}')
+  return root
+}
+
+describe('§3.2/§3.3 draft files are the one writable part of a project state tree', () => {
+  it('the ask reason names both carve-outs', () => {
+    expect(VWA_STATE_ASK_REASON).toContain('.dsh/vwa/batches/**')
+    expect(VWA_STATE_ASK_REASON).toContain('.dsh/vwa/<projectId>/drafts/**')
+  })
+
+  it('exempts a draft FILE of a well-formed project, and nothing else under the state tree', () => {
+    const root = draftsWorkspace()
+    const draft = `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.md`
+    expect(isVwaStateWrite(draft, root)).toBe(false)
+    expect(isVwaStateWrite(join(root, draft), root)).toBe(false)
+    for (const target of [
+      `.dsh/vwa/${DRAFT_PROJECT}/drafts/notes.json`,
+      `.dsh/vwa/${DRAFT_PROJECT}/drafts/sub/notes.md`,
+      `.dsh/vwa/${DRAFT_PROJECT}/adjudications.json`,
+      // A placeholder project id is not a project: no drafts exemption.
+      '.dsh/vwa/prj_1/drafts/notes.md',
+    ]) {
+      expect(isVwaStateWrite(target, root), target).toBe(true)
+    }
+  })
+
+  it('an Edit/Write of a draft file does not ask, while the project state still does', () => {
+    const root = draftsWorkspace()
+    const draft = decideCallVerbose(deps(), fakeExec('write', { file_path: join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts/notes.md') }, root))
+    expect(draft.decision.kind).not.toBe('ask')
+    const state = decideCallVerbose(deps(), fakeExec('write', { file_path: join(root, '.dsh/vwa', DRAFT_PROJECT, 'adjudications.json') }, root))
+    expect(state.decision.kind).toBe('ask')
+    expect(state.decision.kind === 'ask' ? state.decision.reason : '').toBe(VWA_STATE_ASK_REASON)
   })
 })

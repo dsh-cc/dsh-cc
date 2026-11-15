@@ -17,7 +17,7 @@ import type { Executor, GateOptions } from './gates.ts'
 import { runGates } from './gates.ts'
 import { extractClaims } from './marker.ts'
 import { sha256Hex, type ClaimEntry, type GateEntry, type NumberEntry, type ReceiptRow } from './receipt.ts'
-import { verifyClaim } from './verify.ts'
+import { verifyClaim, type VerifyOptions } from './verify.ts'
 import { writeReceipt } from './receipt.ts'
 
 export interface EvaluateOptions {
@@ -28,6 +28,11 @@ export interface EvaluateOptions {
   workspaceRoot: string
   exec: Executor
   gates?: GateOptions
+  /**
+   * Read-back options (§5.3): the `gr:` project-source resolver the
+   * vwa-argument side supplies. Absent ⇒ `gr:` markers fail closed.
+   */
+  verify?: VerifyOptions
   /** Chain head linkage; '' at v1 until P2b wires ledger chaining (§4.1). */
   parentHash?: string
   now?: number | undefined
@@ -56,7 +61,7 @@ export async function evaluateArtifact(opts: EvaluateOptions): Promise<Evaluatio
   for (const claim of claims) {
     const specsPerMarker = claim.markers.filter(m => m.parsed).map(m => m.specs)
     const parsedFlags = claim.markers.map(m => m.parsed)
-    const outcome = await verifyClaim(specsPerMarker, parsedFlags, opts.workspaceRoot)
+    const outcome = await verifyClaim(specsPerMarker, parsedFlags, opts.workspaceRoot, opts.verify ?? {})
     const entry: ClaimEntry = { span: claim.span, text: claim.text, status: outcome.status }
     if (outcome.status === 'marked-ok' && claim.markers[0] !== undefined) {
       const first = claim.markers[0]?.specs[0]

@@ -145,3 +145,38 @@ describe('task-grant descriptor identity in the active session workspace', () =>
     expect(grants.of(agent)).toHaveLength(0)
   })
 })
+
+/** A well-formed `prj_<uuid>` project segment: the drafts carve-out is keyed on it (§3.2). */
+const DRAFT_PROJECT = 'prj_11111111-1111-4111-8111-111111111111'
+
+describe('task-grant proposal and the drafts carve-out (§3.2/§3.3)', () => {
+  it('accepts a drafts prefix for a well-formed project segment', async () => {
+    const root = workspace()
+    mkdirSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts'), { recursive: true })
+    const path = descriptor(root, [`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    const { agent, grants } = setup(root)
+    const view = await grants.propose(agent, path)
+    expect(view.writePaths).toEqual([`.dsh/vwa/${DRAFT_PROJECT}/drafts`])
+    expect(await grants.create(agent, path)).toBe(view)
+  })
+
+  it.each(['.dsh/vwa', `.dsh/vwa/${DRAFT_PROJECT}`, `.dsh/vwa/${DRAFT_PROJECT}/reports`])(
+    'rejects a proposed prefix that covers authoritative state: %s',
+    async (writePath) => {
+      const root = workspace()
+      mkdirSync(join(root, '.dsh/vwa', DRAFT_PROJECT, 'drafts'), { recursive: true })
+      const path = descriptor(root, [writePath])
+      const { agent, grants } = setup(root)
+      await expect(grants.propose(agent, path)).rejects.toThrow(/authoritative VWA state/)
+      expect(grants.of(agent)).toHaveLength(0)
+    },
+  )
+
+  it('rejects a drafts-looking prefix whose project segment is not prj_<uuid>', async () => {
+    const root = workspace()
+    const path = descriptor(root, ['.dsh/vwa/prj_1/drafts'])
+    const { agent, grants } = setup(root)
+    await expect(grants.propose(agent, path)).rejects.toThrow(/authoritative VWA state/)
+    expect(grants.of(agent)).toHaveLength(0)
+  })
+})

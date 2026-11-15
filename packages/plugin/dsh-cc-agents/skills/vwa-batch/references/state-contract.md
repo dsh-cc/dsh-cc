@@ -75,10 +75,16 @@ must not appear here; the host derives them at grant time.
 - `tools` accepts `prefix.*` and exact names. `argument.*` covers init, update,
   review and report; add `evidence.*` only when the pages register sources.
 - `writePaths` are root-relative normalized prefixes, derived from the manifest
-  page list plus `docs/vwa-reports/` and `.dsh/vwa/batches/`. Nothing else.
-  Nothing under `.dsh/vwa/**` except `.dsh/vwa/batches/**` may ever appear here;
-  adjudications, signatures, revisions, review-runs, review-cycles and
-  evaluations are mutable only through the VWA tools.
+  page list plus `docs/vwa-reports/` and `.dsh/vwa/batches/`. The one other
+  accepted shape is a project's drafts prefix, `.dsh/vwa/<projectId>/drafts/`
+  — the page's editing surface in the render pipeline — which requires the
+  literal `prj_…` project id and therefore can only be listed once that id
+  exists. A batch mints its project ids per page at checkpoint 1, after this
+  file is written, so a batch descriptor normally carries none. Nothing else
+  under `.dsh/vwa/**` may ever appear here, and the ancestor prefixes
+  `.dsh/vwa` and `.dsh/vwa/<projectId>` stay rejected by the validator;
+  adjudications, signatures, revisions, review-runs, review-cycles,
+  evaluations, sources and reports are mutable only through the VWA tools.
 - `modeCeiling` defaults to `workspace-write`. `danger-full-access` must be
   declared here and is highlighted in the approval view.
 - `contentScope` defaults conditionally to `tracked-md-only` when
@@ -150,7 +156,7 @@ In order, per page. The page fix and its report land in ONE commit.
 | # | Checkpoint | Passes when | On-disk evidence for a resume |
 | --- | --- | --- | --- |
 | 1 | `projectCreated` | `argument.init` returned a projectId | `.dsh/vwa/inits/<initRequestId>.json` and `.dsh/vwa/<projectId>/HEAD.json` |
-| 2 | `graphBound` | bind-artifact succeeded, occurrences verified | the bound revision under `.dsh/vwa/<projectId>/revisions/` |
+| 2 | `graphBound` | bind-artifact with `mode: "draft"` succeeded against the page's draft, occurrences verified | the bound revision under `.dsh/vwa/<projectId>/revisions/` |
 | 3 | `reviewCompleted` | every semantic stage current AND (audit pass OR the skip-audit predicate in effect); deferred disagreements do not block | the run records and the delivery state of the project |
 | 4 | `evaluationFrozen` | `argument.report` with `write:false` returned an `evaluationId` | `.dsh/vwa/<projectId>/evaluations/<evaluationId>` |
 | 5 | `reportWritten` | the as-of re-render returned a path and `reportHash` matches the file on disk | the report file itself |
@@ -211,7 +217,7 @@ After a restart:
 5. `state.json` never contradicts disk evidence; on conflict the state is
    rewritten from disk.
 6. `writePaths` never include anything under `.dsh/vwa/**` except
-   `.dsh/vwa/batches/**`.
+   `.dsh/vwa/batches/**` and a `<projectId>/drafts/` prefix.
 7. No grant ⇒ no page work. The batch aborts before checkpoint 1.
 8. The batch never adjudicates, signs, or picks a prevailing run.
 9. Only `pending` and `active` pages are processed; `skipped`/`failed` wait for

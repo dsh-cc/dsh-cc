@@ -7,16 +7,27 @@ behavioral guidance, not a re-spec; where the two disagree, the design doc
 wins. It extends — never overrides — the citation checks (`docs/vwa/writing-guidance.md`).
 
 
-## Bound paths are hash-watched
+## Bound paths: draft-backed vs legacy inline
 
-Once a document is bound to a VWA project, its bytes are
-hash-watched: writes from ANY editor trigger re-evaluation at turn-end,
-including shell redirections. The citation-check "editing tools only" rule still
-applies to *unbound* paths — an unbound file stays invisible to the
-evidence pipeline — but a bound path loses that invisibility. Writing a
-bound artifact through shell tools is therefore not a way around review:
-it changes the artifact hash, invalidates the binding, and forces a
-re-bind and a full re-audit.
+A bound document has one of two shapes, and the hash-watch story differs.
+
+**Draft-backed (the current shape).** The binding records a draft under
+`.dsh/vwa/<projectId>/drafts/`; the deliverable is that draft's render —
+compile output written by the bind transaction. Editing the deliverable
+yourself changes bytes the graph does not own: it is drift, the next bind
+overwrites it, and until then the artifact reports as stale rather than
+verified. Edit the draft and re-bind.
+
+**Legacy inline (unchanged).** A binding made without a draft keeps the v1
+behaviour: the bytes at the deliverable path are the artifact, and writes
+from ANY editor trigger re-evaluation at turn-end, including shell
+redirections. Writing such an artifact through shell tools is not a way
+around review: it changes the artifact hash, invalidates the binding, and
+forces a re-bind and a full re-audit. Binding with `mode: "draft"` is the
+explicit conversion path; nothing converts implicitly.
+
+For unbound paths the citation-check "editing tools only" rule still
+applies: an unbound file stays invisible to the evidence pipeline.
 
 
 ## Claim markers (authoring aid)
@@ -24,16 +35,36 @@ re-bind and a full re-audit.
 A new marker MAY be used while drafting: `〔claim:<id>〕`, pointing at a
 claim registered in the project graph. Notes:
 
-- Lane-1 mechanical verification treats `〔claim:<id>〕` as non-marker
-  text: it is skipped, produces no `invalid-marker`, and preserves all
-  character offsets. Mixing it with `src:` markers is safe.
+- Citation checks treat `〔claim:<id>〕` as non-marker text: it is skipped,
+  produces no `invalid-marker`, and preserves all character offsets. Mixing
+  it with `src:` markers is safe.
 - By default, writing claim markers is NOT required. The argument-review audit
   extracts the artifact independently and aligns it against the graph;
   occurrences of claims in the body are used directly.
-- Claim markers are an authoring aid only. Internal claim markers are not
-  retained in the final body text: removing them before formal delivery
-  changes the artifact hash, so the artifact MUST be re-bound and
-  re-audited afterwards.
+- Claim markers are an authoring aid only. In a draft-backed artifact the
+  render strips them, so they never reach the deliverable and removing one
+  never changes the deliverable hash — it changes the draft hash, which is
+  the graph↔source drift figure. Re-bind if you want that figure current.
+  Legacy inline artifacts keep the old rule: a claim marker left in the
+  delivered bytes is part of the artifact hash, so remove it before formal
+  delivery and re-bind and re-audit.
+
+
+## Migrating a v1 project
+
+`/vwa repair <projectId> --migrate` moves a `schemaVersion 1` project to the
+v2 layout: source snapshots to `.dsh/vwa/<projectId>/sources/`, review
+reports to `.dsh/vwa/<projectId>/reports/`, and it creates the `drafts/`,
+`renders/` and `retired/` directories. Every snapshot is hash-verified before
+anything moves; the migration is all-or-nothing.
+
+The move rewrites every source path, which changes every review identity, so
+migration **retires** the project's review records and adjudications into
+`retired/` instead of pretending they still apply. The project reads
+`not-run` until it is reviewed again; that is the stated cost of the move,
+not a lost result, and there is no half-converted state to reason about.
+Sources registered before the move carry no recorded corpus path, so
+re-register them before citing them with `gr:`.
 
 
 ## Body-text requirements (§19)

@@ -77,7 +77,7 @@ inside vwa). The `agent/turn-stopping` listener:
   last-row-per-path selection over the session's monotonic event order
   (`staleAgainst`); no external ledger bookkeeping is added.
 
-## Lane-2 bound-artifact delivery (§16.2)
+## Bound-artifact delivery (§16.2)
 
 When the `vwa-argument` service is mounted in the same realm, the turn-end
 evaluator also handles artifacts that a `vwa-argument` project has bound

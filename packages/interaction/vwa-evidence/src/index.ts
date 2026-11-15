@@ -65,7 +65,27 @@ export {
   type MarkerOccurrence,
   type SourceSpec,
 } from './marker.ts'
-export { isWhitelistedRel, verifyClaim, verifySpec, type VerifyOutcome, type VerifyOptions } from './verify.ts'
+export {
+  GR_REASONS,
+  isWhitelistedRel,
+  verifyClaim,
+  verifySpec,
+  type GrProjectSources,
+  type GrSource,
+  type VerifyOutcome,
+  type VerifyOptions,
+} from './verify.ts'
+export {
+  DRAFT_FILE_RE,
+  DRAFT_PREFIX_RE,
+  PROJECT_ID_RE,
+  VWA_BATCH_ROOT,
+  VWA_STATE_ROOT,
+  isVwaBatchPath,
+  isVwaDraftPath,
+  isVwaDraftPrefix,
+  vwaProjectIdOfDraft,
+} from './vwa-paths.ts'
 export {
   DEFAULT_GATE_TIMEOUT_MS,
   gateBStyle,

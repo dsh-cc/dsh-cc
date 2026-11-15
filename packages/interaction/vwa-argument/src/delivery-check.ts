@@ -11,20 +11,25 @@ import { computeAssessments, digestRecords, activeMajorCount } from './policy.ts
 import { mapMechanical, stageVerdict, type GateEntry } from './report-render.ts'
 import { policyHash, promptHash, semanticContract, semanticContractHash } from './review-contract.ts'
 import { computeStageProgress } from './review-progress.ts'
+import { resolveDisputes, type Dispute } from './dispute.ts'
 import { verifySnapshot } from './sources.ts'
+import { resolveRecordedPath } from './paths.ts'
 import { validateEvidenceAgainstSnapshot } from './graph.ts'
 import { ProjectStore } from './store.ts'
 import type { DisagreementPolicy } from './review-config.ts'
 import { auditSkipInEffect, type AuditSkip } from './audit-skip.ts'
 import { effectiveReviewRecords } from './delivery-adjudication.ts'
 import type { DeliveryCheck } from './report.ts'
-import type { AdjudicationRecord, Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
+import type { AdjudicationDispute, AdjudicationRecord, Finding, Hash, Id, ProjectSnapshot, ReviewRecord, Verdict } from './types.ts'
 
 export interface DeliveryInputs {
   root: string
   snapshot: ProjectSnapshot
   artifactId: Id
-  text: string
+  /** §4.4: the SEMANTIC text — the draft for draft-backed artifacts (span space of occurrences/core sets). */
+  semanticText: string
+  /** §4.4: sha256 of the RENDERED deliverable — the identity delivery joins audit rows on. */
+  artifactHash: Hash
   records: ReviewRecord[]
   pendingRunIds: Id[]
   adjudications: AdjudicationRecord[]
@@ -64,6 +69,18 @@ function describeDeferred(records: ReviewRecord[], marker: Finding): DeferredDis
   ]
   return { ...marker, runId: home.runId, ...(conflicts.length ? { conflicts } : {}) }
 }
+/**
+ * §6.2 liveness. A `REVIEWER_DISAGREEMENT` row is live when (1) its dispute still
+ * resolves in the record store, (2) the CURRENT origin-run cohort still equals
+ * the recorded one — the run that produced each judgment, never the run id of a
+ * cache reuse — and (3) the finding still sits on a current record. Appending an
+ * unrelated round changes neither id nor cohort; a genuinely fresh judgment on
+ * the same `{inputHash, stage}` widens the cohort and asks the human again.
+ *
+ * Rows written before this scheme (and legacy single-run findings) carry no
+ * `dispute` block and keep the content-digest liveness they were recorded
+ * against. Retired rows (§6.3) are simply absent from the active set.
+ */
 export function activeAdjudications(
   snapshot: ProjectSnapshot,
   records: ReviewRecord[],
@@ -77,17 +94,29 @@ export function activeAdjudications(
     targets,
     reviewerConfigHash,
   ).records
-  return adjudications.filter(
-    (a) =>
-      a.dependencyDigest === projectDependencyDigest(snapshot, records) &&
-      current.some(
-        (r) =>
-          r.stage !== 'extract' &&
-          // §4.4 liveness: the marker lives on the detecting run, so a
-          // cross-run adjudication counts when EITHER run is current.
-          (r.runId === a.overrides.runId || r.runId === a.overrides.supersededRunId) &&
-          r.response?.findings.some((f) => f.id === a.findingId),
-      ),
+  const disputes = new Map(resolveDisputes(snapshot, records).map((dispute) => [dispute.disputeId, dispute]))
+  const digest = projectDependencyDigest(snapshot, records)
+  return adjudications.filter((a) => {
+    const recorded = a.dispute
+    if (recorded === undefined ? a.dependencyDigest !== digest : !isLiveDispute(disputes.get(recorded.disputeId), recorded))
+      return false
+    return current.some(
+      (r) =>
+        r.stage !== 'extract' &&
+        // §4.4 liveness: the marker lives on the detecting run, so a
+        // cross-run adjudication counts when EITHER run is current.
+        (r.runId === a.overrides.runId || r.runId === a.overrides.supersededRunId) &&
+        r.response?.findings.some((f) => f.id === a.findingId),
+    )
+  })
+}
+/** §6.2 conditions 1 and 2: the dispute still resolves and its cohort is unchanged. */
+function isLiveDispute(dispute: Dispute | undefined, recorded: AdjudicationDispute): boolean {
+  if (dispute === undefined) return false
+  return (
+    dispute.inputHash === recorded.inputHash &&
+    dispute.stage === recorded.stage &&
+    stableJson(dispute.originRunIds) === stableJson([...recorded.runIdCohort].sort())
   )
 }
 export function projectDependencyDigest(snapshot: ProjectSnapshot, records: ReviewRecord[]): Hash {
@@ -140,7 +169,7 @@ function runtimeFinding(code: string, targetIds: Id[], explanation: string): Fin
     repair: 'manual-review',
   }
 }
-export function mechanicalFindings(root: string, snapshot: ProjectSnapshot, artifactId: Id, text: string): Finding[] {
+export function mechanicalFindings(root: string, snapshot: ProjectSnapshot, artifactId: Id, semanticText: string): Finding[] {
   const store = new ProjectStore(root, snapshot.projectId),
     findings: Finding[] = []
   const artifact = snapshot.artifacts.find((a) => a.id === artifactId)
@@ -151,7 +180,7 @@ export function mechanicalFindings(root: string, snapshot: ProjectSnapshot, arti
       continue
     }
     try {
-      const body = readFileSync(join(store.snapshotDir, source.snapshotPath.split('/').pop()!), 'utf8')
+      const body = readFileSync(resolveRecordedPath(root, source.snapshotPath), 'utf8')
       for (const ev of snapshot.evidence.filter((e) => e.sourceId === source.id)) {
         if (ev.sourceSnapshotHash !== source.snapshotHash)
           throw new Error(`evidence ${ev.id} uses an old snapshot hash`)
@@ -161,20 +190,21 @@ export function mechanicalFindings(root: string, snapshot: ProjectSnapshot, arti
       findings.push(runtimeFinding('EVID-01', [source.id], String(error)))
     }
   }
+  // §4.4: occurrence spans index the DRAFT (semantic text), never the render.
   for (const occurrence of artifact?.occurrences ?? [])
-    if (text.slice(occurrence.span.start, occurrence.span.end) !== occurrence.exactText)
+    if (semanticText.slice(occurrence.span.start, occurrence.span.end) !== occurrence.exactText)
       findings.push(
         runtimeFinding('EVID-01', [occurrence.claimId], 'bound occurrence no longer exactly matches the artifact'),
       )
   return findings
 }
 /** One scope for delivery and adjudication: batching makes target scope part of task identity. */
-export function deliveryScope(snapshot: ProjectSnapshot, artifactId: Id, text: string) {
+export function deliveryScope(snapshot: ProjectSnapshot, artifactId: Id, semanticText: string) {
   const index = buildReverseIndex(snapshot)
   const artifact = snapshot.artifacts.find((a) => a.id === artifactId)!
   const core = computeCoreSet({
     index,
-    artifactText: text,
+    artifactText: semanticText,
     requiredQuestionTexts: snapshot.contract.requiredQuestions.map((q) => q.text),
     artifactId,
   })
@@ -182,8 +212,8 @@ export function deliveryScope(snapshot: ProjectSnapshot, artifactId: Id, text: s
   return { index, artifact, core, targets }
 }
 export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
-  const { snapshot, artifactId, text } = input
-  const { index, artifact, core, targets } = deliveryScope(snapshot, artifactId, text)
+  const { snapshot, artifactId, semanticText } = input
+  const { index, artifact, core, targets } = deliveryScope(snapshot, artifactId, semanticText)
   const selected = currentReviews(snapshot, input.records, targets, input.reviewerConfigHash)
   // Feature D §D.2.1: stage progress from the FULL record store (failed
   // records included), planned with the same batch size as the runner.
@@ -194,14 +224,16 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
     targets,
     records: input.records,
     claimsBatchSize: snapshot.contract.reviewSettings?.claimsBatchSize ?? 1,
-    artifact: { id: artifactId, text },
+    artifact: { id: artifactId, text: semanticText },
     ...(input.reviewerConfigHash === undefined ? {} : { reviewerConfigHash: input.reviewerConfigHash }),
   })
   const contractHash = semanticContractHash(snapshot.contract),
-    artifactHash = sha256Hex(text)
+    artifactHash = input.artifactHash,
+    semanticHash = sha256Hex(semanticText)
   // §5.2: the explicit-skip declaration in effect for THIS binding (shared predicate).
+  // §4.4a: the skip key is the semantic (draft) hash — it follows the source.
   const auditSkip = input.runtime === undefined
-    ? auditSkipInEffect(input.root, snapshot.projectId, artifactId, artifactHash, artifact.entityVersion)
+    ? auditSkipInEffect(input.root, snapshot.projectId, artifactId, semanticHash, artifact.entityVersion)
     : input.runtime.auditSkip
   const expectedAudit = auditDependencyDigest(snapshot, artifactId, selected.records)
   const audit = input.records.filter(
@@ -317,7 +349,7 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
       ),
     ]
   }
-  const runtimeFindings = input.runtime?.mechanicalFindings ?? mechanicalFindings(input.root, snapshot, artifactId, text)
+  const runtimeFindings = input.runtime?.mechanicalFindings ?? mechanicalFindings(input.root, snapshot, artifactId, semanticText)
   const findings = [
     ...records.flatMap((r) => (r.stage === 'extract' ? [] : (r.response?.findings ?? []))),
     ...selected.findings,
@@ -399,6 +431,9 @@ export function evaluateDelivery(input: DeliveryInputs): DeliveryCheck {
       const ids = new Set(dependencyEntries(index, [a.claimId]).map((e) => e.id))
       return {
         claimId: a.claimId,
+        // §4.4: these spans are DRAFT (semantic-text) coordinates — markers
+        // shift offsets, so consumers resolve them against the draft that
+        // ships in the project tree, never against the rendered deliverable.
         spans: artifact.occurrences
           .filter((o) => o.claimId === a.claimId)
           .map((o) => [o.span.start, o.span.end] as [number, number]),

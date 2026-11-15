@@ -70,7 +70,7 @@ describe('argument.init happy path (§2.2/§2.3)', () => {
     for (const entry of ['HEAD.json', 'workspace.json', 'revisions', 'operations', 'locks']) {
       expect(existsSync(join(root, '.dsh', 'vwa', projectId, entry))).toBe(true)
     }
-    expect(existsSync(join(root, 'docs', 'vwa-sources', projectId))).toBe(true)
+    expect(existsSync(join(root, '.dsh', 'vwa', projectId, 'sources'))).toBe(true)
     const reservation = JSON.parse(readFileSync(reservationPath(root, requestId), 'utf8')) as Record<string, unknown>
     expect(reservation).toMatchObject({
       schemaVersion: 1,

@@ -50,7 +50,7 @@ describe('audit continuation search identity', () => {
     const run = (stages: ReviewStage[], continueMode = false) => executeReviewRun({
       ...base, runId: `run_${randomUUID()}`, requestId: randomUUID(), stages, continueMode,
     })
-    const report = () => evaluateDelivery({ root, snapshot, artifactId: artifact.id, text: artifact.text,
+    const report = () => evaluateDelivery({ root, snapshot, artifactId: artifact.id, semanticText: artifact.text, artifactHash: sha256Hex(artifact.text),
       records: allRecords(root, snapshot.projectId), pendingRunIds: [], adjudications: [] })
     const check = (stages: ReviewStage[]) => continuePreCheck({
       ...base, root, adapter, contractHash: deps.contractHash, stages,

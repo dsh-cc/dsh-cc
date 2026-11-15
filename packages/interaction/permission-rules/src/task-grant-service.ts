@@ -15,7 +15,8 @@ import type { ToolExecutionResult } from '@dsh-cc/tools'
 import type { ToolExecution } from '@dsh-cc/tools'
 import type { DecidedCall } from './decide.ts'
 import { checkGrantContentScope, type GitRunner } from './grant-content-scope.ts'
-import { isVwaStateWrite } from './vwa-state.ts'
+import { isVwaStateWrite, vwaStateRootOf } from './vwa-state.ts'
+import { isVwaBatchPath, isVwaDraftPrefix, relativeToStateRoot } from './vwa-paths.ts'
 import { GrantEscalations, type EscalationVerdict } from './grant-escalation.ts'
 import { grantAdmitsExec, type GrantMatchContext } from './task-grant-match.ts'
 import { deriveBranch, loadDescriptorFingerprint } from './task-grant-command.ts'
@@ -99,10 +100,18 @@ export class TaskGrants {
   async propose(agent: Agent, descriptorPath: string): Promise<TaskGrant> {
     const { face, hash } = loadDescriptorFingerprint(normalizePath(resolve(this.host.workspaceOf(agent) ?? '', descriptorPath)))
     const facts = await this.hostFacts(agent)
+    const stateRoot = vwaStateRootOf(facts.root)
     for (const path of face.writePaths) {
       const target = normalizePath(join(facts.root, path))
       if (!isPathWithin(facts.root, target)) throw new GrantValidationError('writePath escapes workspace root')
-      if (isVwaStateWrite(target, facts.root) || isPathWithin(target, normalizePath(join(facts.root, '.dsh/vwa')))) throw new GrantValidationError('writePath covers authoritative VWA state')
+      // A writePath is a PREFIX, so it is judged as one (§3.2): the physical
+      // batches subtree and a drafts prefix of a well-formed project are the
+      // only carve-outs. Everything else that lands in — or covers — the state
+      // tree needs a human, and a grant is not a human.
+      const rel = relativeToStateRoot(target, stateRoot)
+      const exemptPrefix = rel !== undefined && (isVwaBatchPath(rel) || isVwaDraftPrefix(rel))
+      if (!exemptPrefix && (isVwaStateWrite(target, facts.root) || isPathWithin(target, stateRoot)))
+        throw new GrantValidationError('writePath covers authoritative VWA state')
     }
     const grant = buildTaskGrant({ ...facts, face })
     this.pending.set(this.pendingKey(agent, descriptorPath), { grant, hash, facts })

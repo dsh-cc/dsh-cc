@@ -20,7 +20,7 @@ import { reviseFrozenSettings, type PatchReviewSettings, type ReviewSettingsRevi
 import type { FrozenReviewSettings } from './review-config.ts'
 import { computeDeletionClosure, computeDeletionOrder, findReferencesDetailed } from './references.ts'
 import type { AnyEntity, EntityKind, ReverseIndex } from './dependencies.ts'
-import { applyBindArtifact } from './artifact.ts'
+import { applyBindArtifact, type BindDeps } from './artifact.ts'
 import { buildReverseIndex, findEntity } from './dependencies.ts'
 import type {
   Argument, Artifact, Claim, Entity, EvidenceGroup, Id, Issue, Occurrence,
@@ -45,8 +45,23 @@ export type Mutation =
     /** Feature D §D.4.2: when true, deletes expand to the full reference closure. */
     cascade?: boolean
   }
-  | { op: 'bind-artifact'; artifactId?: Id; path: string; occurrences: Occurrence[]; outline: Artifact['outline'] }
-  // F3.3: partial capacity revision of the frozen review settings (never maxContextChars).
+  | {
+    op: 'bind-artifact'
+    artifactId?: Id
+    path: string
+    /**
+     * Explicit binding mode (design §4.1), selected before any text is read.
+     * NOT the same concept as the contract's `mode` ('draft' | 'reviewed',
+     * the delivery attestation posture) — the pun is historical.
+     */
+    mode: 'draft' | 'inline'
+    /** mode 'draft' only: the draft source under `.dsh/vwa/<projectId>/drafts/` (§3.1). */
+    draftPath?: string
+    /** First-bind ownership takeover when the deliverable is not ours (§4.3). */
+    overwrite?: boolean
+    occurrences: Occurrence[]
+    outline: Artifact['outline']
+  }
   // F3.3: partial capacity revision of the frozen review settings (never maxContextChars).
   | { op: 'set-review-settings'; reviewSettings: PatchReviewSettings }
 
@@ -153,19 +168,17 @@ export interface MutationOutcome {
 const VALID_OPS = new Set(['set-contract', 'upsert', 'bind-artifact', 'set-review-settings'])
 
 /** Apply one mutation to the working snapshot in place; full validation on completion (§10.5). */
-export function applyMutation(graph: GraphContext, mutation: Mutation): MutationOutcome {
+export function applyMutation(graph: GraphContext, mutation: Mutation, bindDeps?: BindDeps): MutationOutcome {
   const changedIds: Id[] = []
   let contractChanged = false
   let cascadeDeleted: Id[] | undefined
   let revision: ReviewSettingsRevisionOutcome & { reviewSettings: FrozenReviewSettings } | undefined
   // Feature D §D.1: validate the op enum at the entrance, before dispatch — an
   // unrecognized op used to fall through to bind-artifact and TypeError.
-  if (typeof mutation.op !== 'string' || !VALID_OPS.has(mutation.op)) {
-    reject('SCHEMA_INVALID', `missing or unknown op: got ${JSON.stringify((mutation as { op?: unknown }).op)}; expected one of set-contract, upsert, bind-artifact, set-review-settings`)
-  }
-  if (mutation.op === 'upsert' && (!Array.isArray(mutation.creates) || !Array.isArray(mutation.updates) || !Array.isArray(mutation.deletes))) {
+  const unknownOp = typeof mutation.op !== 'string' || !VALID_OPS.has(mutation.op)
+  if (unknownOp) reject('SCHEMA_INVALID', `missing or unknown op: got ${JSON.stringify((mutation as { op?: unknown }).op)}; expected one of set-contract, upsert, bind-artifact, set-review-settings`)
+  if (mutation.op === 'upsert' && (!Array.isArray(mutation.creates) || !Array.isArray(mutation.updates) || !Array.isArray(mutation.deletes)))
     reject('SCHEMA_INVALID', 'upsert requires creates, updates, and deletes arrays')
-  }
   if (mutation.op === 'set-contract') {
     validateDef('ProjectContract', mutation.contract)
     if (mutation.contract.question.trim() === '') reject('SCHEMA_INVALID', 'contract.question must be non-empty')
@@ -216,7 +229,7 @@ export function applyMutation(graph: GraphContext, mutation: Mutation): Mutation
       }
     }
   } else {
-    applyBindArtifact(graph, mutation)
+    applyBindArtifact(graph, mutation, bindDeps)
     changedIds.push(mutation.artifactId ?? 'artifact')
   }
   postValidate(graph.snapshot)
@@ -234,9 +247,7 @@ function affectedClaims(graph: GraphContext, changedIds: Id[]): Id[] {
   for (const changed of changedIds) {
     if (changed.startsWith('cl_')) affected.add(changed)
     for (const group of graph.snapshot.groups) {
-      if (group.id === changed || (changed.startsWith('ev_') && group.evidenceIds.includes(changed))) {
-        affected.add(group.targetClaimId)
-      }
+      if (group.id === changed || (changed.startsWith('ev_') && group.evidenceIds.includes(changed))) affected.add(group.targetClaimId)
     }
   }
   return [...affected].sort()
@@ -248,9 +259,7 @@ function createEntity(
   rawBody: Record<string, unknown>,
   newIds: Map<string, Id>,
 ): Id {
-  if (graph.countEntities() >= graph.maxEntities) {
-    reject('LIMIT_EXCEEDED', `project entity budget (${graph.maxEntities}) exhausted`)
-  }
+  if (graph.countEntities() >= graph.maxEntities) reject('LIMIT_EXCEEDED', `project entity budget (${graph.maxEntities}) exhausted`)
   const id = newEntityId(type)
   const body = resolveNewRefs(rawBody, newIds)
   const now = graph.now()
@@ -305,20 +314,13 @@ function validateEntity(_graph: GraphContext, type: CreateType, entity: Entity):
   requireNonEmpty(plain, NON_EMPTY[type])
   if (type === 'claim') {
     const scope = plain.scope as Claim['scope']
-    if (scope !== undefined) {
-      if (scope.time === '' || scope.geography === '') {
-        reject('SCHEMA_INVALID', 'scope time/geography use the literal "unspecified", never empty strings')
-      }
-    }
+    if (scope !== undefined && (scope.time === '' || scope.geography === ''))
+      reject('SCHEMA_INVALID', 'scope time/geography use the literal "unspecified", never empty strings')
   }
   if (type === 'issue') {
     const issue = entity as unknown as Issue
-    if (issue.kind === 'missing-evidence' && issue.gap === undefined) {
-      reject('SCHEMA_INVALID', 'missing-evidence issues require gap')
-    }
-    if (issue.kind !== 'missing-evidence' && issue.gap !== undefined) {
-      reject('SCHEMA_INVALID', 'only missing-evidence issues may carry gap')
-    }
+    if (issue.kind === 'missing-evidence' && issue.gap === undefined) reject('SCHEMA_INVALID', 'missing-evidence issues require gap')
+    if (issue.kind !== 'missing-evidence' && issue.gap !== undefined) reject('SCHEMA_INVALID', 'only missing-evidence issues may carry gap')
     if (issue.resolution === 'open' && issue.response.trim() === '') {
       // §5.1: response may be empty when open; non-empty required otherwise.
     } else if (issue.resolution !== 'open' && issue.response.trim() === '') {
@@ -327,15 +329,13 @@ function validateEntity(_graph: GraphContext, type: CreateType, entity: Entity):
   }
   if (type === 'argument') {
     const argument = entity as unknown as Argument
-    if (argument.premiseClaimIds.length === 0 && argument.evidenceGroupIds.length === 0) {
+    if (argument.premiseClaimIds.length === 0 && argument.evidenceGroupIds.length === 0)
       reject('SCHEMA_INVALID', `argument ${entity.id} needs at least one premise or evidence group`)
-    }
   }
   if (type === 'group') {
     const group = entity as unknown as EvidenceGroup
-    if (group.evidenceIds.length === 0 || new Set(group.evidenceIds).size !== group.evidenceIds.length) {
+    if (group.evidenceIds.length === 0 || new Set(group.evidenceIds).size !== group.evidenceIds.length)
       reject('SCHEMA_INVALID', 'evidenceIds must be non-empty and deduplicated')
-    }
   }
   if (type === 'claim' || type === 'group' || type === 'argument' || type === 'issue') {
     // Evidence-group target check and quote validation run in postValidate/creation paths below.

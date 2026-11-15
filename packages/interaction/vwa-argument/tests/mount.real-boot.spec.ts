@@ -452,6 +452,7 @@ describe('vwa-argument real mount: capture and artifact sources (§10.3/§10.5)'
         requestId: randomUUID(),
         input: {
           op: 'bind-artifact',
+          mode: 'inline',
           path: 'docs/report.md',
           outline: [],
           occurrences: [{ claimId, span: { start: 10, end: 32 }, exactText: 'The port closed in May' }],
@@ -509,6 +510,7 @@ describe("vwa-argument real mount: the delivery service resolves the CALLER's wo
         requestId: randomUUID(),
         input: {
           op: 'bind-artifact',
+          mode: 'inline',
           path: 'report.md',
           outline: [],
           occurrences: [{ claimId, span: { start: 0, end: body.length }, exactText: body }],
@@ -531,10 +533,18 @@ describe("vwa-argument real mount: the delivery service resolves the CALLER's wo
     const bProject = await boundProject(b, b.agentAt(rootB), rootB, 'Workspace B claim.')
     const providerA = resolveDeliveryProvider(b.ctx, rootA)
     const providerB = resolveDeliveryProvider(b.ctx, rootB)
-    expect(providerA?.listBoundArtifacts(a.projectId)).toEqual([{ artifactId: a.artifactId, path: 'report.md' }])
-    expect(providerB?.listBoundArtifacts(bProject.projectId)).toEqual([
-      { artifactId: bProject.artifactId, path: 'report.md' },
-    ])
+    const expectBound = (
+      entries: { artifactId: string; path: string; artifactHash: string; draftPath?: string }[] | undefined,
+      artifactId: string,
+    ) => {
+      expect(entries).toHaveLength(1)
+      expect(entries![0]!.artifactId).toBe(artifactId)
+      expect(entries![0]!.path).toBe('report.md')
+      expect(entries![0]!.artifactHash).toMatch(/^[0-9a-f]{64}$/)
+      expect(entries![0]!.draftPath).toBeUndefined()
+    }
+    expectBound(providerA?.listBoundArtifacts(a.projectId), a.artifactId)
+    expectBound(providerB?.listBoundArtifacts(bProject.projectId), bProject.artifactId)
     // A project id never leaks across workspaces.
     expect(providerA?.listBoundArtifacts(bProject.projectId)).toEqual([])
     const frozen = await providerA!.checkForDelivery(a.projectId, a.artifactId)

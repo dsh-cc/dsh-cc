@@ -110,7 +110,7 @@ describe('Feature C — delivery per-claim assessments over batched claims recor
     })
     expect(outcome.status).toBe('completed')
     const check = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: outcome.records, pendingRunIds: [], adjudications: [],
     })
     expect(check.checks.argument).toBe('pass')
@@ -122,7 +122,7 @@ describe('Feature C — delivery per-claim assessments over batched claims recor
       r.stage !== 'claims' || !r.targetRefs.some((ref) => ref.id === claims[2]!.id),
     )
     const incomplete = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: withoutLastBatch, pendingRunIds: [], adjudications: [],
     })
     expect(incomplete.assessments.find((a) => a.claimId === claims[2]!.id)?.reviewState).not.toBe('current')
@@ -138,7 +138,7 @@ describe('Feature C — delivery per-claim assessments over batched claims recor
       root: f.root,
       snapshot: f.snapshot,
       artifactId: f.artifactId,
-      text: f.body,
+      semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: outcome.records,
       pendingRunIds: [],
       adjudications: [],
@@ -163,7 +163,7 @@ describe('Feature C — delivery per-claim assessments over batched claims recor
       root: batched.root,
       snapshot: batched.snapshot,
       artifactId: batched.artifactId,
-      text: batched.body,
+      semanticText: batched.body, artifactHash: sha256Hex(batched.body),
       records: outcome.records,
       pendingRunIds: [],
       adjudications: [],
@@ -200,7 +200,7 @@ describe('Feature D — report stage progress and failure detail (§D.2)', () =>
       targetClaimIds: claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
     })
     const check = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: outcome.records, pendingRunIds: [], adjudications: [],
     })
     expect(check.stageProgress.claims).toMatchObject({
@@ -225,7 +225,7 @@ describe('Feature D — report stage progress and failure detail (§D.2)', () =>
       targetClaimIds: f.claims.map((c) => c.id), snapshot: f.snapshot, signal: new AbortController().signal,
     })
     const check = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: outcome.records, pendingRunIds: [], adjudications: [],
     })
     expect(check.stageProgress.claims).toMatchObject({ total: 1, completed: 0, failed: 1, notRun: 0 })
@@ -265,7 +265,7 @@ describe('report progress regressions', () => {
     expect(outcome.records).toHaveLength(1)
     expect(outcome.records[0]).toMatchObject({ stage: 'arguments', status: 'error', errorCode: 'CONTEXT_TOO_LARGE' })
     const check = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: [...claims.records, ...outcome.records], pendingRunIds: [], adjudications: [],
     })
     expect(check.stageProgress.arguments).toMatchObject({ total: 1, completed: 0, failed: 1, notRun: 0 })
@@ -288,7 +288,7 @@ describe('report progress regressions', () => {
       if (change === 'policy') for (const record of outcome.records) record.policyHash = 'old policy'
       if (change === 'scope') for (const record of outcome.records) record.inputHash = 'old scope'
       const check = evaluateDelivery({
-        root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+        root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
         records: outcome.records, pendingRunIds: [], adjudications: [],
         ...(change === 'reviewer' ? { reviewerConfigHash: 'new reviewer' } : {}),
       })
@@ -304,7 +304,7 @@ describe('report progress regressions', () => {
       status: 'error' as const, errorCode: 'REVIEW_UNAVAILABLE', endedAt: '2099-01-01',
     }
     const check = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: [...outcome.records, stale], pendingRunIds: [], adjudications: [],
     })
     expect(check.stageProgress.claims).toMatchObject({ completed: 2, failed: 0, notRun: 0 })
@@ -322,7 +322,7 @@ describe('report progress regressions', () => {
       artifact: { id: f.artifactId, path: 'report.md', text: f.body }, signal: new AbortController().signal,
     })
     const check = evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: outcome.records, pendingRunIds: [], adjudications: [],
     })
     expect(check.stageProgress.audit).toMatchObject({ total: 1, completed: 0, failed: 1, notRun: 0, budgetErrors: 1 })
@@ -334,7 +334,7 @@ describe('report progress regressions', () => {
     const changed = structuredClone(f.snapshot)
     changed.artifacts[0]!.entityVersion += 1
     const stale = evaluateDelivery({
-      root: f.root, snapshot: changed, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: changed, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: outcome.records, pendingRunIds: [], adjudications: [],
     })
     expect(stale.stageProgress.audit).toMatchObject({ completed: 0, failed: 0, notRun: 1 })
@@ -356,7 +356,7 @@ describe('report progress regressions', () => {
       { ...base, stage: 'align', promptHash: promptHash('align'), response: { stage: 'align', rubricVersion: 'humanities-v1', targets: [], findings: [] } },
     ]
     const check = (rows = records) => evaluateDelivery({
-      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, text: f.body,
+      root: f.root, snapshot: f.snapshot, artifactId: f.artifactId, semanticText: f.body, artifactHash: sha256Hex(f.body),
       records: rows, pendingRunIds: [], adjudications: [],
     })
     expect(check().stageProgress.audit).toMatchObject({ total: 1, completed: 1, failed: 0, notRun: 0 })

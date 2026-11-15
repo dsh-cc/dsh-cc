@@ -72,7 +72,8 @@ export async function executeReviewRun(input: {
   targetClaimIds: Id[]
   snapshot: ProjectSnapshot
   signal: AbortSignal
-  artifact?: { id: Id; path: string; text: string }
+  /** text = the SEMANTIC text (the draft for draft-backed artifacts, §4.4); artifactHash = rendered hash. */
+  artifact?: { id: Id; path: string; text: string; artifactHash?: Hash }
   maxUnitChars?: number
   /** §A.2: continue mode — reuse completed records across requestIds. */
   continueMode?: boolean
@@ -83,8 +84,7 @@ export async function executeReviewRun(input: {
   // Per-run counters enforce liveness; every dispatch also reserves against
   // the aggregate cycle ledger under a cross-process lock.
   const budget = new BudgetTracker(deps.budget, deps.now)
-  const records: ReviewRecord[] = [],
-    findings: unknown[] = []
+  const records: ReviewRecord[] = [], findings: unknown[] = []
   const history = allRecords(deps.root, snapshot.projectId)
   const index = buildReverseIndex(snapshot)
   const startedAt = new Date(deps.now?.() ?? Date.now()).toISOString()
@@ -95,9 +95,7 @@ export async function executeReviewRun(input: {
   }, startedAt)
   const reserved = reserveCycleRequest(deps.root, snapshot.projectId, runId, request)
   if (!('ok' in reserved)) Object.assign(request, reserved)
-  let coreDiscovered = false,
-    newClaimProposals: unknown[] = [],
-    auditMetrics: ReviewRunOutcome['auditMetrics']
+  let coreDiscovered = false, newClaimProposals: unknown[] = [], auditMetrics: ReviewRunOutcome['auditMetrics']
   const finish = (status: ReviewJobStatus, refusal?: Fail): ReviewRunOutcome => {
     const totals = { inputTokens: budget.inputTokens, outputTokens: budget.outputTokens, calls: budget.calls }
     store.writeOutcome(runId, {
@@ -173,7 +171,8 @@ export async function executeReviewRun(input: {
     // the successful extract/align pair so progress can reject stale runs.
     ...(stage === 'audit' && input.artifact ? {
       targetRefs: [{ id: input.artifact.id, entityVersion: snapshot.artifacts.find((a) => a.id === input.artifact!.id)?.entityVersion ?? 1 }],
-      artifactHash: sha256Hex(input.artifact.text),
+      artifactHash: input.artifact.artifactHash ?? sha256Hex(input.artifact.text),
+      semanticHash: sha256Hex(input.artifact.text),
       dependencyDigest: auditDependencyDigest(snapshot, input.artifact.id,
         currentReviews(snapshot, [...history, ...records], input.targetClaimIds, configHash).records),
     } : {}),
@@ -318,7 +317,7 @@ export async function executeReviewRun(input: {
             const ownRuns = new Set(requestRuns(deps.root, snapshot.projectId, input.requestId))
             const reusable = reusableRecord(prior, task, input.continueMode === true, ownRuns)
             if (reusable) {
-              save({ ...reusable, runId })
+              save({ ...reusable, runId, originRunId: reusable.originRunId ?? reusable.runId }) // §6.2: reuse keeps the PRODUCING run
               // §A.3.5: reused records appear in the ledger with zero tokens.
               if (input.continueMode === true)
                 store.appendUsage(runId, {

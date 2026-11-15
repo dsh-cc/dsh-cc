@@ -81,6 +81,7 @@
         "createdAt": { "$ref": "#/$defs/Rfc3339" },
         "updatedAt": { "$ref": "#/$defs/Rfc3339" },
         "snapshotPath": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "corpusPath": { "type": "string", "minLength": 1, "maxLength": 512 },
         "snapshotHash": { "$ref": "#/$defs/Hash" },
         "acquisition": {
           "type": "object",
@@ -270,6 +271,16 @@
         "updatedAt": { "$ref": "#/$defs/Rfc3339" },
         "path": { "type": "string", "minLength": 1, "maxLength": 512 },
         "contentHash": { "$ref": "#/$defs/Hash" },
+        "draft": {
+          "type": "object",
+          "description": "§3.1/§8.3: the draft this artifact was rendered from (absent on legacy inline artifacts).",
+          "additionalProperties": false,
+          "required": ["path", "draftHash"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "draftHash": { "$ref": "#/$defs/Hash" }
+          }
+        },
         "occurrences": { "type": "array", "items": { "$ref": "#/$defs/Occurrence" }, "maxItems": 1000 },
         "outline": {
           "type": "array",
@@ -324,7 +335,7 @@
       "additionalProperties": false,
       "required": ["schemaVersion", "projectId", "revision", "workspaceIdentity", "contract", "sources", "evidence", "claims", "groups", "arguments", "issues", "searches", "artifacts"],
       "properties": {
-        "schemaVersion": { "const": 1 },
+        "schemaVersion": { "enum": [1, 2] },
         "projectId": { "$ref": "#/$defs/ProjectId" },
         "revision": { "type": "integer", "minimum": 1 },
         "workspaceIdentity": { "$ref": "#/$defs/Hash" },

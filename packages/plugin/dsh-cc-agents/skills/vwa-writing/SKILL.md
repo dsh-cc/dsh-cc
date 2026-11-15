@@ -44,6 +44,11 @@ For a new article, agree on the source scope and body path.
 For an existing article, preserve the body unless the user requests changes.
 You can read, register, map, bind, and review an existing article without rewriting it.
 
+A project still on the old state layout must be migrated first: ask the user to run `/vwa repair <projectId> --migrate`.
+Migration hash-verifies and moves every source snapshot, creates the drafts, renders and retired directories, and retires the project's review records and adjudications.
+Tell the user up front that the project then reads `not-run` until it is reviewed again.
+Never migrate a project by hand.
+
 ## 3. Register evidence and build the graph
 
 Read the actual sources before `evidence.register`.
@@ -63,15 +68,21 @@ Cascade delete removes all entities that reference the target, including argumen
 
 When a source exceeds the review context window, register a distilled companion source with `lineage.parentSourceIds: ["src_original"]`. The companion's text should be a faithful summary or structured extract (e.g., counts, key passages). Cite the companion instead of the oversized original in claim scope or evidence to request its review. The original remains registered and contributes dependency metadata and any evidence slices, without inlining its full text in the companion's review. Reviewing the companion does not verify the full original; requesting a separate review of an oversized structured original still returns `CONTEXT_TOO_LARGE`.
 
-## 4. Write and bind the body
+## 4. Edit the draft, then bind
 
-Use the normal write/edit tools for an authorized body change.
+Write the body into a draft — `.dsh/vwa/<projectId>/drafts/<name>.md` — with the normal write/edit tools.
+The draft is the source; the deliverable at the body path is compile output produced by the bind.
+Never edit the deliverable: an edit there is drift, invisible to the graph, and the next bind overwrites it.
 Put necessary limits, uncertainty, and material disputes in the relevant body paragraphs.
 Keep source markers. Claim markers are optional author aids.
-Remove internal claim markers before final review if they are not reader content.
-Then bind the current body with `argument.update` using `op: "bind-artifact"`.
-Preserve exact occurrence text and valid spans. Follow the live tool schema.
-Every later body change needs a new binding and review.
+
+Then bind the draft with `argument.update`, `op: "bind-artifact"`, `mode: "draft"`, the deliverable `path` and the matching `draftPath`.
+The bind renders the deliverable: every `〔src:…〕` and `〔claim:…〕` marker is stripped from the bytes the reader gets.
+Occurrence spans index the DRAFT text, markers included. Preserve exact occurrence text and valid spans. Follow the live tool schema.
+Re-binding overwrites the deliverable it owns; taking over a file this pipeline never produced needs `overwrite: true`.
+Use `mode: "inline"` only for an artifact that has no draft — it validates the body as written and writes nothing.
+Keep the deliverable `.md` or `.mdx`: `argument.review` reads the deliverable through the markdown artifact-path gate even though draft mode would accept another extension.
+Every later body change means editing the draft, binding again, and a new review.
 
 ## 5. Run the complete review
 

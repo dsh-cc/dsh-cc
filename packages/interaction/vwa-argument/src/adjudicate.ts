@@ -8,7 +8,9 @@
  */
 import { randomUUID } from 'node:crypto'
 import { appendAdjudication, currentDependencyDigest, readReviewRecords } from './report.ts'
-import type { AdjudicationRecord, Finding, Id } from './types.ts'
+import { resolveDisputes, type Dispute } from './dispute.ts'
+import { ProjectStore } from './store.ts'
+import type { AdjudicationDispute, AdjudicationRecord, Finding, Hash, Id } from './types.ts'
 import type { CommandResult } from '@deepseek-ai/dsh-commands'
 
 /** Deterministic failures (path/hash/quote mismatch) can never be adjudicated away (§18). */
@@ -93,6 +95,24 @@ function conflictingSlot(
 }
 
 /**
+ * §6.2: the dispute a disagreement finding belongs to, recovered through the
+ * persisted marker's `{inputHash, stage}` so the recorded id is exactly the one
+ * delivery computes later — never a value re-minted at adjudication time.
+ */
+function disputeForFinding(root: string, projectId: string, findingId: string): Dispute | undefined {
+  const head = new ProjectStore(root, projectId).readHead()
+  if (!head.ok) return undefined
+  const records = readReviewRecords(root, projectId)
+  const home = records.find(
+    (record) => record.stage !== 'extract' && record.response?.findings.some((f) => f.id === findingId),
+  )
+  if (home === undefined) return undefined
+  return resolveDisputes(head.data.snapshot, records).find(
+    (dispute) => dispute.inputHash === home.inputHash && dispute.stage === home.stage,
+  )
+}
+
+/**
  * The /vwa adjudicate transaction (§18, §4.4). `prevailingRunId` is required
  * for a REVIEWER_DISAGREEMENT (validated against its conflicting runs) and
  * optional for legacy single-run findings.
@@ -121,6 +141,7 @@ export async function vwaAdjudicate(
   let runId = finding.runId ?? ''
   let supersededRunId: Id | undefined
   let slot: { ruleId: string; targetId: Id } | undefined
+  let dispute: Dispute | undefined
   if (finding.code === 'REVIEWER_DISAGREEMENT') {
     const runs = conflictingRunIds(root, projectId, findingId)
     if (runs.length < 2) {
@@ -144,15 +165,37 @@ export async function vwaAdjudicate(
         text: `finding ${findingId} does not identify exactly one conflicting (target, rule) slot; re-run the review or repair the store.`,
       }
     }
+    dispute = disputeForFinding(root, projectId, findingId)
+    if (dispute === undefined) {
+      return {
+        kind: 'error',
+        text: `finding ${findingId} is a reviewer disagreement, but its dispute is not readable from the record store; re-run the review or repair the store.`,
+      }
+    }
   } else if (prevailingRunId !== undefined && prevailingRunId !== runId) {
     return {
       kind: 'error',
       text: `prevailingRunId ${prevailingRunId} is not the run that produced finding ${findingId} (${runId}).`,
     }
   }
-  const dependencyDigest = currentDependencyDigest(root, projectId)
-  if (dependencyDigest === undefined) {
-    return { kind: 'error', text: 'cannot read the project HEAD; repair the store first (/vwa repair).' }
+  // §6.2: a disagreement row binds the dispute cohort; a legacy row keeps the
+  // content digest it was recorded against.
+  let binding: { dependencyDigest: Hash } | { dispute: AdjudicationDispute }
+  if (dispute === undefined) {
+    const dependencyDigest = currentDependencyDigest(root, projectId)
+    if (dependencyDigest === undefined) {
+      return { kind: 'error', text: 'cannot read the project HEAD; repair the store first (/vwa repair).' }
+    }
+    binding = { dependencyDigest }
+  } else {
+    binding = {
+      dispute: {
+        disputeId: dispute.disputeId,
+        inputHash: dispute.inputHash,
+        stage: dispute.stage,
+        runIdCohort: dispute.originRunIds,
+      },
+    }
   }
   const record: AdjudicationRecord = {
     adjudicationId: `adj_${randomUUID()}`,
@@ -161,7 +204,7 @@ export async function vwaAdjudicate(
     reason: reason.trim(),
     signer: 'user',
     ts: new Date().toISOString(),
-    dependencyDigest,
+    ...binding,
     overrides: {
       ruleId: slot?.ruleId ?? finding.code,
       targetId: slot?.targetId ?? finding.targetIds[0] ?? '',

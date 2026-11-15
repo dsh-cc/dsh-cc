@@ -19,6 +19,15 @@ import type { Hash, Id, ProjectSnapshot, ReviewRecord } from './types.ts'
 
 export const AUDIT_RULE_IDS = ['AUDIT-01', 'AUDIT-02', 'AUDIT-03', 'AUDIT-04', 'AUDIT-05'] as const
 
+/**
+ * §4.4a join key for the audit's semantic identity: `semanticHash` (sha256
+ * of the draft) on new records, with the pre-split `artifactHash` as the
+ * legacy fallback (identical value for legacy inline artifacts).
+ */
+export function recordSemanticHash(record: ReviewRecord): Hash | undefined {
+  return record.semanticHash ?? record.artifactHash
+}
+
 /** Effective extraction unit size: the unit cap, halved context when a caller enforces one. */
 export function auditUnitChars(maxUnitChars: number, maxContextChars?: number): number {
   return Math.min(maxUnitChars, maxContextChars === undefined ? maxUnitChars : Math.max(1, Math.floor(maxContextChars / 2)))
@@ -49,7 +58,8 @@ export function auditInputHash(input: {
       // Invalidate those records in BOTH admission and runner reuse checks;
       // version 2 guarantees that these finding codes are runtime-owned.
       resultVersion: 2,
-      artifactHash: sha256Hex(input.artifact.text),
+      // §4.4a: reuse follows the SOURCE (the draft), never the render.
+      semanticHash: sha256Hex(input.artifact.text),
       dependencyDigest: auditDependencyDigest(input.snapshot, input.artifact.id, input.records),
       coreClaimIds: [...new Set(input.coreClaimIds)].sort(),
       contractHash: input.contractHash,

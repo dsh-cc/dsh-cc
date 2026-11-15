@@ -12,6 +12,7 @@ import { currentReviews, matchesReviewTask, auditDependencyDigest } from './revi
 import { taskDependencyDigest } from './review-input.ts'
 import { sha256Hex } from './schema.ts'
 import { policyHash, promptHash, semanticContractHash } from './review-contract.ts'
+import { recordSemanticHash } from './audit-reuse.ts'
 import type { ReverseIndex } from './dependencies.ts'
 import type { Id, ProjectSnapshot, ReviewFailure, ReviewRecord, ReviewStage, StageProgress } from './types.ts'
 
@@ -136,8 +137,9 @@ export function computeStageProgress(input: {
     progress.total = 1
     const artifact = input.snapshot.artifacts.find((a) => a.id === input.artifact!.id)
     const digest = auditDependencyDigest(input.snapshot, input.artifact.id, current)
+    const semanticHash = sha256Hex(input.artifact.text)
     const matching = auditRecords.filter((r) =>
-      r.artifactHash === sha256Hex(input.artifact!.text) && r.contractHash === contractHash &&
+      recordSemanticHash(r) === semanticHash && r.contractHash === contractHash &&
       r.policyHash === policyHash() && r.dependencyDigest === digest &&
       r.targetRefs.some((ref) => ref.id === artifact?.id && ref.entityVersion === artifact.entityVersion) &&
       (input.reviewerConfigHash === undefined || r.reviewerConfigHash === input.reviewerConfigHash) &&

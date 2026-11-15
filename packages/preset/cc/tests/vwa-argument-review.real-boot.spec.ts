@@ -392,6 +392,7 @@ describe('agent.vwa.cordis.yml argument-review group (semantic-enabled real boot
         requestId: randomUUID(),
         input: {
           op: 'bind-artifact',
+          mode: 'inline',
           path: 'report.md',
           outline: [],
           occurrences: [{ claimId, span: { start: 0, end: claimText.length }, exactText: claimText }],

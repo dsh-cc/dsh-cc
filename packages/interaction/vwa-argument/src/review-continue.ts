@@ -19,7 +19,7 @@ import { ReviewRunStore, cacheKey, recordReusable } from './review-run-store.ts'
 import { taskDependencyDigest } from './review-input.ts'
 import { currentReviews } from './review-current.ts'
 import { policyHash, promptHash, recordMatchesKey } from './review-contract.ts'
-import { auditInputHash, effectiveAuditUnitChars, hasReusableAudit } from './audit-reuse.ts'
+import { auditInputHash, effectiveAuditUnitChars, hasReusableAudit, recordSemanticHash } from './audit-reuse.ts'
 import { cycleBudgetRefusal, cycleUsage } from './review-cycle.ts'
 import type { ReviewBudget } from './review-budget.ts'
 import { fail, type Fail } from './store.ts'
@@ -65,9 +65,10 @@ export function frozenCoreSet(input: {
     requiredQuestionTexts: input.snapshot.contract.requiredQuestions.map((q) => q.text),
   })
   if (input.artifact) {
-    const artifactHash = sha256Hex(input.artifact.text)
+    // §4.4a: core discovery joins prior align records on the SEMANTIC hash.
+    const semanticHash = sha256Hex(input.artifact.text)
     for (const r of input.history ?? allRecords(input.root, input.snapshot.projectId)) {
-      if (r.stage !== 'align' || r.artifactHash !== artifactHash) continue
+      if (r.stage !== 'align' || recordSemanticHash(r) !== semanticHash) continue
       for (const id of r.coreClaimIds ?? []) if (input.index.claims.has(id)) core.add(id)
     }
   }

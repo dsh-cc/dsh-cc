@@ -62,7 +62,7 @@ markdown 交付物转成机器可查证证据回执的纯函数模块。
   评估器将其实现为按会话单调事件序的每路径最后一行选取
   （`staleAgainst`），不引入额外的外部记账。
 
-## Lane-2 绑定产物交付（§16.2）
+## 绑定产物交付（§16.2）
 
 当 `vwa-argument` 服务挂载在同一 realm 时，回合结束评估器还会处理被某个
 `vwa-argument` 项目绑定的产物（`src/bound-eval.ts`、`src/vwa-delivery.ts`）。
