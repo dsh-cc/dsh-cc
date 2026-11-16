@@ -17,6 +17,35 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.9.6-rc.1 — MCP permissions, VWA renders and a stricter completion gate
+
+- **MCP permissions** — a bare \`mcp__<server>\` rule now releases every
+  tool on that server with Claude Code semantics, over a public MCP name
+  decomposition that is contract-unique. MCP calls in \`auto\` mode resolve
+  a deterministic class before the gauge: a curated read-only table
+  (serena, pinned to its live tool list) and settings-declared
+  workspace-write classes, screened so a protected-path argument forces an
+  ask. Annotation trust stays opt-in and never amplifies plan mode.
+- **VWA renders** — the autonomous render pipeline lands: drafts are the
+  editable source and a bind renders the marker-free deliverable,
+  \`gr:\` citations cover corpus-registered sources, state moves under
+  \`.dsh/vwa/<id>/{sources,reports,renders}\`, \`schemaVersion\` 2 adds
+  \`/vwa repair --migrate\`, and dispute judgments key on input hash plus
+  stage so a cached run can never expire one.
+- **Completion gate** — an opt-in \`enforce\` mode re-opens a turn whose
+  final message carries unmatched completion claims and, when the cycle
+  budget is spent, records a terminal \`completion-gate/unverified\` marker
+  at turn end. The default stays \`nudge\`; enforce needs
+  \`cc-completion-gate.mode: 'enforce'\`.
+- **Review contracts** — the critic agent gains a design-review mode: walk
+  a failure-class taxonomy, anchor every finding to a \`file:line\` read in
+  this run, open with \`VERDICT\` and P0–P2 findings. The orchestration
+  skill documents the four-part review brief shared by the critic and the
+  bridge lanes.
+- **Docs and models** — root and package READMEs are trued up against the
+  implementation, and the render pipeline ships with TLA+ models for the
+  render-commit and adjudication paths under \`specs/tla\`.
+
 ## 0.9.5 — governed model input, skill routing and one memory catalog
 
 - **Input ledger** — every model step now records what it actually received
