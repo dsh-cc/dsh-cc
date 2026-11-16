@@ -47,6 +47,9 @@ it and re-dispatch; it is neither GO nor a finding. Leave plan mode only
 when the review returns GO with no open P0/P1 findings, or every finding
 from a GO-WITH-CHANGES / NO-GO is folded or rejected and a delta brief on
 the folds (and on anything else the revision touched) re-reviews to GO.
+The divergence stop below applies here too: two consecutive rounds that
+add no new P0/P1 while none remain open mean the review is churning —
+stop and surface it to the user.
 
 Verification is planned too: name the behavior, how it is driven (script/browser/
 CLI) and the observable result that counts as pass before verifying; ambiguous
@@ -77,9 +80,12 @@ rungs to P0/P1), is a blocker — fold or reject it, then delta re-review
 the SAME revision on every seat: an approval of a superseded revision does
 not carry. GO-WITH-CHANGES resolves the same way — fold, delta re-review
 to GO; P2s are folded when cheap but never gate. A seat that never returns,
-or returns BLOCKED, is surfaced to the user — not waited on, not counted
-as GO. If two consecutive rounds produce no new P0/P1, stop and surface
-the divergence to the user. Disagreement IS the finding —
+or returns BLOCKED, is surfaced to the user and that seat's approval is
+withheld: the pass does not continue on the reduced roster without an
+explicit user decision, and a second BLOCKED from the same seat ends the
+pass at the user. If two consecutive rounds add no new P0/P1 while none
+remain open, stop and surface the divergence to the user — a stop never
+authorizes proceeding with a P0/P1 still open. Disagreement IS the finding —
 dig into the divergence before deciding.
 
 ### Execution & failure recovery

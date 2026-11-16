@@ -131,7 +131,11 @@ material instead of summarizing it:
    what version it actually read; material it cannot read or that does not
    match the pinned version is reported BLOCKED, never reviewed from memory.
    Freeze the pinned material while reviews are in flight — no edits to it;
-   if it must change, re-dispatch with a fresh brief.
+   if it must change, re-dispatch with a fresh brief. The reviewer restates
+   the pinned version in its report, and a restatement that differs across
+   seats is a BLOCKED, not a discrepancy to argue: prefer a commit or a
+   snapshot whenever one exists, because a live-tree pin is only as good as
+   that restatement.
 3. **Self-check anchors** — the entry points that decide the verdict, named
    explicitly: where the load-bearing claims live. Anchors are a start, not a
    boundary — the reviewer follows the related calls, state transitions and

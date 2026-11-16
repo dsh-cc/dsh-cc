@@ -195,16 +195,22 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       await reasoner.start({ prompt: 'x' })
       const delegation = specs[specs.length - 1]!['request'] as Record<string, unknown>
       const persona = String((delegation['prompt'] as readonly { text: string }[])[0]!.text)
-      // The review contract must reach every model: verdict line (incl. the
-      // BLOCKED escape), severity ladder with anchor rule, evidence
-      // self-read rule and the missing-specification bar.
+      // Phrase-presence smoke pin, not a semantic contract check: it fails if
+      // the review contract stops reaching non-gated models, and it names the
+      // load-bearing clauses (BLOCKED + its version precondition, self-read,
+      // anchor rule, malformed-GO rule) so a wholesale rewrite trips it.
       expect(persona).toContain('## Design review mode')
       expect(persona).toContain('GO-WITH-CHANGES')
       expect(persona).toContain('P0|P1|P2')
       expect(persona).toContain('BLOCKED')
+      expect(persona).toContain('never review from memory')
       expect(persona).toContain('Read the material yourself')
+      expect(persona).toContain('the version')
       expect(persona).toContain('Anchor every finding')
       expect(persona).toContain('Missing specification is a defect')
+      // The severity ladder must stay meaningful: the malformed-GO rule is
+      // what stops a seat returning GO alongside open P0/P1 findings.
+      expect(persona).toContain('A GO with an open P0/P1 finding is a malformed review')
       // ...and it must sit OUTSIDE the marked block: content placed inside
       // vanishes for the default routed critic.
       expect(persona).not.toContain('actor-contract:')
