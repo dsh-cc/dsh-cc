@@ -180,6 +180,46 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     }
   })
 
+  it('keeps the design-review contract in the persona of a critic on a routed model', async () => {
+    const ctx = new Context()
+    const { subagents, providers, specs } = subagentsSeam()
+    const mount = await mountCcPlugin(ctx, {
+      root: REAL_PLUGIN_DIR,
+      seams: { subagents },
+      // A configured alias resolves to a concrete route; any non-gated model
+      // strips the marked block while the review contract outside it survives.
+      resolveModel: () => 'routed/model-a',
+    })
+    try {
+      const reasoner = providers.find(p => p.definition.agentType === 'critic')!
+      await reasoner.start({ prompt: 'x' })
+      const delegation = specs[specs.length - 1]!['request'] as Record<string, unknown>
+      const persona = String((delegation['prompt'] as readonly { text: string }[])[0]!.text)
+      // Phrase-presence smoke pin, not a semantic contract check: it fails if
+      // the review contract stops reaching non-gated models, and it names the
+      // load-bearing clauses (BLOCKED + its version precondition, self-read,
+      // anchor rule, malformed-GO rule) so a wholesale rewrite trips it.
+      expect(persona).toContain('## Design review mode')
+      expect(persona).toContain('GO-WITH-CHANGES')
+      expect(persona).toContain('P0|P1|P2')
+      expect(persona).toContain('BLOCKED')
+      expect(persona).toContain('never review from memory')
+      expect(persona).toContain('Read the material yourself')
+      expect(persona).toContain('the version')
+      expect(persona).toContain('Anchor every finding')
+      expect(persona).toContain('Missing specification is a defect')
+      // The severity ladder must stay meaningful: the malformed-GO rule is
+      // what stops a seat returning GO alongside open P0/P1 findings.
+      expect(persona).toContain('A GO with an open P0/P1 finding is a malformed review')
+      // ...and it must sit OUTSIDE the marked block: content placed inside
+      // vanishes for the default routed critic.
+      expect(persona).not.toContain('actor-contract:')
+      expect(persona).not.toContain('You reason over a read-only tool set')
+    } finally {
+      mount.dispose()
+    }
+  })
+
   it('the skills component LOADS (not skipped) and the skill is visible in a real registry', async () => {
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)

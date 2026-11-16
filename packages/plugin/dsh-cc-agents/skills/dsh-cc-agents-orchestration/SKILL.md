@@ -112,3 +112,40 @@ resolved child model matches the `actor-contract.models` settings patterns
 (default `['glm-*']`). Agents whose contract is GLM-specific (actor framing,
 evidence rules) opt in by adding their own marked block near the identity
 line; content outside markers reaches every model.
+
+## Review briefs (plan, design, architecture)
+
+A review is only as deep as its brief. Send the same four parts to
+`dsh-cc-agents:critic` and to an external bridge lane, and point at the
+material instead of summarizing it:
+
+1. **Role and prohibition** — "adversarial design review of `<subject>`; do not
+   modify any files."
+2. **The material, versioned** — pin each part's exact bytes: the plan or
+   design (a committed path, or a snapshot materialized for the review when it
+   is not yet committed), and the source baseline (a named commit, or the live
+   tree explicitly declared as such). Never point at both a sha and "the
+   current worktree" — a dirty tree or an uncommitted plan makes two reviewers
+   read different bytes. Say "read the material itself, not a diff and not a
+   summary": a reviewer fed a summary reviews the summary. The reviewer states
+   what version it actually read; material it cannot read or that does not
+   match the pinned version is reported BLOCKED, never reviewed from memory.
+   Freeze the pinned material while reviews are in flight — no edits to it;
+   if it must change, re-dispatch with a fresh brief. The reviewer restates
+   the pinned version in its report, and a restatement that differs across
+   seats is a BLOCKED, not a discrepancy to argue: prefer a commit or a
+   snapshot whenever one exists, because a live-tree pin is only as good as
+   that restatement.
+3. **Self-check anchors** — the entry points that decide the verdict, named
+   explicitly: where the load-bearing claims live. Anchors are a start, not a
+   boundary — the reviewer follows the related calls, state transitions and
+   failure paths from there; a review confined to the dispatcher's pre-named
+   risks is only half a review.
+4. **Output contract and stakes** — verdict first, numbered findings with
+   severity and `file:line`, and what makes a missed defect expensive
+   (irreversible, public API, data model, migration). Add that the implementer
+   will carry the reviewed text out verbatim, so ambiguity is a defect.
+
+Send the same brief blind to more than one seat; never feed one seat's findings
+into another's brief. A brief edit is a prompt change: name the expected
+behavior change when you commit it, then observe it in a later real review.

@@ -35,7 +35,21 @@ Enter plan mode before: new features, >2-3-file changes, multiple viable
 approaches, refactor/migration/deletion. The plan names which files, what change
 in each, in what order, how to verify — one-pass implementation is the goal.
 Before ExitPlanMode: task `dsh-cc-agents:critic` to review the plan cold as a
-Staff Engineer; revise per its findings, re-review if substantial.
+Staff Engineer, on the review-brief form the `dsh-cc-agents-orchestration`
+skill states (pinned versions, self-read anchors, verdict/findings
+contract) — a bare "review this plan" buys agreement, not defects. If the
+plan meets the high-stakes bar below, its review is that three-seat pass,
+not the single critic seat. Fold a finding only after re-checking it
+against the tree — a finding disproved on re-check is rejected with the
+evidence, and a rejected finding does not gate; re-dispatch rather than
+plan around speculation. A BLOCKED review means the brief was broken: fix
+it and re-dispatch; it is neither GO nor a finding. Leave plan mode only
+when the review returns GO with no open P0/P1 findings, or every finding
+from a GO-WITH-CHANGES / NO-GO is folded or rejected and a delta brief on
+the folds (and on anything else the revision touched) re-reviews to GO.
+The divergence stop below applies here too: two consecutive rounds that
+add no new P0/P1 while none remain open mean the review is churning —
+stop and surface it to the user.
 
 Verification is planned too: name the behavior, how it is driven (script/browser/
 CLI) and the observable result that counts as pass before verifying; ambiguous
@@ -44,7 +58,8 @@ detail: the `change-cookbook` skill.
 
 ### High-stakes decisions (parallel blind review)
 For irreversible or expensive choices (architecture, data model,
-deleting subsystems, public API shape): task dsh-cc-agents:critic AND
+deleting subsystems, public API shape): task dsh-cc-agents:critic — on the
+same review-brief form as the two lanes — AND
 dispatch two external review lanes — the cc-grok-bridge review lane
 (`/cc-grok-bridge:review`) and the cc-codex-bridge lane
 (`/cc-codex-bridge:rescue`, carrying a review-only brief here) — all
@@ -59,7 +74,18 @@ absent or reports NOT armed is stopped and reported to the user, not
 replaced: cc-grok-bridge has no fallback (do not guess or construct an
 invocation), and for review passes cc-codex-bridge does not take its
 stock-plugin fallback either — the user decides whether to proceed on
-the reduced roster. Agreement → proceed; disagreement IS the finding —
+the reduced roster. All seats GO → proceed; any NO-GO, or any open P0/P1
+from any seat (a seat using its own severity words maps its two worst
+rungs to P0/P1), is a blocker — fold or reject it, then delta re-review
+the SAME revision on every seat: an approval of a superseded revision does
+not carry. GO-WITH-CHANGES resolves the same way — fold, delta re-review
+to GO; P2s are folded when cheap but never gate. A seat that never returns,
+or returns BLOCKED, is surfaced to the user and that seat's approval is
+withheld: the pass does not continue on the reduced roster without an
+explicit user decision, and a second BLOCKED from the same seat ends the
+pass at the user. If two consecutive rounds add no new P0/P1 while none
+remain open, stop and surface the divergence to the user — a stop never
+authorizes proceeding with a P0/P1 still open. Disagreement IS the finding —
 dig into the divergence before deciding.
 
 ### Execution & failure recovery
