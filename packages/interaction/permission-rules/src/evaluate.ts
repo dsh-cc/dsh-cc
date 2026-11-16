@@ -26,6 +26,7 @@ import {
   type PermissionRuleSource,
 } from './types.ts'
 import { contentMatches } from './parser.ts'
+import { ruleMatchesTool } from './matchers.ts'
 import { type SegmentResult, type ShellSegment } from './shell-segments.ts'
 import { stripLeadingAssignments } from './shell-words.ts'
 import { exemptShortHeadBoundaryOf } from './auto-rule-filter.ts'
@@ -156,13 +157,6 @@ function foldDecision(
 /** The first whole-tool rule for `toolName` in a behavior list. */
 function firstToolLevel(list: readonly PermissionRule[], toolName: string): PermissionRule | undefined {
   return list.find(rule => rule.content === undefined && ruleMatchesTool(rule, toolName))
-}
-
-/** Whether an authored rule's tool name answers to the harness call's tool name. */
-function ruleMatchesTool(rule: PermissionRule, toolName: string): boolean {
-  // The harness exec.name is lowercase; the rule preserves its authored CC
-  // spelling, so compare through the CC↔harness alias map.
-  return ccToolAliases(toolName).includes(rule.toolName)
 }
 
 /** The first content rule for `toolName`/`subject` at exactly one source, or undefined. */

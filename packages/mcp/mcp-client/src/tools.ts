@@ -9,6 +9,11 @@
  * constraints. The raw name is only ever sent on the wire (`tools/call`); the
  * public name is never parsed to recover it.
  *
+ * Namespace contract: both segments stay `__`-free (a segment-internal `__` is
+ * normalized AND hash-suffixed) and `serverName` may not END with `_` (mount
+ * rejects it), so a public name decomposes into exactly one `(server, rawName)`
+ * pair — the property a server-wide `mcp__<server>` rule prefix-matches on.
+ *
  * @module
  */
 
@@ -174,22 +179,29 @@ export function callToolUncached(
  * Derive the model-facing public name for one MCP tool.
  *
  * Deterministic pure function of `(serverName, rawName)`: the clean case is
- * `mcp__<serverName>__<rawName>` verbatim. When character replacement or
- * truncation to the DeepSeek function-name contract (64 chars,
- * `[A-Za-z0-9_-]`) changes the name, a 12-hex-char SHA-256 hash of the
- * identity is appended so distinct MCP identities never collapse into the
- * same public name.
+ * `mcp__<serverName>__<rawName>` verbatim. When character replacement,
+ * `__`→`_` segment normalization, or truncation to the DeepSeek function-name
+ * contract (64 chars, `[A-Za-z0-9_-]`) changes the name, a 12-hex-char SHA-256
+ * hash of the identity is appended so distinct MCP identities never collapse
+ * into the same public name.
  *
  * @param serverName - Stable local namespace from plugin config.
  * @param rawName - The MCP server's own tool name.
  * @returns The globally unique, model-facing ToolRuntime name.
  */
 export function publicToolName(serverName: string, rawName: string): string {
+  const server = normalizeNameSegment(serverName)
+  const raw = normalizeNameSegment(rawName)
   const joined = `mcp__${serverName}__${rawName}`
-  const normalized = joined.replace(INVALID_NAME_CHARS, '_')
+  const normalized = `mcp__${server}__${raw}`
   if (normalized === joined && normalized.length <= MAX_PUBLIC_NAME_LENGTH) return normalized
   const hash = createHash('sha256').update(`${serverName}\0${rawName}`).digest('hex').slice(0, HASH_LENGTH)
   return `${normalized.slice(0, MAX_PUBLIC_NAME_LENGTH - HASH_LENGTH - 1)}_${hash}`
+}
+
+/** Function-name-legal, `__`-free segment: invalid characters → `_`, `_` runs → one. */
+function normalizeNameSegment(segment: string): string {
+  return segment.replace(INVALID_NAME_CHARS, '_').replace(/_+/g, '_')
 }
 
 /**

@@ -70,6 +70,17 @@ describe('filterAutoAllowRules', () => {
     expect(out.allow.map(rule => rule.toolName)).toEqual(['Edit'])
   })
 
+  it('keeps a whole-tool `mcp__serena` server-wide allow in force (neither shell nor subagent)', () => {
+    // D6a: a server-wide MCP rule is a plain whole-tool allow for a different
+    // tool family — auto mode suspends only shell and subagent grants.
+    const out = filterAutoAllowRules(allowStrings(['mcp__serena', 'Bash']), { classifyAllShell: false })
+    expect(out.allow.map(rule => rule.toolName)).toEqual(['mcp__serena'])
+    expect(autoSuspendedReason(parseRule('mcp__serena', 'allow', 'config'), { classifyAllShell: false })).toBeUndefined()
+    // classifyAllShell only sweeps shell rules; the MCP grant still survives.
+    const swept = filterAutoAllowRules(allowStrings(['mcp__serena']), { classifyAllShell: true })
+    expect(swept.allow.map(rule => rule.toolName)).toEqual(['mcp__serena'])
+  })
+
   it('leaves deny, ask, and bypassImmune lists untouched', () => {
     const input = rules({
       allow: [parseRule('Bash', 'allow', 'config')],

@@ -104,6 +104,30 @@ describe('publicToolName', () => {
     expect(a).toBe(publicToolName('srv', 'admin.reset'))
     expect(a).not.toBe(b)
   })
+
+  it('normalizes a segment-internal `__` through the identity-hash path', () => {
+    // Namespace contract (design D2 rule 1+2): a raw `__` is rewritten inside
+    // the segment AND the name is hash-suffixed, so it can never collapse onto
+    // a genuine tool of the clean spelling.
+    const hashed = publicToolName('srv', 'evil__run')
+    expect(hashed).toMatch(/^mcp__srv__evil_run_[0-9a-f]{12}$/)
+    expect(hashed).not.toBe(publicToolName('srv', 'evil_run'))
+    expect(publicToolName('srv', 'evil_run')).toBe('mcp__srv__evil_run')
+
+    // Same rule for the server segment (a `__` there is legal config but lossy).
+    const serverHashed = publicToolName('my__server', 'run')
+    expect(serverHashed).toMatch(/^mcp__my_server__run_[0-9a-f]{12}$/)
+    expect(serverHashed).not.toBe(publicToolName('my_server', 'run'))
+  })
+
+  it('keeps the decomposed segments `__`-free so the public name splits unambiguously', () => {
+    for (const [serverName, rawName] of [['srv', 'a___b'], ['a__b', 'c'], ['srv', 'x..y']] as const) {
+      const name = publicToolName(serverName, rawName)
+      // Exactly `mcp` + server + raw: no extra `__` boundary anywhere.
+      expect(name.split('__')).toHaveLength(3)
+      expect(name.length).toBeLessThanOrEqual(64)
+    }
+  })
 })
 
 describe('syncTools', () => {

@@ -52,6 +52,16 @@ describe('collectGaugeAllowEvidence', () => {
     expect(lines).toEqual(['Pre-authorized: Bash', 'Pre-authorized: Bash(python3:*)'])
   })
 
+  it('relevance: a server-wide `mcp__serena` allow is pre-authorization evidence for its tools (D6a)', () => {
+    const exec = { name: 'mcp__serena__find_symbol', arguments: { name_path: 'foo' } } as never
+    const lines = collectGaugeAllowEvidence({
+      exec,
+      rules: [rule('userSettings', 'mcp__serena'), rule('userSettings', 'mcp__other')],
+      session: undefined,
+    })
+    expect(lines).toEqual(['Pre-authorized: mcp__serena'])
+  })
+
   it('session grants render the this-session label and follow static order', () => {
     const lines = collectGaugeAllowEvidence({
       exec: EXEC,

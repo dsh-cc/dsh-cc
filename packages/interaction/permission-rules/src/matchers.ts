@@ -11,11 +11,34 @@ import { contentMatches } from './parser.ts'
 import { splitShellCommand } from './shell-segments.ts'
 import type { PermissionRule } from './types.ts'
 
+/** The model-facing MCP tool-name prefix; `mcp__<server>__<rawName>` names use it. */
+const MCP_PREFIX = 'mcp__'
+
 /** Whether an authored rule's tool name answers to a harness call's tool name. */
 export function ruleMatchesTool(rule: PermissionRule, toolName: string): boolean {
   // The harness exec.name is lowercase; the rule preserves its authored CC
   // spelling, so compare through the CC↔harness alias map.
-  return ccToolAliases(toolName).includes(rule.toolName)
+  if (ccToolAliases(toolName).includes(rule.toolName)) return true
+  // Claude Code server-wide form: a content-less `mcp__<server>` rule covers
+  // every `mcp__<server>__<rawName>` call on that server. Exact (three-segment)
+  // MCP tool rules and every non-MCP rule keep exact-name semantics; content
+  // rules are untouched (they only match a call subject, which MCP calls lack).
+  return rule.content === undefined
+    && isServerWideMcpRule(rule.toolName)
+    && (toolName === rule.toolName || toolName.startsWith(`${rule.toolName}__`))
+}
+
+/**
+ * Whether a tool name is the MCP server-wide form `mcp__<server>`: the MCP
+ * prefix plus exactly one `__` segment separator. Sound as a discriminator
+ * because the mcp-client namespace contract keeps both the server and the raw
+ * tool segment `__`-free, so a three-segment name is always an exact tool name.
+ * @param toolName - an authored rule tool name or a harness call name.
+ * @returns true for the `mcp__<server>` form only.
+ */
+export function isServerWideMcpRule(toolName: string): boolean {
+  if (!toolName.startsWith(MCP_PREFIX)) return false
+  return toolName.split('__').length === 2
 }
 
 /** Whether a rule's tool name and content (when present) match a call. */
