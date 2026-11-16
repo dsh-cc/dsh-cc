@@ -180,6 +180,36 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     }
   })
 
+  it('keeps the design-review contract in the persona of a critic on a routed model', async () => {
+    const ctx = new Context()
+    const { subagents, providers, specs } = subagentsSeam()
+    const mount = await mountCcPlugin(ctx, {
+      root: REAL_PLUGIN_DIR,
+      seams: { subagents },
+      // A configured alias resolves to a concrete route, so the actor-contract
+      // gate strips its marked block from the persona.
+      resolveModel: () => 'routed/model-a',
+    })
+    try {
+      const reasoner = providers.find(p => p.definition.agentType === 'critic')!
+      await reasoner.start({ prompt: 'x' })
+      const delegation = specs[specs.length - 1]!['request'] as Record<string, unknown>
+      const persona = String((delegation['prompt'] as readonly { text: string }[])[0]!.text)
+      // The review contract must reach every model: verdict line, severity
+      // ladder, evidence anchor rule and the missing-specification bar.
+      expect(persona).toContain('## Design review mode')
+      expect(persona).toContain('GO-WITH-CHANGES')
+      expect(persona).toContain('P0|P1|P2')
+      expect(persona).toContain('Missing specification is a defect')
+      // ...and it must sit OUTSIDE the marked block: content placed inside
+      // vanishes for the default routed critic.
+      expect(persona).not.toContain('actor-contract:')
+      expect(persona).not.toContain('You reason over a read-only tool set')
+    } finally {
+      mount.dispose()
+    }
+  })
+
   it('the skills component LOADS (not skipped) and the skill is visible in a real registry', async () => {
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)

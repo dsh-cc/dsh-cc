@@ -35,7 +35,11 @@ Enter plan mode before: new features, >2-3-file changes, multiple viable
 approaches, refactor/migration/deletion. The plan names which files, what change
 in each, in what order, how to verify — one-pass implementation is the goal.
 Before ExitPlanMode: task `dsh-cc-agents:critic` to review the plan cold as a
-Staff Engineer; revise per its findings, re-review if substantial.
+Staff Engineer, on the review-brief form the `dsh-cc-agents-orchestration`
+skill states (material paths + HEAD, self-read anchors, verdict/findings
+contract) — a bare "review this plan" buys agreement, not defects. Fold a
+finding only after re-checking it against the tree; re-dispatch rather than
+plan around speculation.
 
 Verification is planned too: name the behavior, how it is driven (script/browser/
 CLI) and the observable result that counts as pass before verifying; ambiguous
@@ -44,7 +48,8 @@ detail: the `change-cookbook` skill.
 
 ### High-stakes decisions (parallel blind review)
 For irreversible or expensive choices (architecture, data model,
-deleting subsystems, public API shape): task dsh-cc-agents:critic AND
+deleting subsystems, public API shape): task dsh-cc-agents:critic — on the
+same review-brief form as the two lanes — AND
 dispatch two external review lanes — the cc-grok-bridge review lane
 (`/cc-grok-bridge:review`) and the cc-codex-bridge lane
 (`/cc-codex-bridge:rescue`, carrying a review-only brief here) — all

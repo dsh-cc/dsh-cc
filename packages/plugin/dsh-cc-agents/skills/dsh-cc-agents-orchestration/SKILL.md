@@ -112,3 +112,27 @@ resolved child model matches the `actor-contract.models` settings patterns
 (default `['glm-*']`). Agents whose contract is GLM-specific (actor framing,
 evidence rules) opt in by adding their own marked block near the identity
 line; content outside markers reaches every model.
+
+## Review briefs (plan, design, architecture)
+
+A review is only as deep as its brief. Send the same four parts to
+`dsh-cc-agents:critic` and to an external bridge lane, and point at the
+material instead of summarizing it:
+
+1. **Role and prohibition** — "adversarial design review of `<subject>`; do not
+   modify any files."
+2. **The material** — absolute paths to the plan/design and to the source files
+   that carry its claims, plus the `HEAD` sha to read them at. Say "read the
+   current worktree, not a diff and not a summary": a reviewer fed a summary
+   reviews the summary.
+3. **Self-check anchors** — the two or three files or line ranges that decide
+   the verdict, named explicitly. This is what separates a review from a
+   reaction to the prose.
+4. **Output contract and stakes** — verdict first, numbered findings with
+   severity and `file:line`, and what makes a missed defect expensive
+   (irreversible, public API, data model, migration). Add that the implementer
+   will carry the reviewed text out verbatim, so ambiguity is a defect.
+
+Send the same brief blind to more than one seat; never feed one seat's findings
+into another's brief. A brief edit is a prompt change: name the expected
+behavior change when you commit it, then observe it in a later real review.
