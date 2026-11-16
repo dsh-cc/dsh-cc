@@ -130,6 +130,8 @@ material instead of summarizing it:
    summary": a reviewer fed a summary reviews the summary. The reviewer states
    what version it actually read; material it cannot read or that does not
    match the pinned version is reported BLOCKED, never reviewed from memory.
+   Freeze the pinned material while reviews are in flight — no edits to it;
+   if it must change, re-dispatch with a fresh brief.
 3. **Self-check anchors** — the entry points that decide the verdict, named
    explicitly: where the load-bearing claims live. Anchors are a start, not a
    boundary — the reviewer follows the related calls, state transitions and

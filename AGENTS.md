@@ -37,11 +37,16 @@ in each, in what order, how to verify — one-pass implementation is the goal.
 Before ExitPlanMode: task `dsh-cc-agents:critic` to review the plan cold as a
 Staff Engineer, on the review-brief form the `dsh-cc-agents-orchestration`
 skill states (pinned versions, self-read anchors, verdict/findings
-contract) — a bare "review this plan" buys agreement, not defects. Fold a
-finding only after re-checking it against the tree; re-dispatch rather than
-plan around speculation. Leave plan mode only when the review returns GO, or
-every finding from a GO-WITH-CHANGES / NO-GO is folded and the revised plan
-has been re-reviewed (a delta brief on the folds) to GO.
+contract) — a bare "review this plan" buys agreement, not defects. If the
+plan meets the high-stakes bar below, its review is that three-seat pass,
+not the single critic seat. Fold a finding only after re-checking it
+against the tree — a finding disproved on re-check is rejected with the
+evidence, and a rejected finding does not gate; re-dispatch rather than
+plan around speculation. A BLOCKED review means the brief was broken: fix
+it and re-dispatch; it is neither GO nor a finding. Leave plan mode only
+when the review returns GO with no open P0/P1 findings, or every finding
+from a GO-WITH-CHANGES / NO-GO is folded or rejected and a delta brief on
+the folds (and on anything else the revision touched) re-reviews to GO.
 
 Verification is planned too: name the behavior, how it is driven (script/browser/
 CLI) and the observable result that counts as pass before verifying; ambiguous
@@ -67,9 +72,15 @@ replaced: cc-grok-bridge has no fallback (do not guess or construct an
 invocation), and for review passes cc-codex-bridge does not take its
 stock-plugin fallback either — the user decides whether to proceed on
 the reduced roster. All seats GO → proceed; any NO-GO, or any open P0/P1
-from any seat, is a blocker — fold it, re-review the revision (delta
-brief), and proceed only once every seat's findings are closed.
-Disagreement IS the finding — dig into the divergence before deciding.
+from any seat (a seat using its own severity words maps its two worst
+rungs to P0/P1), is a blocker — fold or reject it, then delta re-review
+the SAME revision on every seat: an approval of a superseded revision does
+not carry. GO-WITH-CHANGES resolves the same way — fold, delta re-review
+to GO; P2s are folded when cheap but never gate. A seat that never returns,
+or returns BLOCKED, is surfaced to the user — not waited on, not counted
+as GO. If two consecutive rounds produce no new P0/P1, stop and surface
+the divergence to the user. Disagreement IS the finding —
+dig into the divergence before deciding.
 
 ### Execution & failure recovery
 Decompose the approved plan into mechanical units → `dsh-cc-agents:executor`; you

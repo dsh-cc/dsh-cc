@@ -186,8 +186,8 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     const mount = await mountCcPlugin(ctx, {
       root: REAL_PLUGIN_DIR,
       seams: { subagents },
-      // A configured alias resolves to a concrete route, so the actor-contract
-      // gate strips its marked block from the persona.
+      // A configured alias resolves to a concrete route; any non-gated model
+      // strips the marked block while the review contract outside it survives.
       resolveModel: () => 'routed/model-a',
     })
     try {
@@ -195,11 +195,15 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
       await reasoner.start({ prompt: 'x' })
       const delegation = specs[specs.length - 1]!['request'] as Record<string, unknown>
       const persona = String((delegation['prompt'] as readonly { text: string }[])[0]!.text)
-      // The review contract must reach every model: verdict line, severity
-      // ladder, evidence anchor rule and the missing-specification bar.
+      // The review contract must reach every model: verdict line (incl. the
+      // BLOCKED escape), severity ladder with anchor rule, evidence
+      // self-read rule and the missing-specification bar.
       expect(persona).toContain('## Design review mode')
       expect(persona).toContain('GO-WITH-CHANGES')
       expect(persona).toContain('P0|P1|P2')
+      expect(persona).toContain('BLOCKED')
+      expect(persona).toContain('Read the material yourself')
+      expect(persona).toContain('Anchor every finding')
       expect(persona).toContain('Missing specification is a defect')
       // ...and it must sit OUTSIDE the marked block: content placed inside
       // vanishes for the default routed critic.

@@ -21,7 +21,7 @@ critic 采用只读人格，通常在后台运行；executor 和 marathon 可以
 
 使用结果前请核查其报告。critic 的只读行为属于人格规则，不是宿主强制执行的写入限制。
 
-critic 对计划或设计的评审，答复以 `VERDICT`（GO / GO-WITH-CHANGES / NO-GO）和一个按严重度排序、锚定到 `file:line` 的问题清单开头，随后是标准的 Recommendation / Reasoning / Risks-unknowns 收尾。派发时给出材料路径、要阅读的 `HEAD` 和这份输出契约——只写一句「评审一下」换来的是认同，不是缺陷。
+critic 对计划或设计的评审，答复以 `VERDICT`（GO / GO-WITH-CHANGES / NO-GO；被钉读的材料缺失或不匹配时为 `BLOCKED`）和一个按严重度排序、锚定到 `file:line` 的问题清单开头，随后是标准的 Recommendation / Reasoning / Risks-unknowns 收尾。派发时给出材料路径与钉定的版本（一个 commit，或交给评审者的快照）和这份输出契约——只写一句「评审一下」换来的是认同，不是缺陷。
 
 未配置的内置别名会继承父路由。若要为不同任务选择不同模型，请配置别名。
 

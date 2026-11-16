@@ -21,7 +21,7 @@ The critic has a read-only persona and usually runs in the background. Executor 
 
 Check their reports before you use the results. Critic read-only behavior is a persona rule, not a host-enforced write restriction.
 
-A critic review of a plan or design opens with `VERDICT` (GO / GO-WITH-CHANGES / NO-GO) and a severity-ranked finding list anchored to `file:line`, then the standard Recommendation / Reasoning / Risks-unknowns trailer. Brief it with the material's paths, the `HEAD` to read them at, and that output contract — a bare "review this" gets agreement, not defects.
+A critic review of a plan or design opens with `VERDICT` (GO / GO-WITH-CHANGES / NO-GO; `BLOCKED` when the material it was pinned to read is missing or mismatched) and a severity-ranked finding list anchored to `file:line`, then the standard Recommendation / Reasoning / Risks-unknowns trailer. Brief it with the material's paths and pinned version (a commit, or the snapshot it hands the reviewer) and that output contract — a bare "review this" gets agreement, not defects.
 
 A missing built-in alias inherits the parent route. Configure aliases to select different models for different tasks.
 
