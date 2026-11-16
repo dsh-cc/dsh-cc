@@ -17,6 +17,13 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.10.0-rc.1
+
+- feat(vwa): implement the autonomous render pipeline (drafts, gr: citations, dispute liveness, migration) (#424)
+- feat(permissions): CC-parity server-wide mcp__<server> rules + unambiguous MCP public-name contract (#425)
+- feat(permissions): deterministic MCP tool classification for auto mode (#426)
+- feat(completion-gate): opt-in enforce mode with durable exhaustion + terminal unverified markers (#428)
+
 ## 0.9.5 — governed model input, skill routing and one memory catalog
 
 - **Input ledger** — every model step now records what it actually received
