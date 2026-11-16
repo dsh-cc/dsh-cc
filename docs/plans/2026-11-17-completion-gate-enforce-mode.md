@@ -1,7 +1,7 @@
 # Completion gate enforce mode: unverified completion can only stall
 
-Status: design v4 — r1 (three-lane) + r2 delta (three-lane, all
-GO-WITH-CHANGES) folded; gate ledger (§6.1) and formal-design screening
+Status: design v5 — r1 (three-lane) + r2 delta (three-lane, all
+GO-WITH-CHANGES) folded; evidence-anchor backfill, gate ledger (§6.1), and formal-design screening
 record (§9) added. Ledger in §8.
 Plan doc: this file. Implementation lands in the same PR (repo convention).
 Baseline plan: docs/plans/2026-10-09-runtime-verified-completion.md (nudge
@@ -11,7 +11,10 @@ mode, shipped default-ON 2026-11-11).
 
 The shipped completion gate is **feedback-only**: at `agent/turn-stopping` it
 injects at most `nudges-per-session` (default 1) evidence nudges, then the turn
-ends with the unverified claim standing. Three independent results in the
+ends with the unverified claim standing — the one-nudge budget and its
+durability across `/resume` are the baseline contract
+〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L493-L497〕.
+Three independent results in the
 wiki synthesis (agent-runtime-harness-systems) converge on the same finding:
 
 - **WebFovea** (harness-only fixes, hidden-set 31.0→57.0): the interventions
@@ -22,6 +25,14 @@ wiki synthesis (agent-runtime-harness-systems) converge on the same finding:
   false completion" becomes a runtime invariant instead of an advisory note.
 - **Finding the Right Fit** (openJiuwen vs PI): bounded execution surfaces
   that convert failure into a usable signal beat unbounded advisory surfaces.
+
+**Anchor disclosure for the three literature citations**: the source is a
+wiki synthesis outside this workspace
+(`llm-wiki/wiki/syntheses/agent-runtime-harness-systems.md`, per-entry
+anchors listed in its Appendix C mechanism list), so it cannot carry a
+`src:ws` workspace marker — workspace markers are only resolvable against this
+repo. The claims above are cited by the synthesis entry names so a reader
+can re-derive them from that file.
 
 P0-1 upgrade: add an **enforce mode** to the completion gate. In enforce mode
 a turn whose final assistant message still carries unmatched completion
@@ -49,15 +60,27 @@ into "recorded, bounded enforcement episode".
   (`target = 'next-step'`); otherwise it breaks and the turn ends. There is
   no listener veto return value — **injection/steering IS the continuation
   primitive**, and the gate not injecting is necessary but NOT sufficient
-  for the turn to end (§3.7 lists the co-owners).
+  for the turn to end (§3.7 lists the co-owners). The dispatch runs ONLY on
+  the non-throwing turn path and fires for `completed` and `max-tokens`
+  endings only — never for `error` or `aborted` — which is why the terminal
+  record of §3.5 hangs off `turn/end` rather than off this event
+  〔src:ws:docs/plans/2026-09-15-error-recovery-parity.md#L13-L21〕.
 - `agent.inject(input)` (harness agent.ts:187-189) = `send(input,
   'next-step', false)`. The shipped smoke spec pins same-turn continuation
   ("synchronous inject at turn-stopping continues the SAME turn",
   tests/smoke.spec.ts:81-115, including turn-number identity and one
-  `turn/end`).
+  `turn/end`). The next-step splice mechanics themselves — a message queued
+  during `turn-stopping` re-enters the loop after the dispatch returns,
+  inside the same turn and with no new turn number — are the ones the
+  error-recovery parity work established for `agent.steer`
+  〔src:ws:docs/plans/2026-09-15-error-recovery-parity.md#L42-L47〕.
 - `turn/end` is appended in the `finally` of `turn()` for EVERY exit path
   (harness agent.ts:419-425) — completed, error, aborted alike. This makes
   the session-event firehose a reliable terminal reconciliation point.
+  **Anchor disclosure**: this fact is a direct read of the harness source
+  and has no corpus-class counterpart in this repo, and the evidence gate's
+  corpus whitelist excludes `.ts` paths, so it carries a prose line
+  reference instead of a `src:ws` workspace marker rather than a fabricated one.
 - Turn-stopping listener inventory (registration order in the cc preset —
   hooks-claude-code is mounted before completion-gate):
   - **hooks-claude-code A3 max-tokens continuation** uses `agent.steer`
@@ -76,7 +99,19 @@ into "recorded, bounded enforcement episode".
   nudges are `source.kind: 'completion-gate'` so they never anchor a
   window), compaction fail-open, composite fail-open, horizon rule, claim
   satisfiability union (window receipts + lineage lifts), nudge budget,
-  per-claim NUDGE events, one joined synchronous inject.
+  per-claim NUDGE events, one joined synchronous inject. The skip rule
+  matching only the gate's own source kind, and the window start requiring
+  a genuine user message, are pinned in the baseline plan
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L186-L190〕;
+  the satisfiability union (in-session receipt after the window start, or a
+  lineage lift whose `stampedOrdinal` is at least the window-start ordinal;
+  JSONL never consulted; the window is snapshot order, never clocks) is
+  specified there too
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L430-L436〕.
+  The `compaction/end` fail-open and the degraded-horizon rule are the
+  baseline's §3.6/§3.4 fail-opens
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L347-L356〕
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L300-L304〕.
 - `receiptSatisfies` (claims.ts) matches tool id + scrubbed head and does
   NOT inspect `receipt.outcome` (r1 finding: a FAILED execution currently
   satisfies a claim).
@@ -120,6 +155,10 @@ Two new keys in the `cc-completion-gate` namespace:
   opt-in. Flipping the default is a deliberate follow-up after dogfood
   (ship-dark-then-flip precedent), NOT part of this change.
 - Hot-toggle unchanged: raw file re-read per event; `mode` participates.
+  The namespace + synchronous raw re-read (the dual-half pattern: the
+  `turn-stopping` handler must run synchronously up to hash capture, hence
+  a sync reader) is the baseline's §3.5 configuration contract
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L511-L519〕.
 
 ### 3.2 New session events (src/events.ts)
 
@@ -175,6 +214,14 @@ After `unmatched` is computed:
 counts ONLY advisory nudges — NUDGE events WITHOUT a `cycle` field (r1
 finding: enforce events must not consume the advisory budget). Everything
 else (latch writes, inject text) unchanged.
+
+The unchanged half keeps the baseline budget semantics: the count is of
+in-session `completion-gate/nudge` events, the budget is durable across
+`/resume` (a resumed session does not refund a spent nudge), and the
+process-local latch exists only so a failed nudge-event append cannot
+re-arm the gate — the two are a mirror, compared with `max`, never summed
+〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L493-L497〕.
+Enforce mode reuses that mirror discipline for its own counter (§3.3.1).
 
 **enforce mode** — the cycle state machine (replaces the nudge budget):
 
@@ -308,7 +355,14 @@ throws into the host (whole body try/catch-debug, same as
   no marker — it would accuse on lost receipts. The §1 invariant is
   therefore stated narrowly: "cannot pass silently UNLESS a documented
   evaluation fail-open fires". Enforce-mode tests PIN the fail-open cases
-  (compaction-in-window → no marker; horizon → no marker).
+  (compaction-in-window → no marker; horizon → no marker). Each fail-open
+  is inherited, not invented here: the `compaction/end` skip is the
+  baseline's §3.6 rule
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L347-L356〕
+  and the degraded-horizon skip is its §3.4 rule
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L300-L304〕;
+  the delegation-lineage lift that horizon protects is specified at
+  〔src:ws:docs/plans/2026-10-09-runtime-verified-completion.md#L430-L436〕.
 - **Lexical retraction only**: an apology restating the phrase is not a
   retraction; the inject text tells the model the exact lexical exit.
 - **Resolution semantics**: session-wide "ever resolved" (unchanged).
@@ -333,7 +387,12 @@ Co-owners that may continue the turn in the SAME serial dispatch:
 A3 continuation (`steer`, capped), a denying Stop hook (`steer`, F1 cap 8,
 then `cancel()` → aborted end; the reconciliation still fires on
 `turn/end`), vwa-evidence inject (VWA preset), turn-rules reminders
-(next-turn). Consequences, all accepted and bounded:
+(next-turn). The steer-during-turn-stopping splice that makes these
+co-owners real — the message lands in the next-step inbox and the loop
+re-checks it only after the whole dispatch returns — is the mechanism the
+error-recovery parity work pinned
+〔src:ws:docs/plans/2026-09-15-error-recovery-parity.md#L42-L47〕.
+Consequences, all accepted and bounded:
 - After gate exhaustion, A3 may still steer a truncated claim-bearing
   message; the reconciliation judges whatever the turn finally ended on.
 - A max-tokens stop may burn a gate cycle on a message the model never
@@ -505,11 +564,35 @@ the all-green table above.
 | File | Coverage | Threshold | Disposition |
 | --- | --- | --- | --- |
 | `.scratch/pr-body-completion-gate-enforce.md` | 0.00 | 0.9 | **Resolved by removal.** A one-shot PR-body draft, never tracked by git; the shipped PR body is on GitHub and this doc is the argumentative artifact. Deleted during self-repair. |
-| `docs/claude-code-capabilities.yaml` | 0.09 | 0.9 | **Not applicable — format mismatch.** This file's evidence system is its own structured form: `evidence: [{type: source\|test, path, anchor}]` per capability, validated by `check-capability-evidence.mjs` (I1–I11 + anchor resolution) and consumed by `generate-parity-matrix.mjs`. 〔src:ws:…〕 prose markers are not part of that format and would either be ignored or break the generator. The owning gate passed: `check:capabilities` in quality-gates job 133071683564, local run "capability manifest OK: docs/claude-code-capabilities.yaml". Note the gate reported `overall: pass` at both coverage values — coverage is a marker-density heuristic, so a non-paragraph file scores near zero by construction. |
+| `docs/claude-code-capabilities.yaml` | 0.09 | 0.9 | **Not applicable — format mismatch.** This file's evidence system is its own structured form: `evidence: [{type: source\|test, path, anchor}]` per capability, validated by `check-capability-evidence.mjs` (I1–I11 + anchor resolution) and consumed by `generate-parity-matrix.mjs`. Prose `src:ws` markers are not part of that format and would either be ignored or break the generator. The owning gate passed: `check:capabilities` in quality-gates job 133071683564, local run "capability manifest OK: docs/claude-code-capabilities.yaml". Note the gate reported `overall: pass` at both coverage values — coverage is a marker-density heuristic, so a non-paragraph file scores near zero by construction. |
+| `docs/plans/2026-11-17-completion-gate-enforce-mode.md` (this doc) | 0.00 → backfilled | 0.9 | **Self-repaired by backfill.** This doc was written before any marker discipline, so its load-bearing claims cited .ts source paths in prose only. Thirteen `src:ws` markers were added on the claims that genuinely have a corpus-class counterpart (two baseline plans in `docs/plans/`), each at the sentence it supports. See the anchor policy below for the two classes deliberately left unmarked. |
+
+**Evidence-anchor policy for this doc** (why coverage will not reach 1.0 and
+must not be padded to it):
+
+1. **Marker-citable** — `docs/**` and `*.md` files. The baseline gate plan
+   (`docs/plans/2026-10-09-runtime-verified-completion.md`) and the
+   error-recovery parity plan (`docs/plans/2026-09-15-error-recovery-parity.md`)
+   carry the window/budget/fail-open contracts and the
+   turn-stopping/steer-splice seam facts, so those claims are marked.
+2. **Not marker-citable, cited in prose** — harness and package `.ts` source
+   (`agent.ts` turn loop and `finally` `turn/end`, `lineage.ts` lift shapes,
+   `wiring.ts`): the gate's corpus whitelist is `docs/**` ∪ `*.md`/`*.mdx`, so
+   a `.ts` path in a marker is structurally out-of-bounds and fails the whole
+   artifact. These carry `file:line` prose references plus the design's own
+   test pins instead; faking a marker would be worse than the gap.
+3. **Not marker-citable, cited by entry name** — the three literature
+   citations in §1 live in a wiki synthesis outside this workspace
+   (`llm-wiki/…`), unresolvable as a workspace source.
+
+Padding coverage with markers that do not support the adjacent sentence
+would defeat the gate's purpose; the honest disposition is this policy plus
+the marked set.
 
 Why this matters for later re-checks: a future audit that sees 0.00/0.09 on
 these paths should read this table first; the low value is expected for a
 data/format file and for a deleted scratch draft, not an unresolved defect.
+For this doc the remaining gap is the .ts-source class described above.
 
 ## 7. Out of scope
 
