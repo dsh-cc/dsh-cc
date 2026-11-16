@@ -67,6 +67,31 @@ screening; use its manual agents snippet. Re-screen scope changes.
   assignment (steering, same-task follow-ups); a continued child resumes
   inside its full prior conversation and its original definition snapshot.
 
+## Pre-flight before a mutating delegation
+Before dispatching executor/marathon into a worktree or any checkout that
+is not the one you are sitting in:
+1. **Environment ready for the child-owned commands**: determine the
+   target repo's declared bootstrap and make the commands the CHILD will
+   run actually work before dispatch (for the dsh-cc pnpm workspace:
+   `pnpm install --frozen-lockfile` in the target worktree, then confirm
+   `node_modules/.bin/vitest` exists). Never let the child bootstrap the
+   environment — a delegation that starts with "no node_modules" will
+   either stall on permission asks or improvise symlinks. Docs-only
+   dispatches with no child-owned commands need no install.
+2. **Command ownership split**: put in the dispatch prompt (a) the
+   child-owned verification commands — for an executor behavior change,
+   the focused red/green test commands stay child-owned per its TDD
+   contract — and (b) "Gates I will run: …" for the broader suites and
+   repo gates you keep. The child lists under Gates-not-run exactly the
+   (b)-class checks it could not run; it never skips (a)-class commands
+   silently.
+3. **Dispatch prompt minimums**: absolute worktree path; forbidden
+   operations (git write commands unless delegated, improvised scripted
+   file edits, environment bootstrap); the report contract pointer
+   (Changed / Checked / Deviations / Blockers + Final verification + Gates
+   not run — executor shape; marathon reports per its own native
+   contract).
+
 ## Optional MCP tools
 
 All agents name optional deferred MCP tools in their frontmatter
@@ -84,7 +109,10 @@ below hold.
   `Reasoning` / `Risks-unknowns` — treat an open Risk as unverified, not done.
 - **executor** ends every answer with `Changed` / `Checked` /
   `Deviations` / `Blockers` — a Blocker means STOP and re-plan; never let it
-  improvise.
+  improvise — plus `Final verification` (the last verification command it
+  ran and its literal exit code, as `<command> — exit <N>`) and `Gates not
+  run` (every check the dispatch named that it could not execute, each with
+  its one-line structural reason; `none` is a valid entry).
 - **marathon** ends every answer with `Verdict` / `What changed` /
   `Evidence trail` / `Dead ends` / `Open threads` — treat an unverified
   claim as open, and never re-walk a listed dead end.
