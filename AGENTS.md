@@ -36,10 +36,12 @@ approaches, refactor/migration/deletion. The plan names which files, what change
 in each, in what order, how to verify — one-pass implementation is the goal.
 Before ExitPlanMode: task `dsh-cc-agents:critic` to review the plan cold as a
 Staff Engineer, on the review-brief form the `dsh-cc-agents-orchestration`
-skill states (material paths + HEAD, self-read anchors, verdict/findings
+skill states (pinned versions, self-read anchors, verdict/findings
 contract) — a bare "review this plan" buys agreement, not defects. Fold a
 finding only after re-checking it against the tree; re-dispatch rather than
-plan around speculation.
+plan around speculation. Leave plan mode only when the review returns GO, or
+every finding from a GO-WITH-CHANGES / NO-GO is folded and the revised plan
+has been re-reviewed (a delta brief on the folds) to GO.
 
 Verification is planned too: name the behavior, how it is driven (script/browser/
 CLI) and the observable result that counts as pass before verifying; ambiguous
@@ -64,7 +66,9 @@ absent or reports NOT armed is stopped and reported to the user, not
 replaced: cc-grok-bridge has no fallback (do not guess or construct an
 invocation), and for review passes cc-codex-bridge does not take its
 stock-plugin fallback either — the user decides whether to proceed on
-the reduced roster. Agreement → proceed; disagreement IS the finding —
+the reduced roster. All seats GO → proceed; any NO-GO or open P0 is a
+blocker — fold it, re-review the revision (delta brief), and proceed only
+once every seat's blockers are closed. Disagreement IS the finding —
 dig into the divergence before deciding.
 
 ### Execution & failure recovery

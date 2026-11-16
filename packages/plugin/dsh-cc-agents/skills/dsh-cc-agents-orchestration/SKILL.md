@@ -121,13 +121,20 @@ material instead of summarizing it:
 
 1. **Role and prohibition** — "adversarial design review of `<subject>`; do not
    modify any files."
-2. **The material** — absolute paths to the plan/design and to the source files
-   that carry its claims, plus the `HEAD` sha to read them at. Say "read the
-   current worktree, not a diff and not a summary": a reviewer fed a summary
-   reviews the summary.
-3. **Self-check anchors** — the two or three files or line ranges that decide
-   the verdict, named explicitly. This is what separates a review from a
-   reaction to the prose.
+2. **The material, versioned** — pin each part's exact bytes: the plan or
+   design (a committed path, or a snapshot materialized for the review when it
+   is not yet committed), and the source baseline (a named commit, or the live
+   tree explicitly declared as such). Never point at both a sha and "the
+   current worktree" — a dirty tree or an uncommitted plan makes two reviewers
+   read different bytes. Say "read the material itself, not a diff and not a
+   summary": a reviewer fed a summary reviews the summary. The reviewer states
+   what version it actually read; material it cannot read or that does not
+   match the pinned version is reported BLOCKED, never reviewed from memory.
+3. **Self-check anchors** — the entry points that decide the verdict, named
+   explicitly: where the load-bearing claims live. Anchors are a start, not a
+   boundary — the reviewer follows the related calls, state transitions and
+   failure paths from there; a review confined to the dispatcher's pre-named
+   risks is only half a review.
 4. **Output contract and stakes** — verdict first, numbered findings with
    severity and `file:line`, and what makes a missed defect expensive
    (irreversible, public API, data model, migration). Add that the implementer
