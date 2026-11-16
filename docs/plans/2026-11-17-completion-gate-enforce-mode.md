@@ -1,7 +1,8 @@
 # Completion gate enforce mode: unverified completion can only stall
 
-Status: design v3 — r1 (three-lane) + r2 delta (three-lane, all
-GO-WITH-CHANGES) folded; ledger in §8.
+Status: design v4 — r1 (three-lane) + r2 delta (three-lane, all
+GO-WITH-CHANGES) folded; gate ledger (§6.1) and formal-design screening
+record (§9) added. Ledger in §8.
 Plan doc: this file. Implementation lands in the same PR (repo convention).
 Baseline plan: docs/plans/2026-10-09-runtime-verified-completion.md (nudge
 mode, shipped default-ON 2026-11-11).
@@ -471,10 +472,44 @@ in ledger.spec changes (new fields); all `deps()` fixtures grow a shared
 - **Pass criteria**: all §5 cases green; existing suite green modulo the
   DEFAULT snapshot + fixture updates; `pnpm --filter @dsh-cc/completion-gate
   test` exit 0; full local battery (`tsc -b --force`, check:spec-deps,
-  check:capabilities, check:parity, check:readme, check:size, check:exports
-  after build) green.
+  check:capabilities, check:parity, check:readme, check:size) green.
 - **Follow-up (not this PR)**: dogfood `mode: 'enforce'` in the user-layer
   settings in a real session; then the default-flip decision.
+
+### 6.1 Gate ledger (auditable dispositions)
+
+**Required CI suite on PR #428 (run 43798139592 / 43798139598) — all pass.**
+These five are the merge gate; each verdict below is the job's own:
+
+| Check | Job | Verdict |
+| --- | --- | --- |
+| static-gates | 133071683732 | pass |
+| quality-gates (contains `check:capabilities` + `check:parity`) | 133071683564 | pass |
+| unit-tests | 133071683340 | pass |
+| formal-design-tla+ | 133071685907 | pass (no model in scope — see §9) |
+| formal-design-lean | 133071686131 | pass |
+
+Local package battery: `pnpm --filter @dsh-cc/completion-gate test` → 11
+files / 106 tests; `npx tsc -b tsconfig.packages.json --force` → exit 0;
+`check:size`, `check:spec-deps`, `check:readme`, `check:capabilities`,
+`docs:parity` green. `check:exports` was NOT run cleanly here: this worktree
+has ~252 unrelated packages unbuilt, so the repo-wide scan is noisy —
+completion-gate itself has no missing export target, and the CI
+quality-gates job is the authoritative run for it.
+
+**Advisory gate: VWA evidence (background reviewer; NOT part of the required
+suite, does not gate merge).** Verdict for this PR: **not-applicable on
+both files, with the reasons below** — reported as such, not folded into
+the all-green table above.
+
+| File | Coverage | Threshold | Disposition |
+| --- | --- | --- | --- |
+| `.scratch/pr-body-completion-gate-enforce.md` | 0.00 | 0.9 | **Resolved by removal.** A one-shot PR-body draft, never tracked by git; the shipped PR body is on GitHub and this doc is the argumentative artifact. Deleted during self-repair. |
+| `docs/claude-code-capabilities.yaml` | 0.09 | 0.9 | **Not applicable — format mismatch.** This file's evidence system is its own structured form: `evidence: [{type: source\|test, path, anchor}]` per capability, validated by `check-capability-evidence.mjs` (I1–I11 + anchor resolution) and consumed by `generate-parity-matrix.mjs`. 〔src:ws:…〕 prose markers are not part of that format and would either be ignored or break the generator. The owning gate passed: `check:capabilities` in quality-gates job 133071683564, local run "capability manifest OK: docs/claude-code-capabilities.yaml". Note the gate reported `overall: pass` at both coverage values — coverage is a marker-density heuristic, so a non-paragraph file scores near zero by construction. |
+
+Why this matters for later re-checks: a future audit that sees 0.00/0.09 on
+these paths should read this table first; the low value is expected for a
+data/format file and for a deleted scratch draft, not an unresolved defect.
 
 ## 7. Out of scope
 
@@ -540,3 +575,66 @@ suite — this PR only documents the composition contract).
   LiftEntry/ReceiptLiftInput shapes; wiring.ts:202 drops the signal;
   grok's Session.commit reentry-guard line anchors were read in the harness
   clone (session/src/index.ts publication window).
+
+## 9. Formal design (screening record, 2026-11-17)
+
+**Adoption status — read this first.** AGENTS.md and CLAUDE.md carry no
+formal-design screening clause (grep: 0 hits), so this screening is
+**session-level adoption**, not a project rule; the adoption snippet lives
+at `<formal-design skill>/references/agents-snippet.md`. No repo review
+roster is implied by this record.
+
+```yaml
+mode: auto
+decision: not-needed
+triggerIds: []          # no full trigger; see the weak-hit analysis below
+backends: []
+modelDirs: []
+userDirective: >-
+  Asked whether this feature's design needs formal-design modeling; answered
+  and recorded here rather than modeling.
+```
+
+**Scope screened**: the enforce-mode state machine as specified in §3 —
+window-scoped cycle budget, the two markers, the `turn/end` reconciliation,
+the mirror/durable accounting, and the settings resolution.
+
+| Trigger | Hit | Analysis |
+| --- | --- | --- |
+| FD-T1 independent actors + shared-state ordering | **no** | Every participant (agent loop, the serial `agent/turn-stopping` dispatch, A3/Stop/vwa co-owners, reconciliation, the deferred microtask append) runs in one single-threaded process. Ordering is fixed by serial dispatch + FIFO microtasks. There is exactly one writer to the cycle accounting. Contrast the compaction-pin-restore model, which exists because the engine and a plugin are two writers over one surface. |
+| FD-T2 retries / duplicates / late messages | **weak** | Real instances exist — duplicate `turn/end` replay, failed-append re-dispatch, mid-turn hot-toggle, mirror vs durable divergence. All are closed by two constructive devices (idempotence guards, `max(durable, mirror)`), and are pinned by the §5 reconciliation a–i matrix, mirror hygiene, and the real-JSONL reentry smoke. No unenumerated interleaving space is left for TLC to find. |
+| FD-T3 crash recovery (ownership/dedup/persistence order) | **weak, bounded** | The one crash window is documented in §3.6: a restart loses the mirror, so a prior failed NUDGE append can re-arm the budget (bounded by the schema cap ≤ 10) and the terminal marker can be missing. The failure direction is fail-open, and the consequence is one missing audit row — not a correctness inversion like pin-restore's phantom restore. |
+| FD-T4 authorization / lease / ownership | **no** | — |
+| FD-L1 policy/eligibility composition with a stated invariant | **no** | Per-key setting resolution is validation, not authorization composition; a bad value falls to a default (fail-soft) and cannot change what is permitted. |
+| FD-L2 budget/accounting arithmetic with a stated bound | **weak** | `enforce-max-cycles` is literally a bounded budget, but the arithmetic is three constructive invariants (`spent = max(durable, mirror)`; compare-then-inject; mirror-before-inject) whose complete decision procedure is an exhaustive unit matrix — the same shape that justified `not-needed` for selective-system-prompt-sections (a stateless total function), not the cross-step queue state that made the input-admission model necessary. |
+
+**Decision: `not-needed` for this PR** (enforce is opt-in; the default
+`mode: 'nudge'` behavior is unchanged). Grounds:
+
+1. **No modelable concurrency surface** — single-threaded serial dispatch
+   removes FD-T1, the heaviest trigger.
+2. **The load-bearing property (termination) already has two empirical
+   layers**: the real-loop liveness smoke (a mock model restating the claim
+   forever terminates with exactly one marker pair) and the 18-case §5
+   matrix. A model would not add evidence beyond them at this shape.
+3. **Proportionality** — compare the SystemOne program: a pure threshold
+   policy (S1-09) was `not-needed` while four gates sharing one cache+
+   coalesce protocol were merged into a single model. This machine sits
+   closer to S1-09 in complexity.
+
+**Re-screening triggers (this decision is scoped, not permanent)**:
+
+- **Flipping the default to `enforce`.** The machine then runs in every
+  session instead of only opted-in ones, converting the weak T2/T3 hits
+  from "observable during dogfood" to "production-constant". At that point
+  model the three properties that matter for the flip — bounded injection
+  per window, at-most-once marker pair per turn, no phantom terminal marker
+  without exhaustion — before shipping the flip.
+- Any change introducing a **second writer** to the cycle accounting or the
+  markers (another plugin appending `cycle`-bearing nudges, a cross-process
+  or cross-session budget), which would activate FD-T1.
+- Any change to the **persistence order** (e.g. moving the terminal marker
+  out of the reconciliation, or making the exhausted event authoritative
+  again), which would activate FD-T3.
+
+No model was created, and this record claims no verification.
