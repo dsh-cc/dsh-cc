@@ -64,13 +64,13 @@ describe('lineage lift (§5.13)', () => {
     registry.record(child, receipt)
     const lifts = registry.liftsFor('root')
     expect(lifts).toHaveLength(1)
-    expect(lifts[0]).toMatchObject({ tool: 'bash', head: 'pnpm test', stampedOrdinal: 2 })
+    expect(lifts[0]).toMatchObject({ tool: 'bash', head: 'pnpm test', outcome: 'ok', stampedOrdinal: 2 })
   })
 
   it('own-session receipts never lift', () => {
     const root = fakeSession('root')
     const registry = new LineageRegistry()
-    const receipt = { sessionId: 'root', tool: 'bash' }
+    const receipt = { sessionId: 'root', tool: 'bash', outcome: 'ok' as const }
     registry.record(root, receipt)
     expect(registry.liftsFor('root')).toHaveLength(0)
   })
@@ -80,7 +80,7 @@ describe('lineage lift (§5.13)', () => {
     // tools — its parent link is never learned, so walkRoot stalls there.
     const registry = new LineageRegistry()
     const grandchild = fakeSession('gc', 'mid')
-    const receipt = { sessionId: 'gc', tool: 'bash' }
+    const receipt = { sessionId: 'gc', tool: 'bash', outcome: 'ok' as const }
     registry.record(grandchild, receipt)
     // 'mid' has no parent link: root = 'mid' ≠ 'gc' ⇒ lifts to 'mid' bucket.
     expect(registry.liftsFor('root')).toHaveLength(0)

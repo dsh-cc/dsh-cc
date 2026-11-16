@@ -24,11 +24,12 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { MockAdapter, textResponse, toolCallResponse } from '@dsh-cc/agent-loop-mock'
 import { defineTool } from '@dsh-cc/tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { NUDGE_EVENT, RECEIPT_EVENT, type Receipt } from '../src/events.ts'
-import { evaluateTurnStopping, type EvalAgent, type EvalEvent } from '../src/evaluate.ts'
-import { createPostExecuteHandler } from '../src/wiring.ts'
+import { NUDGE_EVENT, EXHAUSTED_EVENT, RECEIPT_EVENT, UNVERIFIED_EVENT, type Receipt } from '../src/events.ts'
+import { evaluateTurnStopping, type EvalAgent, type EvalEvent, type EnforceMirrorEntry } from '../src/evaluate.ts'
+import { createPostExecuteHandler, createTurnEndReconciler } from '../src/wiring.ts'
+import { buildReceipt } from '../src/receipts.ts'
 import { LineageRegistry } from '../src/lineage.ts'
-import { DEFAULT_GATE_SETTINGS } from '../src/settings.ts'
+import { DEFAULT_GATE_SETTINGS, type GateSettings } from '../src/settings.ts'
 import { apply } from '../src/index.ts'
 
 const roots: string[] = []
@@ -40,6 +41,8 @@ const evalDeps = () => ({
   settings: { ...DEFAULT_GATE_SETTINGS, enabled: true },
   lineage: new LineageRegistry(),
   latches: new Map<string, number>(),
+  enforceMirror: new Map<string, EnforceMirrorEntry>(),
+  exhaustedTurns: new Set<string>(),
   debug: () => {},
 })
 
@@ -173,4 +176,192 @@ describe('@dsh-cc/completion-gate resume replay (§5.8, real zstd backend)', () 
     })
     expect(restored3).toEqual({ action: 'nudge', claims: ['tests-green'] })
   }, 30_000)
+
+  it('both enforce markers round-trip through the real backend (§3.2)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cg-markers-'))
+    roots.push(root)
+    const ctx = await mount(root, [textResponse('hello there')], false)
+    const agent = await ctx.agentLoop.create(SessionId('cg-markers-1'), { provider: 'mock', model: 'mock' }, { cwd: root })
+    await turn(agent, 'hi')
+    const marker = { turn: 1, claims: ['tests-green'], assistantTextHash: 'abcabcabcabcabca' }
+    agent.session.append(EXHAUSTED_EVENT, marker)
+    agent.session.append(UNVERIFIED_EVENT, { ...marker, lastInjectFailed: true })
+    await ctx.sessions.flush(agent.session)
+
+    const ctx2 = new Context()
+    await ctx2.plugin(JsonlSessionPersistence, { root })
+    const reader = await ctx2.sessionPersistence.open(SessionId('cg-markers-1'), 'read')
+    const replayed = (await reader.read()).events as EvalEvent[]
+    await reader.close()
+    const exhausted = replayed.filter(event => event.type === EXHAUSTED_EVENT)
+    const unverified = replayed.filter(event => event.type === UNVERIFIED_EVENT)
+    expect(exhausted).toHaveLength(1)
+    expect(exhausted[0]!.data).toEqual(marker)
+    expect(unverified).toHaveLength(1)
+    expect(unverified[0]!.data).toEqual({ ...marker, lastInjectFailed: true })
+  }, 30_000)
+})
+
+/** Fixture session for the `turn/end` reconciliation pins (§3.5 / §5 case 11). */
+function markerSession(id: string, events: EvalEvent[]): any {
+  return {
+    header: { id },
+    snapshotEvents: () => events,
+    append: (type: string, data: unknown) => {
+      events.push({ type, data, seq: events.length })
+    },
+  }
+}
+
+function userEvent(text = 'please finish', kind?: string): EvalEvent {
+  return { type: 'user/message', data: { content: [{ type: 'text', text }], ...(kind ? { source: { kind } } : {}) } }
+}
+
+function assistantEvent(turn: number, text = 'tests pass'): EvalEvent {
+  return { type: 'assistant/message', data: { turn, message: { role: 'assistant', content: [{ type: 'text', text }] } } }
+}
+
+function receiptOk(): EvalEvent {
+  return {
+    type: RECEIPT_EVENT,
+    data: buildReceipt(
+      { callId: 'c1', name: 'bash', arguments: { command: 'pnpm test' }, agent: undefined } as never,
+      { isError: false, content: [{ type: 'text', text: 'ok' }] } as never,
+      { headEnabled: true },
+    ),
+  }
+}
+
+const turnEndEvent = (turn = 1) => ({ type: 'turn/end', data: { turn, reason: { kind: 'completed' } } })
+
+/** Let the deferred `queueMicrotask` append run. */
+const flushMicrotasks = () => new Promise<void>(resolve => setTimeout(resolve, 0))
+
+function reconciliation(overrides: {
+  settings?: Partial<GateSettings>
+  enforceMirror?: Map<string, EnforceMirrorEntry>
+  exhaustedTurns?: Set<string>
+} = {}) {
+  const logs: string[] = []
+  const enforceMirror = overrides.enforceMirror ?? new Map<string, EnforceMirrorEntry>()
+  const exhaustedTurns = overrides.exhaustedTurns ?? new Set<string>()
+  const reconcile = createTurnEndReconciler({
+    readSettings: () => ({ ...DEFAULT_GATE_SETTINGS, enabled: true, mode: 'enforce', ...overrides.settings }) as GateSettings,
+    lineage: new LineageRegistry(),
+    enforceMirror,
+    exhaustedTurns,
+    debug: (message: string) => logs.push(message),
+  })
+  return { reconcile, enforceMirror, exhaustedTurns, logs }
+}
+
+describe('@dsh-cc/completion-gate turn/end reconciliation (§3.5 / §5 case 11)', () => {
+  it('11a: exhausted + still unmatched ⇒ exactly ONE deferred unverified event', async () => {
+    const events: EvalEvent[] = [userEvent(), assistantEvent(1), turnEndEvent()]
+    const session = markerSession('s1', events)
+    const exhaustedTurns = new Set(['s1:1'])
+    const { reconcile } = reconciliation({ exhaustedTurns })
+
+    reconcile(session, turnEndEvent())
+    // Deferred out of the publication window: nothing lands synchronously.
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(0)
+    await flushMicrotasks()
+
+    const markers = events.filter(event => event.type === UNVERIFIED_EVENT)
+    expect(markers).toHaveLength(1)
+    expect(markers[0]!.data).toMatchObject({ turn: 1, claims: ['tests-green'] })
+    expect(typeof markers[0]!.data.assistantTextHash).toBe('string')
+    // The append-failure backstop is dropped once the turn is finalized.
+    expect(exhaustedTurns.has('s1:1')).toBe(false)
+  })
+
+  it('11b: a continuation supplied the evidence ⇒ NO terminal marker', async () => {
+    // Exhausted, then a co-owner continued the turn: the model ran the suite
+    // (ok receipt inside the window) and repeated the claim.
+    const events: EvalEvent[] = [
+      userEvent(),
+      assistantEvent(1),
+      userEvent('Completion gate (enforced): …', 'completion-gate'),
+      receiptOk(),
+      assistantEvent(1),
+      turnEndEvent(),
+    ]
+    const { reconcile } = reconciliation({ exhaustedTurns: new Set(['s1:1']) })
+    reconcile(markerSession('s1', events), turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(0)
+  })
+
+  it('11c: the turn ended on a retraction ⇒ NO terminal marker', async () => {
+    const events: EvalEvent[] = [userEvent(), assistantEvent(1), assistantEvent(1, 'all good now'), turnEndEvent()]
+    const { reconcile } = reconciliation({ exhaustedTurns: new Set(['s1:1']) })
+    reconcile(markerSession('s1', events), turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(0)
+  })
+
+  it('11d: not exhausted (no event, no set entry, spent < max) ⇒ no marker even if unmatched', async () => {
+    const events: EvalEvent[] = [userEvent(), assistantEvent(1), turnEndEvent()]
+    const { reconcile } = reconciliation()
+    reconcile(markerSession('s1', events), turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(0)
+  })
+
+  it('11e: compaction fail-open in the window ⇒ no marker', async () => {
+    const events: EvalEvent[] = [
+      userEvent(),
+      { type: 'compaction/end', data: {} },
+      assistantEvent(1),
+      turnEndEvent(),
+    ]
+    const { reconcile } = reconciliation({ exhaustedTurns: new Set(['s1:1']) })
+    reconcile(markerSession('s1', events), turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(0)
+  })
+
+  it('11f: a duplicate turn/end replay appends nothing more', async () => {
+    const events: EvalEvent[] = [userEvent(), assistantEvent(1), turnEndEvent()]
+    const session = markerSession('s1', events)
+    const exhaustedTurns = new Set(['s1:1'])
+    const { reconcile } = reconciliation({ exhaustedTurns })
+    reconcile(session, turnEndEvent())
+    await flushMicrotasks()
+    reconcile(session, turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(1)
+  })
+
+  it('11g: the exhausted append THREW (set entry + mirror at max) ⇒ still one unverified', async () => {
+    const events: EvalEvent[] = [userEvent(), assistantEvent(1), turnEndEvent()]
+    const enforceMirror = new Map<string, EnforceMirrorEntry>([['s1', { windowOrdinal: 1, spent: 3 }]])
+    const { reconcile } = reconciliation({ enforceMirror, exhaustedTurns: new Set(['s1:1']) })
+    reconcile(markerSession('s1', events), turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(1)
+  })
+
+  it('11h: a turn with no assistant message gets no marker', async () => {
+    const events: EvalEvent[] = [userEvent(), turnEndEvent()]
+    const { reconcile } = reconciliation({ exhaustedTurns: new Set(['s1:1']) })
+    reconcile(markerSession('s1', events), turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(0)
+  })
+
+  it('11i: the exhaustion condition is recovered from the event when the set entry is gone', async () => {
+    // Hot-toggle-off-after-exhaustion: the durable observation exists, no set
+    // entry, mode is nudge at turn/end — the marker still lands.
+    const events: EvalEvent[] = [
+      userEvent(),
+      assistantEvent(1),
+      { type: EXHAUSTED_EVENT, data: { turn: 1, claims: ['tests-green'], assistantTextHash: 'h' } },
+      turnEndEvent(),
+    ]
+    const { reconcile } = reconciliation({ settings: { mode: 'nudge' } })
+    reconcile(markerSession('s1', events), turnEndEvent())
+    await flushMicrotasks()
+    expect(events.filter(event => event.type === UNVERIFIED_EVENT)).toHaveLength(1)
+  })
 })

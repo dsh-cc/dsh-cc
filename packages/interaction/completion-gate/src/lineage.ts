@@ -22,6 +22,8 @@ export const MAX_LINEAGE_DEPTH = 8
 export interface LiftEntry {
   tool: string
   head?: string
+  /** Execution outcome — enforce mode only satisfies claims with `ok` (§3.3). */
+  outcome: 'ok' | 'error'
   stampedOrdinal: number
 }
 
@@ -36,6 +38,8 @@ export interface ReceiptLiftInput {
   sessionId: string | null
   tool: string
   head?: string
+  /** Carried through so enforce matching can drop failed child executions (§3.3 r2). */
+  outcome: 'ok' | 'error'
 }
 
 /**
@@ -120,7 +124,7 @@ export class LineageRegistry {
     const rootSession = this.lookup(root)
     const stampedOrdinal = rootSession === undefined ? 0 : countGenuineUserMessages(rootSession.snapshotEvents())
     const bucket = this.lifts.get(root)
-    const entry: LiftEntry = { tool: receipt.tool, stampedOrdinal }
+    const entry: LiftEntry = { tool: receipt.tool, outcome: receipt.outcome, stampedOrdinal }
     if (receipt.head !== undefined) entry.head = receipt.head
     if (bucket === undefined) this.lifts.set(root, [entry])
     else bucket.push(entry)

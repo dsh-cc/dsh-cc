@@ -376,7 +376,10 @@ capabilities:
         completion claims lack verified evidence, delivering an evidence
         nudge instead, and keeps a per-session receipts ledger with lineage
         lift. Default ON since 2026-11-11 (cc-completion-gate.enabled: true;
-        opt out with false).
+        opt out with false). Opt-in enforce mode
+        (cc-completion-gate.mode: enforce) turns the nudge into a bounded
+        same-turn enforcement loop with durable enforce-exhausted and
+        terminal unverified markers; default mode is nudge.
       refs: []
     dimensions:
       recognized: true
@@ -394,7 +397,10 @@ capabilities:
       summary: >-
         dsh-cc extension: no CC counterpart exists. A runtime-verified
         completion gate (receipts ledger + evidence nudge + lineage lift),
-        default on since 2026-11-11.
+        default on since 2026-11-11. Opt-in enforce mode re-opens the turn
+        until claims are satisfied, retracted, or a window-scoped cycle
+        budget exhausts (markers: completion-gate/enforce-exhausted,
+        completion-gate/unverified at turn/end).
 
   engine.config-snapshot:
     title: Session config snapshot (sidecar ledger)
