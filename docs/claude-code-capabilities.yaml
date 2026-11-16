@@ -4427,6 +4427,21 @@ capabilities:
         in gauge-stage), and the `permission/classifier` audit event carries an
         optional `ambiguity` field. CC has no such key — deliberate dsh-cc
         extension.
+        Delegated-session ask-rejection copy slice (2026-11-17): asks from
+        delegated (ancestor-subagent) sessions whose folded approval policy
+        is `never` — and delegated sessions with no approval channel composed
+        at all — resolve to structured agent-addressed guidance instead of
+        the user-rejection sentence: a stable prefix ("no approval channel
+        can answer this request in this delegated session"), the sanitized
+        original trigger, and exactly one category-scoped retry policy (one
+        materially narrower retry for an under-specified target/scope, one
+        identical retry for a transient classifier failure, and
+        report-a-blocker for structural triggers), because a rejection by the
+        deterministic `never` path is not a human decision the model can
+        appeal (packages/core/tools ask-guidance + serviceAsk). ASK decisions
+        and every answerable surface are untouched: a policy `ask` rejection
+        (a human said no, including the TUI modal on a tracked child) and any
+        main-session rejection keep the user-addressed copy byte-identical.
 
   # ── models ──────────────────────────────────────────────────────────────
   models.aliases:

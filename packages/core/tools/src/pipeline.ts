@@ -10,6 +10,8 @@ import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { assertNever, deepFreeze, snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
+import { askRaisedClause, ASK_CHANNEL_GUIDANCE, ASK_DENIAL_GUIDANCE, sanitizeAskReason } from './ask-guidance.ts'
+import { approvalPolicyIsNever, isDelegatedSession, subagentAskGuidance } from './ask-guidance.ts'
 import { TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH, ToolNotFoundError, ToolOutputError } from './contracts.ts'
 import { validateJsonSchemaValue } from './json-schema.ts'
 import type { ToolsService } from './index.ts'
@@ -62,35 +64,6 @@ interface FusedToolSignal {
  * prepare and complete calls while dispatch may overlap. Use executeToolBatch
  * for complete calls, including a single-call batch.
  */
-/**
- * Guidance tail for a permission denial whose cause is environmental (no
- * approval answerer exists at all). One stable sentence.
- */
-const ASK_CHANNEL_GUIDANCE
-  = 'This is an environment limitation, not a tool malfunction — do not retry this call in a loop.'
-
-/**
- * Guidance tail for a USER-driven approval rejection: names the decision class
- * so a repeated rejection is not misread as a tool outage. One stable sentence.
- */
-const ASK_DENIAL_GUIDANCE
-  = 'This is a permission decision, not a tool malfunction — do not retry the identical call unchanged; ask the user, explain why you need the action, or take a different approach.'
-
-/**
- * Model-facing hygiene for an embedded ask reason: the permission-rules lanes
- * sanitize their own strings, but third-party hook reasons arrive raw — strip
- * C0 controls/DEL, fold whitespace, cap at 120 chars (ellipsized).
- */
-function sanitizeAskReason(reason: string): string {
-  const clean = reason.replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim()
-  return clean.length <= 120 ? clean : `${clean.slice(0, 119)}…`
-}
-
-/** The parenthetical that carries the ask's reason into the denial text. */
-function askRaisedClause(ask: { reason?: string }): string {
-  return ask.reason === undefined ? '' : ` (the ask was raised because: ${sanitizeAskReason(ask.reason)})`
-}
-
 export class ToolExecutionPipeline {
   private readonly tools: ToolsService
 
@@ -459,7 +432,11 @@ export class ToolExecutionPipeline {
    * session to audit to and no UI to route to. Otherwise the outcome maps
    * one-to-one — `allowed-once` proceeds; the three non-grants deny with
    * distinct reasons so the model can tell a human "no" from an absent
-   * approval channel.
+   * approval channel. A rejection that provably cannot be answered — a
+   * delegated session whose folded approval policy is `never`, or one with
+   * no approval channel composed at all — carries structured agent-addressed
+   * guidance instead (see unattendedAskDeny); every answerable surface keeps
+   * the copy below byte-identical.
    */
   private async serviceAsk(
     exec: ToolExecution,
@@ -467,6 +444,9 @@ export class ToolExecutionPipeline {
   ): Promise<ToolAskResolution> {
     const approval = this.ctx.get('approval')
     if (approval === undefined) {
+      if (isDelegatedSession(exec.agent)) {
+        return { decision: { kind: 'deny', reason: subagentAskGuidance(exec.name, ask.reason) }, approvalCancelled: false }
+      }
       const reason = ask.reason === undefined
         ? `tool "${exec.name}" requires approval (not yet supported)`
         : sanitizeAskReason(ask.reason)
@@ -492,7 +472,7 @@ export class ToolExecutionPipeline {
     switch (outcome) {
       case 'allowed-once': return { decision: { kind: 'allow' }, approvalCancelled: false }
       case 'rejected': return {
-        decision: { kind: 'deny', reason: `the user rejected tool "${exec.name}"${askRaisedClause(ask)}. ${ASK_DENIAL_GUIDANCE}` },
+        decision: { kind: 'deny', reason: this.unattendedAskDeny(exec, ask) ?? `the user rejected tool "${exec.name}"${askRaisedClause(ask)}. ${ASK_DENIAL_GUIDANCE}` },
         approvalCancelled: false,
       }
       case 'cancelled': return {
@@ -500,11 +480,29 @@ export class ToolExecutionPipeline {
         approvalCancelled: true,
       }
       case 'unavailable': return {
-        decision: { kind: 'deny', reason: `tool "${exec.name}" requires approval, but no approval channel is available${askRaisedClause(ask)}. ${ASK_CHANNEL_GUIDANCE}` },
+        decision: { kind: 'deny', reason: this.unattendedAskDeny(exec, ask) ?? `tool "${exec.name}" requires approval, but no approval channel is available${askRaisedClause(ask)}. ${ASK_CHANNEL_GUIDANCE}` },
         approvalCancelled: false,
       }
       default: return assertNever(outcome, 'ApprovalOutcome')
     }
+  }
+
+  /**
+   * Structured deny reason for an ask that provably cannot be answered: a
+   * delegated (ancestor-subagent) session whose CURRENT folded approval
+   * policy is `never`. Undefined for every answerable surface — a policy
+   * `ask` rejection (a human, or the TUI modal on a tracked child) and a
+   * main session keep the CC-parity copy byte-identical.
+   */
+  private unattendedAskDeny(
+    exec: ToolExecution,
+    ask: Extract<PreToolDecision, { kind: 'ask' }>,
+  ): string | undefined {
+    const agent = exec.agent
+    if (agent === undefined || !isDelegatedSession(agent)) return undefined
+    return approvalPolicyIsNever(agent.session.snapshotEvents())
+      ? subagentAskGuidance(exec.name, ask.reason)
+      : undefined
   }
 
   /**
