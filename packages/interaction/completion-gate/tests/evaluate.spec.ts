@@ -12,16 +12,19 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { RECEIPT_EVENT, type Receipt } from '../src/events.ts'
+import { EXHAUSTED_EVENT, NUDGE_EVENT, RECEIPT_EVENT, type Receipt } from '../src/events.ts'
 import {
   evaluateTurnStopping,
   maybeResolveOnReceipt,
   type EvalAgent,
   type EvalEvent,
+  type EnforceMirrorEntry,
+  type EvaluateDeps,
 } from '../src/evaluate.ts'
 import { LineageRegistry, countGenuineUserMessages, type SessionLike } from '../src/lineage.ts'
 import { buildReceipt } from '../src/receipts.ts'
 import { DEFAULT_GATE_SETTINGS, type GateSettings } from '../src/settings.ts'
+import { createTurnStoppingHandler } from '../src/wiring.ts'
 
 /** One fixture session whose append mutates the same snapshot array. */
 function fakeSession(id: string, events: EvalEvent[] = []): any {
@@ -45,18 +48,27 @@ function fixtureAgent(session: any): EvalAgent & { injected: string[] } {
   } as never
 }
 
-function deps(overrides?: Partial<GateSettings> & { lineage?: LineageRegistry; latches?: Map<string, number> }): {
-  settings: GateSettings
-  lineage: LineageRegistry
-  latches: Map<string, number>
-  debug: string[]
-} {
-  const debug: string[] = []
+/**
+ * Evaluate deps fixture. `enforceMirror`/`exhaustedTurns` are SHARED across
+ * re-dispatches within a test (a fresh map per dispatch can never stall) —
+ * pass one in to continue a simulated turn loop.
+ */
+function deps(overrides?: Partial<GateSettings> & {
+  lineage?: LineageRegistry
+  latches?: Map<string, number>
+  enforceMirror?: Map<string, EnforceMirrorEntry>
+  exhaustedTurns?: Set<string>
+}): EvaluateDeps & { logs: string[] } {
+  const { lineage, latches, enforceMirror, exhaustedTurns, ...settingsOverrides } = overrides ?? {}
+  const logs: string[] = []
   return {
-    settings: { ...DEFAULT_GATE_SETTINGS, enabled: true, ...overrides },
-    lineage: overrides?.lineage ?? new LineageRegistry(),
-    latches: overrides?.latches ?? new Map(),
-    debug: (message: string) => debug.push(message),
+    settings: { ...DEFAULT_GATE_SETTINGS, enabled: true, ...settingsOverrides } as GateSettings,
+    lineage: lineage ?? new LineageRegistry(),
+    latches: latches ?? new Map(),
+    enforceMirror: enforceMirror ?? new Map(),
+    exhaustedTurns: exhaustedTurns ?? new Set(),
+    debug: (message: string) => logs.push(message),
+    logs,
   }
 }
 
@@ -68,10 +80,10 @@ function assistantClaim(turn: number, text = 'tests pass'): EvalEvent {
   return { type: 'assistant/message', data: { turn, message: { role: 'assistant', content: [{ type: 'text', text }] } } }
 }
 
-function receiptEvent(tool: string, head?: string): EvalEvent {
+function receiptEvent(tool: string, head?: string, outcome: 'ok' | 'error' = 'ok'): EvalEvent {
   const receipt = buildReceipt(
     { callId: 'c1', name: tool, arguments: { command: head ?? 'noop' }, agent: undefined } as never,
-    { isError: false, content: [{ type: 'text', text: 'ok' }] } as never,
+    { isError: outcome === 'error', content: [{ type: 'text', text: 'ok' }] } as never,
     { headEnabled: head !== undefined },
   )
   if (head === undefined) delete receipt.head
@@ -243,7 +255,7 @@ describe('horizon rule (§3.4 / §5.13)', () => {
     // never replayed its old messages — replay is not needed: the stamp reads
     // snapshotEvents, and it must equal the count-from-view at lift time).
     lineage.witness(root)
-    lineage.record(child, { sessionId: 'child', tool: 'bash', head: 'pnpm test' })
+    lineage.record(child, { sessionId: 'child', tool: 'bash', head: 'pnpm test', outcome: 'ok' })
     expect(lineage.liftsFor('root')[0]!.stampedOrdinal).toBe(countGenuineUserMessages(rootEvents))
     rootEvents.push(assistantClaim(1))
     const d = deps({ lineage })
@@ -283,5 +295,242 @@ describe('resolved loop-closer (§3.4 step 4)', () => {
       { headEnabled: true },
     ), () => {})
     expect(events.filter(event => event.type === 'completion-gate/resolved')).toHaveLength(0)
+  })
+})
+
+/** Count fixture events of one type. */
+function countOf(events: EvalEvent[], type: string): number {
+  return events.filter(event => event.type === type).length
+}
+
+describe('enforce mode: cycle machine (§5 cases 1-3)', () => {
+  it('case 1: first unmatched claim ⇒ nudge with cycle 1, one inject, mirror advanced', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const d = deps({ mode: 'enforce' })
+    const { result, agent } = outcome(events, 1, d)
+    expect(result).toEqual({ action: 'nudge', claims: ['tests-green'] })
+    const nudges = events.filter(event => event.type === NUDGE_EVENT)
+    expect(nudges).toHaveLength(1)
+    expect(nudges[0]!.data).toMatchObject({ claim: 'tests-green', missingReceipt: true, cycle: 1 })
+    expect(agent.injected).toHaveLength(1)
+    expect(agent.injected[0]).toContain('Completion gate (enforced):')
+    expect(agent.injected[0]).toContain('Gate cycles remaining: 2.')
+    expect(d.enforceMirror.get('root')).toEqual({ windowOrdinal: 1, spent: 1 })
+  })
+
+  it('case 2: re-dispatch after a restated claim ⇒ cycle 2 (mirror shared across dispatches)', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const d = deps({ mode: 'enforce' })
+    expect(outcome(events, 1, d).result).toEqual({ action: 'nudge', claims: ['tests-green'] })
+    // The model restated the claim after the injected message (same turn).
+    events.push(userMessage('Completion gate (enforced): …', 'completion-gate'), assistantClaim(1))
+    expect(outcome(events, 1, d).result).toEqual({ action: 'nudge', claims: ['tests-green'] })
+    expect(events.filter(event => event.type === NUDGE_EVENT).map(event => event.data.cycle)).toEqual([1, 2])
+    expect(d.enforceMirror.get('root')).toEqual({ windowOrdinal: 1, spent: 2 })
+  })
+
+  it('case 3: enforce-max-cycles 2 ⇒ third evaluation stalls once, fourth is idempotent', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const d = deps({ mode: 'enforce', 'enforce-max-cycles': 2 })
+    expect(outcome(events, 1, d).result).toMatchObject({ action: 'nudge' })
+    expect(outcome(events, 1, d).result).toMatchObject({ action: 'nudge' })
+    const third = outcome(events, 1, d)
+    expect(third.result).toEqual({ action: 'stall', claims: ['tests-green'] })
+    expect(third.agent.injected).toHaveLength(0)
+    expect(countOf(events, EXHAUSTED_EVENT)).toBe(1)
+    const exhausted = events.find(event => event.type === EXHAUSTED_EVENT)!
+    expect(exhausted.data).toMatchObject({ turn: 1, claims: ['tests-green'] })
+    expect(typeof exhausted.data.assistantTextHash).toBe('string')
+    // Fourth dispatch: no second event, no inject, no mirror write.
+    const mirrorBefore = { ...d.enforceMirror.get('root')! }
+    const fourth = outcome(events, 1, d)
+    expect(fourth.result).toEqual({ action: 'stall', claims: ['tests-green'] })
+    expect(fourth.agent.injected).toHaveLength(0)
+    expect(countOf(events, EXHAUSTED_EVENT)).toBe(1)
+    expect(d.enforceMirror.get('root')).toEqual(mirrorBefore)
+  })
+})
+
+describe('enforce mode: exits (§5 cases 4-5)', () => {
+  it('case 4: retraction (phrase gone) ⇒ no-claim skip; an apology WITH the phrase ⇒ nudge again', () => {
+    // Lexical retraction: the new final message simply drops the phrase.
+    const retracted = [
+      userMessage(), assistantClaim(1),
+      userMessage('Completion gate (enforced): …', 'completion-gate'), assistantClaim(1, 'all good now'),
+    ]
+    expect(outcome(retracted, 1, deps({ mode: 'enforce' })).result)
+      .toEqual({ action: 'skip', reason: 'no-claim' })
+
+    // Lexical contract: an apology that still contains the phrase is NOT a retraction.
+    const apology = [
+      userMessage(), assistantClaim(1),
+      userMessage('Completion gate (enforced): …', 'completion-gate'),
+      assistantClaim(1, "you're right, tests pass was unverified"),
+    ]
+    const d = deps({ mode: 'enforce' })
+    expect(outcome(apology, 1, d).result).toEqual({ action: 'nudge', claims: ['tests-green'] })
+    expect(d.enforceMirror.get('root')).toEqual({ windowOrdinal: 1, spent: 1 })
+  })
+
+  it('case 5: an ok receipt satisfies; a failed execution does not', () => {
+    const satisfied = [userMessage(), receiptEvent('bash', 'pnpm test', 'ok'), assistantClaim(1)]
+    expect(outcome(satisfied, 1, deps({ mode: 'enforce' })).result)
+      .toEqual({ action: 'skip', reason: 'satisfied' })
+
+    const failed = [userMessage(), receiptEvent('bash', 'pnpm test', 'error'), assistantClaim(1)]
+    const d = deps({ mode: 'enforce' })
+    expect(outcome(failed, 1, d).result).toEqual({ action: 'nudge', claims: ['tests-green'] })
+    expect(d.enforceMirror.get('root')).toEqual({ windowOrdinal: 1, spent: 1 })
+  })
+})
+
+describe('enforce mode: suppression + budget matrix (§5 cases 6, 8)', () => {
+  const gatedEvents = (): EvalEvent[] =>
+    [userMessage(), assistantClaim(1), userMessage('Evidence check…', 'completion-gate'), assistantClaim(1)]
+
+  it('case 6: nudge mode skips on its own nudge; enforce mode does not (only mode differs)', () => {
+    expect(outcome(gatedEvents(), 1, deps({ 'nudges-per-session': 5 })).result)
+      .toEqual({ action: 'skip', reason: 'suppressed' })
+    expect(outcome(gatedEvents(), 1, deps({ mode: 'enforce' })).result)
+      .toEqual({ action: 'nudge', claims: ['tests-green'] })
+  })
+
+  it('case 8: enforce nudges consume no advisory budget and write no latches', () => {
+    // nudges-per-session: 0 does not stop enforce.
+    const zero = deps({ mode: 'enforce', 'nudges-per-session': 0 })
+    expect(outcome([userMessage(), assistantClaim(1)], 1, zero).result).toMatchObject({ action: 'nudge' })
+
+    // Cycle-bearing NUDGE events are invisible to the advisory count.
+    const events = [userMessage(), assistantClaim(1)]
+    const enforceD = deps({ mode: 'enforce' })
+    expect(outcome(events, 1, enforceD).result).toMatchObject({ action: 'nudge' })
+    expect(enforceD.latches.size).toBe(0)
+    const nudgeD = deps({ 'nudges-per-session': 1, latches: enforceD.latches })
+    expect(outcome(events, 1, nudgeD).result).toMatchObject({ action: 'nudge' })
+  })
+})
+
+describe('enforce mode: window-scoped budget (§5 case 9)', () => {
+  it('plugin-origin turns cannot re-arm a fresh budget; a genuine user message can', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const d = deps({ mode: 'enforce', 'enforce-max-cycles': 1 })
+    expect(outcome(events, 1, d).result).toMatchObject({ action: 'nudge' })
+
+    // Turn 2 opens with a PLUGIN-origin user message — no new window.
+    events.push(userMessage('checkpoint…', 'plugin'), assistantClaim(2))
+    expect(outcome(events, 2, d).result).toEqual({ action: 'stall', claims: ['tests-green'] })
+    // ...and a second plugin-origin turn still finds no fresh budget.
+    events.push(userMessage('advisor note…', 'plugin'), assistantClaim(3))
+    expect(outcome(events, 3, d).result).toEqual({ action: 'stall', claims: ['tests-green'] })
+
+    // A GENUINE user message advances the window ⇒ fresh budget.
+    events.push(userMessage('another ask'), assistantClaim(4))
+    expect(outcome(events, 4, d).result).toEqual({ action: 'nudge', claims: ['tests-green'] })
+    expect(events.filter(event => event.type === NUDGE_EVENT).map(event => event.data.cycle)).toEqual([1, 1])
+  })
+})
+
+describe('enforce mode: mirror hygiene (§5 case 10)', () => {
+  it('append-unavailable: the mirror alone advances the cycle (no re-inject of cycle 1)', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const session: any = { header: { id: 'root' }, snapshotEvents: () => events }
+    const d = deps({ mode: 'enforce', 'enforce-max-cycles': 2 })
+    const agent = fixtureAgent(session)
+    expect(evaluateTurnStopping(agent, 1, d)).toMatchObject({ action: 'nudge' })
+    expect(d.enforceMirror.get('root')).toEqual({ windowOrdinal: 1, spent: 1 })
+    expect(evaluateTurnStopping(agent, 1, d)).toMatchObject({ action: 'nudge' })
+    expect(d.enforceMirror.get('root')).toEqual({ windowOrdinal: 1, spent: 2 })
+    // Budget exhausted without a single durable cycle event.
+    expect(evaluateTurnStopping(agent, 1, d)).toEqual({ action: 'stall', claims: ['tests-green'] })
+  })
+
+  it('inject-failure consumes the cycle and marks the marker', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const session = fakeSession('root', events)
+    const d = deps({ mode: 'enforce', 'enforce-max-cycles': 2 })
+    let attempts = 0
+    const agent = {
+      session,
+      inject: () => { attempts += 1; throw new Error('inject exploded') },
+    } as unknown as EvalAgent
+    expect(evaluateTurnStopping(agent, 1, d)).toMatchObject({ action: 'nudge' })
+    expect(d.enforceMirror.get('root')).toEqual({ windowOrdinal: 1, spent: 1, lastInjectFailed: true })
+    expect(evaluateTurnStopping(agent, 1, d)).toMatchObject({ action: 'nudge' })
+    expect(attempts).toBe(2)
+    expect(evaluateTurnStopping(agent, 1, d)).toEqual({ action: 'stall', claims: ['tests-green'] })
+    // The record does not accuse a model that never saw the last-chance footer.
+    expect(events.find(event => event.type === EXHAUSTED_EVENT)!.data.lastInjectFailed).toBe(true)
+  })
+})
+
+describe('enforce mode: co-owner composition (§5 case 12)', () => {
+  it('exhausted + a co-owner continuing the turn ⇒ stall, no inject, one exhaustion observation', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const d = deps({ mode: 'enforce', 'enforce-max-cycles': 1 })
+    expect(outcome(events, 1, d).result).toMatchObject({ action: 'nudge' })
+    // A denying Stop hook steered a continuation of the SAME turn.
+    events.push(userMessage('Stop hook denial…', 'hooks-claude-code'), assistantClaim(1))
+    const stall = outcome(events, 1, d)
+    expect(stall.result).toEqual({ action: 'stall', claims: ['tests-green'] })
+    expect(stall.agent.injected).toHaveLength(0)
+    // Another co-owner pass in the same dispatch still records only ONE event.
+    events.push(userMessage('Stop hook denial…', 'hooks-claude-code'), assistantClaim(1))
+    expect(outcome(events, 1, d).result).toEqual({ action: 'stall', claims: ['tests-green'] })
+    expect(countOf(events, EXHAUSTED_EVENT)).toBe(1)
+  })
+})
+
+describe('enforce mode: aborted signal (§5 case 14)', () => {
+  it('an aborted dispatch neither injects nor records exhaustion', () => {
+    const events = [userMessage(), assistantClaim(1)]
+    const agent = fixtureAgent(fakeSession('root', events))
+    const exhaustedTurns = new Set<string>()
+    const handler = createTurnStoppingHandler({
+      readSettings: () => ({ ...DEFAULT_GATE_SETTINGS, enabled: true, mode: 'enforce' }),
+      lineage: new LineageRegistry(),
+      latches: new Map(),
+      enforceMirror: new Map(),
+      exhaustedTurns,
+      debug: () => {},
+    })
+    const controller = new AbortController()
+    controller.abort()
+    handler({ agent, turn: 1, signal: controller.signal })
+    expect(agent.injected).toHaveLength(0)
+    expect(countOf(events, NUDGE_EVENT)).toBe(0)
+    expect(countOf(events, EXHAUSTED_EVENT)).toBe(0)
+    expect(exhaustedTurns.size).toBe(0)
+  })
+})
+
+describe('enforce mode: lift outcomes (§5 case 15)', () => {
+  function liftFixture(childOutcome: 'ok' | 'error'): { root: any; lineage: LineageRegistry } {
+    const rootEvents: EvalEvent[] = [userMessage(), assistantClaim(1)]
+    const root = fakeSession('root', rootEvents)
+    const child = {
+      id: 'child',
+      header: { id: 'child', parentSession: 'root' },
+      snapshotEvents: () => [],
+    } as unknown as SessionLike
+    const lineage = new LineageRegistry()
+    lineage.witness(root)
+    lineage.record(child, buildReceipt(
+      { callId: 'c1', name: 'bash', arguments: { command: 'pnpm test' }, agent: { session: child } } as never,
+      { isError: childOutcome === 'error', content: [{ type: 'text', text: 'ok' }] } as never,
+      { headEnabled: true },
+    ))
+    return { root, lineage }
+  }
+
+  it('a failed child execution does not satisfy the claim', () => {
+    const { root, lineage } = liftFixture('error')
+    expect(evaluateTurnStopping(fixtureAgent(root), 1, deps({ mode: 'enforce', lineage })))
+      .toEqual({ action: 'nudge', claims: ['tests-green'] })
+  })
+
+  it('an ok child execution satisfies the claim', () => {
+    const { root, lineage } = liftFixture('ok')
+    expect(evaluateTurnStopping(fixtureAgent(root), 1, deps({ mode: 'enforce', lineage })))
+      .toEqual({ action: 'skip', reason: 'satisfied' })
   })
 })

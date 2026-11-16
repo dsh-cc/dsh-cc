@@ -89,8 +89,13 @@ function readdirSafe(dir: string): string[] {
 }
 
 describe('settings (§3.5 / §3.2 dual-half)', () => {
-  it('defaults: enabled true (default ON since 2026-11-11), one nudge per session', () => {
-    expect(DEFAULT_GATE_SETTINGS).toEqual({ enabled: true, 'nudges-per-session': 1 })
+  it('defaults: enabled true (default ON since 2026-11-11), one nudge, mode nudge, 3 cycles', () => {
+    expect(DEFAULT_GATE_SETTINGS).toEqual({
+      enabled: true,
+      'nudges-per-session': 1,
+      mode: 'nudge',
+      'enforce-max-cycles': 3,
+    })
     expect(readUserSettingsSync(join(tmpdir(), 'no-such-home-xyz'))).toEqual(DEFAULT_GATE_SETTINGS)
   })
 
@@ -115,5 +120,49 @@ describe('settings (§3.5 / §3.2 dual-half)', () => {
     const home = tempDir()
     writeFileSync(join(home, 'settings.json'), JSON.stringify({ 'cc-completion-gate': { enabled: true, 'nudges-per-session': 'bogus' } }), 'utf8')
     expect(readUserSettingsSync(home)).toEqual(DEFAULT_GATE_SETTINGS)
+  })
+
+  it('enforce keys are resolved per-key, never through a section-level fallback (§5 cases 7, 18)', () => {
+    const home = tempDir()
+    const read = (section: Record<string, unknown>) => {
+      writeFileSync(join(home, 'settings.json'), JSON.stringify({ 'cc-completion-gate': section }), 'utf8')
+      return readUserSettingsSync(home)
+    }
+
+    // Defaults for both new keys.
+    expect(read({})).toEqual(DEFAULT_GATE_SETTINGS)
+
+    // mode: const union on the happy path, anything else → nudge.
+    expect(read({ mode: 'enforce' })).toMatchObject({ mode: 'enforce', 'enforce-max-cycles': 3 })
+    expect(read({ mode: 'nope' })).toMatchObject({ mode: 'nudge' })
+
+    // enforce-max-cycles: trunc then clamp to [1, 10], else 3.
+    expect(read({ 'enforce-max-cycles': 0 })['enforce-max-cycles']).toBe(1)
+    expect(read({ 'enforce-max-cycles': 99 })['enforce-max-cycles']).toBe(10)
+    expect(read({ 'enforce-max-cycles': 2.5 })['enforce-max-cycles']).toBe(2)
+    expect(read({ 'enforce-max-cycles': 'x' })['enforce-max-cycles']).toBe(3)
+    expect(read({ 'enforce-max-cycles': 5 })['enforce-max-cycles']).toBe(5)
+
+    // No section-level clobber: an invalid NEW key must not re-enable the gate.
+    expect(read({ enabled: false, mode: 'typo' })).toEqual({
+      enabled: false,
+      'nudges-per-session': 1,
+      mode: 'nudge',
+      'enforce-max-cycles': 3,
+    })
+    // §5 case 18: legacy opt-out preserved, cycles still clamped per-key.
+    expect(read({ enabled: false, 'enforce-max-cycles': 0 })).toEqual({
+      enabled: false,
+      'nudges-per-session': 1,
+      mode: 'nudge',
+      'enforce-max-cycles': 1,
+    })
+    // A section that throws the LEGACY validator still honors raw `mode`.
+    expect(read({ enabled: true, 'nudges-per-session': 'bogus', mode: 'enforce' })).toEqual({
+      enabled: true,
+      'nudges-per-session': 1,
+      mode: 'enforce',
+      'enforce-max-cycles': 3,
+    })
   })
 })
