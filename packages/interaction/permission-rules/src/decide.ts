@@ -21,6 +21,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { evaluatePermission, evaluateShell } from './evaluate.ts'
 import { splitShellCommand } from './shell-segments.ts'
 import { assessBashCommand, assessFilePath, type RiskAssessment } from './classifier.ts'
+import { resolveMcpClass, workspaceWriteProtectedAsk } from './mcp-decide-extensions.ts'
+import type { McpToolClass, McpToolClassResolution, McpToolClassSource } from './mcp-tool-classes.ts'
 import { filterAutoAllowRules } from './auto-rule-filter.ts'
 import { isBashToolName, subjectOf } from './matchers.ts'
 import { foldPlanMode } from './mode.ts'
@@ -61,6 +63,13 @@ export type DecideDeps = {
   bypassDisabled(): boolean
   /** Session-scoped allowlist match (seed-once handled inside the service). */
   sessionAllowMatches(exec: ToolExecution): boolean
+  /**
+   * The deterministic MCP classification for one call (design D3/D4/D5). The
+   * SERVICE supplies it (it owns the executing-definition lookup and the live
+   * settings section); the waterfall consumes it exactly once per call. A
+   * lookup miss or an unclassified call reads as `undefined`.
+   */
+  mcpToolClassOf(exec: ToolExecution): McpToolClassResolution | undefined
   /** The host shell service's sandbox mode, when mounted. */
   shellMode(): SandboxMode | undefined
   /**
@@ -119,8 +128,27 @@ function classify(deps: DecideDeps, exec: ToolExecution): RiskAssessment {
  * (BEFORE any auto-mode proxying) plus the computed risk and effective mode.
  * The async classifier stage (§4.1 of the LLM risk-classifier design) needs
  * all three to decide whether to consult the LLM and how to escalate.
+ *
+ * `mcpClass`/`mcpClassSource` are the resolved MCP classification (design D3)
+ * and are CO-PRESENT: both `undefined` (unclassified) or both set. The stage
+ * skips arbitration for any classified call; `isReadOnly` is amplified only by
+ * the curated/settings `readOnly` origins (never by `annotation`). A
+ * `workspaceWrite` call whose arguments match a protected pattern carries
+ * neither field — the classification was dropped by the D6b screen.
  */
-export type DecidedCall = { decision: PermissionDecision; risk: RiskAssessment; mode: PermissionMode; isReadOnly: boolean }
+export type DecidedCall = {
+  decision: PermissionDecision
+  risk: RiskAssessment
+  mode: PermissionMode
+  isReadOnly: boolean
+  /** The resolved MCP class, always co-present with {@link DecidedCall.mcpClassSource}. */
+  mcpClass?: McpToolClass
+  /** Which layer classified the call; always co-present with {@link DecidedCall.mcpClass}. */
+  mcpClassSource?: McpToolClassSource
+}
+
+/** Re-exported so consumers of {@link DecidedCall} need no second import. */
+export type { McpToolClass, McpToolClassSource }
 
 /**
  * The sync, pure waterfall WITHOUT the auto-proxy conversion. Under `auto`, a
@@ -129,19 +157,30 @@ export type DecidedCall = { decision: PermissionDecision; risk: RiskAssessment; 
  */
 export function decideCallVerbose(deps: DecideDeps, exec: ToolExecution): DecidedCall {
   const risk = classify(deps, exec)
+  const mode = effectiveMode(deps, exec)
+  // ONE MCP classification resolution step (design D3/D6b): the class comes
+  // from the service, and a `workspaceWrite` call's argument strings are
+  // screened against the effective protected patterns. A screen hit drops the
+  // classification and asks deterministically below.
+  const mcp = resolveMcpClass(deps, exec)
+  const mcpFields: Pick<DecidedCall, 'mcpClass' | 'mcpClassSource'> = mcp.mcpClass === undefined
+    ? {}
+    // Co-presence invariant (DecidedCall): a resolved class always carries its source.
+    : { mcpClass: mcp.mcpClass, mcpClassSource: mcp.mcpClassSource as McpToolClassSource }
   const isReadOnly = deps.readOnlyTools.has(exec.name)
+    || (mcp.mcpClass === 'readOnly' && mcp.mcpClassSource !== 'annotation')
   if (risk.level === 'HIGH') {
     return {
       decision: { kind: 'deny', reason: `blocked by risk classifier: ${risk.reasons.join('; ')}` },
       risk,
-      mode: effectiveMode(deps, exec),
+      mode,
       isReadOnly,
+      ...mcpFields,
     }
   }
   // MEDIUM no longer short-circuits before the waterfall (D2/A1): the
   // waterfall runs for LOW and MEDIUM alike; grants and the MEDIUM ask are
   // applied post-waterfall in mapPostWaterfall.
-  const mode = effectiveMode(deps, exec)
   const subject = subjectOf(exec, deps.bashToolName)
   const evaluationInput = {
     toolName: exec.name,
@@ -167,7 +206,13 @@ export function decideCallVerbose(deps: DecideDeps, exec: ToolExecution): Decide
   const decision = isBashToolName(exec.name, deps.bashToolName) && subject !== undefined
     ? evaluateShell(evaluationInput, splitShellCommand(subject))
     : evaluatePermission(evaluationInput)
-  return { decision: vwaStateGuard(deps, exec, mode, decision), risk, mode, isReadOnly }
+  return {
+    decision: workspaceWriteProtectedAsk(mode, vwaStateGuard(deps, exec, mode, decision), mcp.protectedPattern),
+    risk,
+    mode,
+    isReadOnly,
+    ...mcpFields,
+  }
 }
 
 /**

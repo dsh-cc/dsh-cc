@@ -55,6 +55,18 @@ describe('PermissionsSchema', () => {
     expect(result['customField']).toEqual({ nested: 1 })
   })
 
+  it('passes the dsh-cc MCP classification keys through untouched (not a cascade concern)', () => {
+    // The cascade schema only carries/preserves the raw section; the plugin
+    // schema owns validation (design D5). Both keys ride through verbatim.
+    const value = {
+      mcpToolClasses: { serena: { readOnlyTools: ['find_symbol'] }, 'other-server': false },
+      trustMcpAnnotations: true,
+    }
+    const result = parse(value) as Record<string, unknown>
+    expect(result['mcpToolClasses']).toEqual(value.mcpToolClasses)
+    expect(result['trustMcpAnnotations']).toBe(true)
+  })
+
   it('rejects a non-array allow', () => {
     expect(() => parse({ allow: 'Bash(*)' })).toThrow()
   })

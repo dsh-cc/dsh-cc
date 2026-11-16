@@ -28,7 +28,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { SettingsProvider, type SettingsNamespace } from '../index.ts'
 import { mergeSettingsSection } from './merge.ts'
-import { reassembleTrustedAutoMode, reassembleTrustedKey, TRUSTED_SOURCE_KEYS } from './trusted-scope.ts'
+import { reassembleTrustedAutoMode, reassembleTrustedKey, reassembleTrustedMcpToolClasses, TRUSTED_SOURCE_KEYS } from './trusted-scope.ts'
 import { isAccessDenied, isENOENT, isPlainObject, MAX_PERSIST_ATTEMPTS } from './shared-guards.ts'
 import { coerceEnv, type EnvSettings } from './env.ts'
 import { applyOpsToSection, diffSections, readUserText, writeJsonAtomic } from './persist.ts'
@@ -379,6 +379,9 @@ export class SettingsCascadeProvider extends SettingsProvider implements Trusted
     // (user/flag/policy) only — see ./trusted-scope.ts.
     const trustedLayers = [user, flag, policy]
     reassembleTrustedAutoMode(merged, trustedLayers)
+    // MCP tool classes + annotation trust (permission-rules design D5) follow
+    // the SAME trusted-only rule: repo layers can never classify MCP tools.
+    reassembleTrustedMcpToolClasses(merged, trustedLayers)
     for (const key of TRUSTED_SOURCE_KEYS) reassembleTrustedKey(merged, trustedLayers, key)
 
     // CC camelCase top-level keys alias onto kebab namespaces before the env

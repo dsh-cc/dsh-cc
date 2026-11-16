@@ -1,0 +1,100 @@
+[
+  {
+    "id": "read-find-symbol",
+    "tool": "mcp__serena__find_symbol",
+    "expect": "read",
+    "description": "Retrieves information on all symbols/coding entities (classes, methods, functions, variables, constants, modules) based on the given name path pattern.",
+    "arguments": {
+      "name_path_pattern": "resolveMcpToolClass",
+      "relative_path": "packages/interaction/permission-rules/src/mcp-tool-classes.ts",
+      "depth": 0,
+      "include_body": false
+    }
+  },
+  {
+    "id": "read-find-referencing-symbols",
+    "tool": "mcp__serena__find_referencing_symbols",
+    "expect": "read",
+    "description": "Finds symbols that reference the symbol at the given name path (usage/impact analysis).",
+    "arguments": {
+      "name_path": "DecidedCall",
+      "relative_path": "packages/interaction/permission-rules/src/decide.ts"
+    }
+  },
+  {
+    "id": "read-get-symbols-overview",
+    "tool": "mcp__serena__get_symbols_overview",
+    "expect": "read",
+    "description": "Get a high-level overview of the code symbols in a file.",
+    "arguments": {
+      "relative_path": "packages/interaction/permission-rules/src/auto-stage.ts",
+      "depth": 1
+    }
+  },
+  {
+    "id": "read-search-for-pattern",
+    "tool": "mcp__serena__search_for_pattern",
+    "expect": "read",
+    "description": "Search for a pattern (regex or literal substring) across files in the project.",
+    "arguments": {
+      "substring_pattern": "mcpToolClassOf",
+      "relative_path": "packages/interaction/permission-rules/src"
+    }
+  },
+  {
+    "id": "read-get-diagnostics-for-file",
+    "tool": "mcp__serena__get_diagnostics_for_file",
+    "expect": "read",
+    "description": "Get language-server diagnostics (errors and warnings) for a file.",
+    "arguments": {
+      "relative_path": "packages/interaction/permission-rules/src/decide.ts",
+      "start_line": 1,
+      "end_line": 40,
+      "min_severity": 4
+    }
+  },
+  {
+    "id": "write-replace-content",
+    "tool": "mcp__serena__replace_content",
+    "expect": "write",
+    "description": "Replace content in a file, matching an exact literal or a regex pattern.",
+    "arguments": {
+      "relative_path": "packages/interaction/permission-rules/src/decide.ts",
+      "needle": "return { decision, risk, mode, isReadOnly }",
+      "repl": "return { decision, risk, mode, isReadOnly, ...mcpFields }"
+    }
+  },
+  {
+    "id": "write-replace-symbol-body",
+    "tool": "mcp__serena__replace_symbol_body",
+    "expect": "write",
+    "description": "Replace the body of a symbol (function, method, class) in a source file.",
+    "arguments": {
+      "name_path": "resolveMcpToolClass",
+      "relative_path": "packages/interaction/permission-rules/src/mcp-tool-classes.ts",
+      "body": "export function resolveMcpToolClass(input, settings, definition, opts) { return undefined }"
+    }
+  },
+  {
+    "id": "write-rename-symbol",
+    "tool": "mcp__serena__rename_symbol",
+    "expect": "write",
+    "description": "Rename a symbol throughout the entire codebase, updating all references.",
+    "arguments": {
+      "name_path": "decided",
+      "relative_path": "packages/interaction/permission-rules/src/auto-stage.ts",
+      "new_name": "decidedCall"
+    }
+  },
+  {
+    "id": "write-insert-after-symbol",
+    "tool": "mcp__serena__insert_after_symbol",
+    "expect": "write",
+    "description": "Insert code after the definition of a symbol (new function, method, or top-level declaration).",
+    "arguments": {
+      "name_path": "DecidedCall",
+      "relative_path": "packages/interaction/permission-rules/src/decide.ts",
+      "body": "export function isClassified(decided: DecidedCall): boolean {\n  return decided.mcpClass !== undefined\n}"
+    }
+  }
+]

@@ -276,6 +276,8 @@ export async function syncTools(
           parameters: tool.inputSchema,
           output: createOutput(tool.name, supportedOutputSchema(tool.outputSchema)),
           execute: createExecutor(client, tool.name, tool.execution?.taskSupport === 'required', opts),
+          mcp: { server: opts.serverName, rawName: tool.name }, // classification identity, never model-visible
+          annotations: { readOnlyHint: tool.annotations?.readOnlyHint === true }, // untrusted server-authored hint
         },
       })
     }

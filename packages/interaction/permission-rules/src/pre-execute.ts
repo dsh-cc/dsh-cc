@@ -11,7 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { PostToolDecision, PreToolDecision, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
+import type { PostToolDecision, PreToolDecision, ToolDefinition, ToolExecution, ToolExecutionResult } from '@dsh-cc/tools'
 import { ccToolAliases } from '@dsh-cc/tools'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -26,6 +26,8 @@ import {
 } from './auto-stage.ts'
 import { exec as nodeExec } from 'node:child_process'
 import { decideCallVerbose, effectiveMode, mapPostWaterfall, type DecideDeps, type DecidedCall } from './decide.ts'
+import type { McpToolClassResolution } from './mcp-tool-classes.ts'
+import { resolveMcpToolClass } from './mcp-tool-classes.ts'
 import { createPiProbe, appendSessionProbe, foldProbes, probeInputText, type PiProbe } from './pi-probe.ts'
 import { foldClassifiers } from './classifier-audit.ts'
 import { summarizeChildHandoff, handoffWarningText } from './return-check.ts'
@@ -53,6 +55,13 @@ export type PreExecuteHost = {
   rules(): PermissionRuleSet
   bypassDisabled(): boolean
   sessionAllowMatches(exec: ToolExecution): boolean
+  /**
+   * The deterministic MCP classification for one call (design D3/D4): the
+   * service resolves the executing definition through the EXECUTION's own
+   * registry view and applies the live settings section. A lookup miss is
+   * unclassified (fail-safe).
+   */
+  mcpToolClassOf(exec: ToolExecution): McpToolClassResolution | undefined
   /** The session workspace root (session-cwd fold), for §3.7 VWA guard scoping. */
   workspaceOf(agent: Agent): string | undefined
   /**
@@ -181,6 +190,43 @@ async function grantPostHoc(
 }
 
 /**
+ * Build the service-side MCP classification resolver (design D3/D4/D5): look
+ * the executing definition up through the EXECUTION's own registry view (its
+ * agent scope and step tool set — never the global view, where a scoped
+ * registration can shadow it), then resolve the class from the stamped `mcp`
+ * identity, the live `permissions.mcpToolClasses` section, the definition's
+ * annotations, and `trustMcpAnnotations`.
+ *
+ * A miss (unregistered name, `when`-gated registration, deferred tool not yet
+ * activated) is unclassified — fail-safe, never throws into a waterfall.
+ * @param ctx - the plugin context owning the `tools` registry.
+ * @param settingsSection - live reader of the settings-resolved section.
+ * @returns the per-call classification supplier for the DecideDeps face.
+ */
+export function createMcpToolClassOf(
+  ctx: Context,
+  settingsSection: () => PermissionSettings,
+): (exec: ToolExecution) => McpToolClassResolution | undefined {
+  return (exec) => {
+    let definition: ToolDefinition | undefined
+    try {
+      definition = ctx.tools.get(exec.name, exec.agent, exec.toolSet)
+    } catch {
+      return undefined
+    }
+    const mcp = definition?.mcp
+    if (mcp === undefined) return undefined
+    const settings = settingsSection()
+    return resolveMcpToolClass(
+      { serverName: mcp.server, rawName: mcp.rawName },
+      settings.mcpToolClasses,
+      definition,
+      { trustAnnotations: settings.trustMcpAnnotations === true },
+    )
+  }
+}
+
+/**
  * Build the DecideDeps face, the auto stage, and register the pre-execute
  * listener. Called from the service constructor at the historical position
  * (after guard registration and the settings inject, before the approval
@@ -200,6 +246,7 @@ export function registerPreExecute(ctx: Context, host: PreExecuteHost): void {
     rules: () => host.rules(),
     bypassDisabled: () => host.bypassDisabled(),
     sessionAllowMatches: (exec) => host.sessionAllowMatches(exec),
+    mcpToolClassOf: (exec) => host.mcpToolClassOf(exec),
     shellMode: () => ctx.get('shell')?.sandboxMode as SandboxMode | undefined,
     workspaceOf: (agent) => host.workspaceOf(agent),
   }

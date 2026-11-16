@@ -113,8 +113,10 @@ function uncovered(
  */
 const DRIFT_ALLOWANCE: Record<string, { why: string, forkOnly: string[], upstreamOnly: string[] }> = {
   'src/contracts.ts': {
-    why: 'D2.1 — the `tools/code-dispatch-log` waterfall payload type (CodeDispatchLog)',
+    why: 'D2.1 — the `tools/code-dispatch-log` waterfall payload type (CodeDispatchLog), plus the MCP permission-class executor metadata (`mcp`/`annotations` on ToolDefinition)',
     forkOnly: [
+      'mcp?: { readonly server: string; readonly rawName: string }',
+      'annotations?: { readonly readOnlyHint?: boolean }',
       'readonly name: string',
       'readonly agent?: Agent',
       'export interface CodeDispatchLog {',

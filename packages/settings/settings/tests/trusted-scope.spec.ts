@@ -19,6 +19,10 @@ const AutoModeSchema = z.object({
 const PermissionsSchema = z.object({
   allow: z.array(z.string()),
   autoMode: z.union([AutoModeSchema, z.const(undefined)]),
+  // MCP classification surface (permission-rules design D5): read back which
+  // layer's value survived; the plugin schema owns the real validation.
+  mcpToolClasses: z.union([z.dict(z.any()), z.const(undefined)]),
+  trustMcpAnnotations: z.union([z.boolean(), z.const(undefined)]),
 })
 
 // Minimal stand-in for the consumer-owned `systemone-decisions` namespace: the
@@ -181,6 +185,57 @@ describe('trusted-scope autoMode assembly (D12)', () => {
       expect((scope.get() as { autoMode?: { soft_deny?: string[] } }).autoMode?.soft_deny).toEqual(['after'])
     }, { timeout: 3000 })
   }, 15000)
+})
+
+describe('trusted-scope MCP tool class assembly (D5)', () => {
+  it('project and local mcpToolClasses/trustMcpAnnotations are ignored', async () => {
+    const dir = await tempDir()
+    const project = await writeSettings(dir, 'project.json', {
+      permissions: {
+        mcpToolClasses: { serena: { workspaceWriteTools: ['replace_content'] } },
+        trustMcpAnnotations: true,
+      },
+    })
+    const local = await writeSettings(dir, 'local.json', {
+      permissions: {
+        mcpToolClasses: { serena: { readOnlyTools: ['find_symbol'] } },
+        trustMcpAnnotations: true,
+      },
+    })
+    const ctx = await boot({ projectSettingsPath: project, localSettingsPath: local })
+    const permissions = permissionsOf(ctx) as Record<string, unknown>
+    expect('mcpToolClasses' in permissions).toBe(false)
+    expect('trustMcpAnnotations' in permissions).toBe(false)
+  })
+
+  it('user-layer entries survive (both keys)', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      permissions: {
+        mcpToolClasses: { serena: { readOnlyTools: ['find_symbol'] }, 'untrusted-server': false },
+        trustMcpAnnotations: true,
+      },
+    })
+    const ctx = await boot({ userSettingsPath: user })
+    const permissions = permissionsOf(ctx) as Record<string, unknown>
+    expect(permissions['mcpToolClasses']).toEqual({
+      serena: { readOnlyTools: ['find_symbol'] },
+      'untrusted-server': false,
+    })
+    expect(permissions['trustMcpAnnotations']).toBe(true)
+  })
+
+  it('a repo layer cannot add a server to a user-layer map', async () => {
+    const dir = await tempDir()
+    const user = await writeSettings(dir, 'user.json', {
+      permissions: { mcpToolClasses: { serena: { readOnlyTools: ['find_symbol'] } } },
+    })
+    const project = await writeSettings(dir, 'project.json', {
+      permissions: { mcpToolClasses: { 'evil-server': { workspaceWriteTools: ['wipe'] } } },
+    })
+    const ctx = await boot({ userSettingsPath: user, projectSettingsPath: project })
+    expect(permissionsOf(ctx)['mcpToolClasses']).toEqual({ serena: { readOnlyTools: ['find_symbol'] } })
+  })
 })
 
 describe('trusted-scope generic key assembly', () => {

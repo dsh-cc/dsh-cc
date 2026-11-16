@@ -6309,6 +6309,92 @@
         "summary": "Deliberate dsh-cc extension: the `cc-subagent-catalog` settings namespace ({ truncate: bool default true, max-bytes: int default 8192, bounds 1024..65536, min-entry-bytes: int default 40, bounds 20..400; defaults provisional }) byte-caps the subagent catalog section render. Pass 1 preserves every agent name and truncates each whenToUse with UTF-8-safe byte slicing; pass 2 keeps the first K alphabetical entries and collapses the rest into a names-only line; a documented oversized-names floor drops names only with an explicit ellipsis line. truncate: false restores the uncapped render. Settings are read live per render."
       }
     },
+    "permissions.mcp-tool-classes": {
+      "title": "MCP tool permission classes (deterministic readOnly / workspaceWrite)",
+      "category": "permissions",
+      "plane": "host",
+      "upstream": {
+        "summary": "Not an upstream CC surface: a dsh-cc extension. Claude Code resolves MCP tool calls through its rule engine and tool-name matching only; it carries no per-tool MCP read-only / workspace-write classification fed by a trusted settings map, no annotation-trust opt-in, and no argument-level protected-pattern screen for a classified write.",
+        "refs": []
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "full"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/interaction/permission-rules/src/mcp-tool-classes.ts",
+          "anchor": "export function resolveMcpToolClass"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/mcp-tool-classes.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/permission-rules/src/decide.ts",
+          "anchor": "mcpToolClassOf"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/mcp-permission-classes.spec.ts",
+          "anchor": "curated readOnly ⇒ the call runs and the classifier stream is NEVER invoked"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/permission-rules/src/mcp-decide-extensions.ts",
+          "anchor": "export function workspaceWriteProtectedAsk"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/mcp-permission-classes.spec.ts",
+          "anchor": "a .mcp.json argument value ⇒ deterministic protected ask, classification dropped"
+        },
+        {
+          "type": "source",
+          "path": "packages/interaction/permission-rules/src/settings-schema.ts",
+          "anchor": "mcpToolClasses"
+        },
+        {
+          "type": "test",
+          "path": "packages/interaction/permission-rules/tests/permission-settings-schema.spec.ts"
+        },
+        {
+          "type": "source",
+          "path": "packages/settings/settings/src/cascade/trusted-scope.ts",
+          "anchor": "export function reassembleTrustedMcpToolClasses"
+        },
+        {
+          "type": "test",
+          "path": "packages/settings/settings/tests/trusted-scope.spec.ts",
+          "anchor": "trusted-scope MCP tool class assembly (D5)"
+        },
+        {
+          "type": "script",
+          "path": "packages/interaction/permission-rules/scripts/probe-mcp-gauge.mjs"
+        },
+        {
+          "type": "source",
+          "path": "packages/mcp/mcp-client/src/tools.ts",
+          "anchor": "classification identity, never model-visible"
+        }
+      ],
+      "deviation": {
+        "kind": "divergent",
+        "summary": "dsh-cc extension: no CC counterpart exists. An MCP tool call resolves to at most one deterministic class — `readOnly` (settings entry, curated serena table, or an opt-in server-authored `readOnlyHint`) or `workspaceWrite` (trusted-layer settings only) — stored ONCE per call on `DecidedCall` as `mcpClass` + `mcpClassSource`. A classified call is never LLM-arbitrated (the classification skip also skips the autoMode hard_deny/soft_deny slot arbitration, accepted by design); only the settings/curated `readOnly` origins amplify `isReadOnly` (plan-mode auto-allow), never the annotation source, and `workspaceWrite` stays non-read-only so plan mode still wraps it. A `workspaceWrite` call additionally passes the D6b protected screen: every argument STRING VALUE is matched against the effective `protectedFiles` with the same anchored wildcard matcher `assessFilePath` uses, and a hit drops the classification and asks deterministically (\"requires approval: workspaceWrite tool arguments match protected pattern …\") composed below any waterfall deny, HIGH risk, and bypassPermissions; a session grant may still convert that ask to allow. The guarantee is narrowed to argument string values — project-wide writes that never name their targets are the accepted residual risk of configuring the class at all. Both `mcpToolClasses` and `trustMcpAnnotations` are reassembled from trusted layers only (user/flag/policy), so a cloned repo's project/local layers can neither classify MCP tools nor enable annotation trust. Server identity comes from the bridge's stamped `ToolDefinition.mcp` metadata, never from parsing the public tool name; an unresolvable definition (unregistered, when-gated, deferred-but-not-activated) is unclassified and keeps the gauge path unchanged. Live probe evidence (`probe-mcp-gauge-results.json`) shows neither an environment-prose amendment nor tool-description injection moves the gauge verdict on the nine serena representative cases, so the deterministic classification — not classifier tuning — is the shipped fix."
+      }
+    },
     "permissions.rules": {
       "title": "Permission rules",
       "category": "permissions",

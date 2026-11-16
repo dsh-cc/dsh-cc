@@ -40,6 +40,7 @@ function deps(overrides: Partial<DecideDeps> = {}): DecideDeps {
     rules: () => EMPTY_RULE_SET,
     bypassDisabled: () => false,
     sessionAllowMatches: () => false,
+    mcpToolClassOf: () => undefined,
     shellMode: () => undefined,
     ...overrides,
   }
