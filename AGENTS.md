@@ -66,10 +66,10 @@ absent or reports NOT armed is stopped and reported to the user, not
 replaced: cc-grok-bridge has no fallback (do not guess or construct an
 invocation), and for review passes cc-codex-bridge does not take its
 stock-plugin fallback either — the user decides whether to proceed on
-the reduced roster. All seats GO → proceed; any NO-GO or open P0 is a
-blocker — fold it, re-review the revision (delta brief), and proceed only
-once every seat's blockers are closed. Disagreement IS the finding —
-dig into the divergence before deciding.
+the reduced roster. All seats GO → proceed; any NO-GO, or any open P0/P1
+from any seat, is a blocker — fold it, re-review the revision (delta
+brief), and proceed only once every seat's findings are closed.
+Disagreement IS the finding — dig into the divergence before deciding.
 
 ### Execution & failure recovery
 Decompose the approved plan into mechanical units → `dsh-cc-agents:executor`; you
