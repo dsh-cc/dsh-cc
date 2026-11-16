@@ -63,6 +63,7 @@ const PAIRS = [
  * in README.md's FORK DRIFT note.
  */
 const FORK_ONLY_FILES = [
+  'ask-guidance.ts', // D1 (executor reliability) — delegated-session ask-rejection guidance: policy-never fold, delegated ancestry, trigger categories; fork-owned, re-imported by pipeline.ts
   'cc-executor.ts', // D7 — the native/code/both ToolExecutor plugin + run_code transport; also strips $schema annotations at the SDK-render boundary (D2.1 continuation) and loads the upstream renderers through the vendored module below
   'cc-names.ts', // CC↔harness tool-name translation
   'current-execution.ts', // execution-identity instrumentation (tools/execute listener)
@@ -210,24 +211,28 @@ const DRIFT_ALLOWANCE: Record<string, { why: string, forkOnly: string[], upstrea
     ],
   },
   'src/pipeline.ts': {
-    why: 'D2.1 — the approval-seam denial copy (ask-reason hygiene + guidance tails), a documented fork divergence carried across every harness bump',
+    why: 'D2.1 — the approval-seam denial copy (ask-reason hygiene + guidance tails), a documented fork divergence carried across every harness bump; D1 (executor reliability) moves the denial-copy helpers and the ASK_*_GUIDANCE constants into fork-only ask-guidance.ts (re-imported below, one prefix per import line) and adds the delegated-session structured deny to serviceAsk',
     forkOnly: [
-      'const ASK_CHANNEL_GUIDANCE',
-      "= 'This is an environment limitation",
-      'const ASK_DENIAL_GUIDANCE',
-      "= 'This is a permission decision",
-      'function sanitizeAskReason(reason: string): string {',
-      'const clean = reason.replace(',
-      'return clean.length <= 120',
-      'function askRaisedClause(ask: { reason?: string }): string {',
-      'return ask.reason === undefined',
+      "import { askRaisedClause, ASK_CHANNEL_GUIDANCE, ASK_DENIAL_GUIDANCE, sanitizeAskReason } from './ask-guidance.ts'",
+      "import { approvalPolicyIsNever, isDelegatedSession, subagentAskGuidance } from './ask-guidance.ts'",
+      'if (isDelegatedSession(exec.agent)) {',
+      'return { decision: { kind: \'deny\', reason: subagentAskGuidance(exec.name, ask.reason) }, approvalCancelled: false }',
+      'decision: { kind: \'deny\', reason: this.unattendedAskDeny(exec, ask) ?? `the user rejected tool "${exec.name}"${askRaisedClause(ask)}',
+      'decision: { kind: \'deny\', reason: this.unattendedAskDeny(exec, ask) ?? `tool "${exec.name}" requires approval, but no approval channel',
+      'if (agent === undefined || !isDelegatedSession(agent)) return undefined',
+      'return approvalPolicyIsNever(agent.session.snapshotEvents())',
+      '? subagentAskGuidance(exec.name, ask.reason)',
+      ': undefined',
+      'const agent = exec.agent',
+      'exec: ToolExecution,',
+      "ask: Extract<PreToolDecision, { kind: 'ask' }>,",
+      'private unattendedAskDeny(',
+      '): string | undefined {',
       'const reason = ask.reason === undefined',
       '? `tool "${exec.name}" requires approval (not yet supported)`',
       ': sanitizeAskReason(ask.reason)',
       'decision: { kind: \'deny\', reason: `${reason}. ${ASK_CHANNEL_GUIDANCE}` },',
       'decision: { kind: \'deny\', reason: `tool "${exec.name}" requires approval, but the call has no agent',
-      'decision: { kind: \'deny\', reason: `the user rejected tool "${exec.name}"${askRaisedClause(ask)}',
-      'decision: { kind: \'deny\', reason: `tool "${exec.name}" requires approval, but no approval channel',
     ],
     upstreamOnly: [
       'decision: { kind: \'deny\', reason: ask.reason ?? `tool "${exec.name}" requires approval (not yet supported)` },',

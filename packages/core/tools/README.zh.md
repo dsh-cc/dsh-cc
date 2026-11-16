@@ -21,6 +21,7 @@
 8. **注册 tripwire**——扁平参数规格在测试模式下硬失败、在生产环境告警，即工具 schema 门禁的 CI 分支。
 9. **审批接缝拒绝文案**——`pipeline` 中的 ask 原因清洗与环境／权限指引尾句，每次 harness 版本升级都要保留。
 10. **MCP 执行器元数据**——`ToolDefinition` 携带 MCP bridge 打标的登记身份（`mcp: { server, rawName }`）与服务端 `tools/list` 注解（`annotations.readOnlyHint`），与 `timeoutMs` 同属执行器元数据：永不对模型可见（`projectToolSchema` 只放行 name/description/parameters），并被权限引擎的确定性 MCP 工具分类消费（服务端身份绝不通过解析公开工具名回推）。
+11. **委托会话 ask 拒绝指引**——`ask-guidance` 模块为「可证明无法被应答」的 ask（折叠后审批策略为 `never` 的委托会话，或完全未组装审批通道的委托会话）构造结构化、面向 agent 的拒绝理由：基于会话 `approval/policy` 事件的 last-wins 折叠、fail-closed 的委托血统判定，以及封闭的触发词类表；`pipeline` 中 `serviceAsk` 的三个 ask 拒绝分支经它路由。差异 9 的拒绝文案辅助件（`sanitizeAskReason`、`askRaisedClause`、`ASK_*_GUIDANCE` 各句）随之一并移入该模块并被重新导入。ASK 决定本身与可应答面（人类或 TUI 弹窗在 policy `ask` 下的拒绝、主会话）及其 CC 对齐文案保持逐字节一致——只有无法应答的拒绝文案被特化。
 
 不再重新施加（已被上游吸收）：嵌套 `presentationMeta` 支持，以及分阶段调度垫片（调度由执行器自己负责）。
 
