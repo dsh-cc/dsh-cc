@@ -17,6 +17,25 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.9.6-rc.2 — an executor that fails fast and reports honestly
+
+- **Delegated ask rejections** — a permission ask denied by policy
+  (approval policy \`never\`, or no channel to ask on) no longer reads as
+  a user rejection that invites a retry loop: delegated sessions get
+  agent-addressed guidance with three retry classes — underspecified
+  earns one narrower retry, transient one identical retry, and
+  structural or unknown reasons mean stop and report a Blocker. ASK
+  decisions, the approval waterfall and hook \`allow\` are untouched.
+- **Executor contract** — \`executor.md\` now fails fast on environment
+  and permission blockers instead of improvising symlink or lockfile
+  workarounds, forbids scripted repo-file edits (dispatch-named
+  generators stay exempt), asks for serena-first bounded read bursts,
+  and requires non-empty Final verification and Gates-not-run sections.
+- **Delegation pre-flight** — the orchestration skill gains a pre-flight
+  checklist for mutating delegations: declarative target-repo bootstrap
+  and an explicit parent/child split of command ownership. Both contract
+  changes come from a two-week audit of 95 executor runs.
+
 ## 0.9.6-rc.1 — MCP permissions, VWA renders and a stricter completion gate
 
 - **MCP permissions** — a bare \`mcp__<server>\` rule now releases every
