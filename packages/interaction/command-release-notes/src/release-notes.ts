@@ -17,6 +17,10 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.10.0-rc.1
+
+- No user-facing changes since 0.9.6-rc.2.
+
 ## 0.9.6-rc.2 — an executor that fails fast and reports honestly
 
 - **Delegated ask rejections** — a permission ask denied by policy
