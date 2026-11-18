@@ -8,14 +8,14 @@
         "kind": "context7",
         "ref": "/websites/code_claude",
         "url": "https://code.claude.com/docs",
-        "retrieved": "2026-09-03"
+        "retrieved": "2026-11-18"
       },
       {
         "id": "cc-repo",
         "kind": "context7",
         "ref": "/anthropics/claude-code",
         "url": "https://github.com/anthropics/claude-code",
-        "retrieved": "2026-09-03"
+        "retrieved": "2026-11-18"
       }
     ],
     "freshness_threshold_days": 120
@@ -293,6 +293,79 @@
       ],
       "deviation": {
         "kind": "none"
+      }
+    },
+    "engine.agent-teams": {
+      "title": "Agent teams (named teammates over a shared task board)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Agent teams: a lead session dispatches named teammates that share a task list, create and complete tasks (the TaskCreated/TaskCompleted payloads carry team_name and teammate_name), and fire TeammateIdle when a teammate is about to go idle.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented: dsh-cc dispatches subagents from a declarations catalog but has no shared task board, no named teammates, and no team-scoped dispatch. The TeammateIdle hook row exists only as an observe-only bridge over subagent idle transitions, so hook config shaped for teams is accepted while the surface it reports has no dsh counterpart."
+      }
+    },
+    "engine.agent-view": {
+      "title": "Agent view (claude agents — background-session dashboard)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "`claude agents` opens one screen for every session — running, blocked on input, or done — over background sessions that keep running without a terminal attached; rows can be dispatched, attached to, printed as JSON (`--json`), and scoped by cwd (`--cwd`).",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/agent-view",
+            "retrieved": "2026-11-18"
+          },
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/cli-reference",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented: dsh-cc has no detached background sessions and no cross-session dashboard. `/agents` lists, inspects, stops, and releases background subagents inside the CURRENT session — a different surface (in-session children vs independent sessions)."
       }
     },
     "engine.ask-user-question": {
@@ -790,7 +863,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-15"
+            "retrieved": "2026-11-18"
           },
           {
             "source": "cc-docs",
@@ -1258,7 +1331,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/sub-agents",
-            "retrieved": "2026-09-15"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -1567,6 +1640,40 @@
       "deviation": {
         "kind": "downgrade",
         "summary": "FORCED DOWNGRADE at seed: the legacy row reads \"🔶 different — CC bridge/ is claude.ai-bound; dsh has its own web/host/sdk/acp stack outside this repo\", but that stack has no in-repo surface to anchor a positive claim against, so the seed records the four dimensions as non-positive until the external stack gains an in-repo seam."
+      }
+    },
+    "engine.safe-mode": {
+      "title": "Safe mode (--safe-mode / CLAUDE_CODE_SAFE_MODE)",
+      "category": "engine",
+      "plane": "preset",
+      "upstream": {
+        "summary": "`--safe-mode` (or CLAUDE_CODE_SAFE_MODE) starts a session with every customization disabled — CLAUDE.md, plugins, skills, hooks, and MCP servers — for troubleshooting a broken configuration.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/changelog",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented: no single switch boots dsh-cc free of CLAUDE.md, plugins, skills, hooks, and MCP servers. Each surface has its own settings kill switch instead, which is a per-feature opt-out rather than a session-wide safe boot."
       }
     },
     "engine.sandbox": {
@@ -2241,6 +2348,142 @@
         "summary": "Same-session replay (`resumeFromRunId`) implemented via the `cc-workflow-journal` provider — frozen-until-first-miss over the per-run result journal. Saved workflows mount as `/<name>` slash commands at session start (project dir shadows user dir), and a passive cc-tui progress row echoes phase/elapsed/agent counts from the `workflow/*` cordis events. Residual: per-user directory mapped to `$DSH_HOME/workflows/` (not `~/.claude/workflows/`); monorepo chain loading of every `.claude/workflows/` up to the repo root (CC v2.1.178) not implemented — cwd-level only; CC built-in workflows absent; `taskId === runId` aliasing with harness-format ids (CC prefix `wf_`); receipt omits `transcriptDir`/`scriptPath`/`sessionUrl`, no-start receipts omit `taskId`; receipt `warning?` extended to saved-script name disagreement; `ultracode`'s upstream session-effort side effect absent (opt-in trigger only); one-active-run constraint; no `/workflows` runs panel, save dialog, or pause/cancel keys; no `/reload-skills`-style mid-session re-read (new saves mount next session, runnable immediately by `name`); the command scan roots at `process.cwd()` while the tool resolves `name` against the session header cwd (divergence only when they differ); the progress row is process-scoped without session attribution (the payloads carry none); TUI-local command names silently shadow same-named saved workflows; command-mount skip surfacing is logger-grade. Residual footnotes: cross-session (and `claude --resume`-class) replay remains unimplemented; the cache key is the request triple (prompt + outputSchema + agentOptions), intentionally stricter than CC's prompt-only keying; durable descriptors and the subagent lifecycle identity name the provider `cc-workflow-journal`; the durable agent-start/agent-end records gain an additive `cached: boolean` field."
       }
     },
+    "hooks.config-change": {
+      "title": "ConfigChange hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when a configuration file changes during a session.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — settings hot-reload exists, but no session event announces a config-file change."
+      }
+    },
+    "hooks.cwd-changed": {
+      "title": "CwdChanged hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when the working directory changes mid-session, for example when Claude runs a `cd` command.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — a `cd` inside a bash tool call does not change the session's working directory in dsh-cc, so there is no emit point for this event."
+      }
+    },
+    "hooks.directory-added": {
+      "title": "DirectoryAdded hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when a working directory is added mid-session via `/add-dir` or the SDK register_repo_root control request.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — dsh-cc has no mid-session add-directory surface to announce; the workspace roots are fixed at session start."
+      }
+    },
+    "hooks.elicitation": {
+      "title": "Elicitation / ElicitationResult hooks",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when an MCP server requests user input during a tool call, and again after the user responds before the answer is sent back to the server.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — the MCP client has no elicitation round-trip, so neither of the two points exists to hook."
+      }
+    },
     "hooks.executors": {
       "title": "Hook executors (command/http/prompt/agent)",
       "category": "hooks",
@@ -2256,7 +2499,12 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
+          },
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/changelog",
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2289,7 +2537,75 @@
       ],
       "deviation": {
         "kind": "downgrade",
-        "summary": "command + http (SSRF-allowlisted via allowedHttpHookUrls) executors are always on; prompt/agent executors are gated behind enablePromptHooks / enableAgentHooks (default off) and resolve their model: through ccModelRoutes (omitted model → the haiku cheap lane)."
+        "summary": "command + http (SSRF-allowlisted via allowedHttpHookUrls) executors are always on; prompt/agent executors are gated behind enablePromptHooks / enableAgentHooks (default off) and resolve their model: through ccModelRoutes (omitted model → the haiku cheap lane). Hook-schema fields added upstream in 2.1.139 — `once: true`, the exec-form `args: string[]` (spawn without a shell), and PostToolUse's `continueOnBlock` — are surfaced as config warnings and ignored."
+      }
+    },
+    "hooks.file-changed": {
+      "title": "FileChanged hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when a watched file changes on disk; the matcher selects which filenames are watched.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — the only watcher in the process tracks configuration for hot reload; no session event announces an arbitrary file change."
+      }
+    },
+    "hooks.instructions-loaded": {
+      "title": "InstructionsLoaded hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when a CLAUDE.md or `.claude/rules/*.md` file is loaded into context — at session start and again when files are lazily loaded during a session.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — memory files are composed at session start through the prompt-assembly seam, which exposes no per-file load event."
       }
     },
     "hooks.message-display": {
@@ -2307,7 +2623,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2331,6 +2647,40 @@
         "summary": "Not bridged — no dsh emit point for message-display rendering events."
       }
     },
+    "hooks.model-switch": {
+      "title": "PreModelSwitch / PostModelSwitch hooks",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires before a requested model switch is applied (PreModelSwitch can block it) and after the session's model changes, including changes Claude Code makes on its own such as restoring the model on resume.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — model switches ride the harness selection seam, which has no pre/post event pair for the bridge to hook."
+      }
+    },
     "hooks.notification": {
       "title": "Notification hook",
       "category": "hooks",
@@ -2346,7 +2696,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2395,7 +2745,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2443,7 +2793,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2491,7 +2841,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2539,7 +2889,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2578,7 +2928,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2626,7 +2976,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2674,7 +3024,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2714,7 +3064,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2748,6 +3098,40 @@
         "summary": "Bridged with matcher support and the permissionDecision decision contract. Payloads for live subagent callers also carry CC's agent_id plus a constant agent_type 'general-purpose' (kind-specific real types are a parity gap), and session_id is child-scoped where CC keeps the parent session id. additionalContext IS injected for a non-deny decision (post-result context, an ordering divergence from CC attaching it to the tool call); only updatedInput is ignored. Harness 0.1.7 adds the PreToolDecision `cancel` kind (deny-with-different-user-text: canonical cancellation without a policy denial); CC's permissionDecision codec (allow|deny|ask) has no counterpart, so CC hooks can never emit it — it arises downstream only and the bridge folds it verbatim."
       }
     },
+    "hooks.prompt-autocomplete": {
+      "title": "prompt.autocomplete hook (mods)",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires while the user types in the prompt box when a word ends at the cursor; a hook may return suggestion rows shown below Claude Code's own autocomplete.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/plugins/mods/reference",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — this event exists only in the mods (JavaScript hook module) runtime, which dsh-cc has no equivalent of; the TUI completion provider is prefix-match only and exposes no hook seam."
+      }
+    },
     "hooks.session-end": {
       "title": "SessionEnd hook",
       "category": "hooks",
@@ -2763,7 +3147,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2811,7 +3195,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2870,7 +3254,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2904,6 +3288,40 @@
         "summary": "Bridged as a first-run approximation, not the full upstream Setup contract."
       }
     },
+    "hooks.skill-prompt": {
+      "title": "skill.prompt hook (mods)",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when a skill's text is expanded for Claude; a hook can return or rewrite the text and frontmatter that later hooks and the model read.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/plugins/mods/reference",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — this event exists only in the mods (JavaScript hook module) runtime; the skill loader renders SKILL.md text with no interception seam."
+      }
+    },
     "hooks.stop": {
       "title": "Stop hook",
       "category": "hooks",
@@ -2919,7 +3337,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -2956,6 +3374,55 @@
         "kind": "none"
       }
     },
+    "hooks.stop-failure": {
+      "title": "StopFailure hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when the turn ends because of an API error rather than a normal stop.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: hooks-claude-code"
+        },
+        {
+          "type": "source",
+          "path": "packages/hooks/hooks-claude-code/src/register-events.ts",
+          "anchor": "runPoint('StopFailure'"
+        },
+        {
+          "type": "test",
+          "path": "packages/hooks/hooks-claude-code/tests/error-recovery.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Observe-only bridge over `agent/error`: the payload carries `error` and a CC error-code mapping only (no `stop_hook_active`, `last_assistant_message`, or `background_tasks`), and the hook runs detached so it cannot influence the failing turn."
+      }
+    },
     "hooks.subagent-start": {
       "title": "SubagentStart hook",
       "category": "hooks",
@@ -2971,7 +3438,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -3025,7 +3492,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -3059,6 +3526,40 @@
         "summary": "Reports a constant agent_type 'general-purpose' where CC's kind-specific matchers would see the real type, a child-scoped session_id where CC reports the parent session, and omits agent_transcript_path and last_assistant_message."
       }
     },
+    "hooks.task-completed": {
+      "title": "TaskCompleted hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when a task is being marked as completed through the task tools.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not bridged — task completion is folded from job status after the fact; there is no pre-completion interception point."
+      }
+    },
     "hooks.task-created": {
       "title": "TaskCreated hook",
       "category": "hooks",
@@ -3074,7 +3575,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -3107,6 +3608,55 @@
         "kind": "none"
       }
     },
+    "hooks.teammate-idle": {
+      "title": "TeammateIdle hook",
+      "category": "hooks",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fires when an agent-team teammate is about to go idle.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/hooks",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: hooks-claude-code"
+        },
+        {
+          "type": "source",
+          "path": "packages/hooks/hooks-claude-code/src/register-events.ts",
+          "anchor": "runPoint('TeammateIdle'"
+        },
+        {
+          "type": "test",
+          "path": "packages/hooks/hooks-claude-code/tests/events.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Approximated: fires only for agents seen as live subagents transitioning to idle (a root agent's idle never fires it), carries the session base fields with no team/teammate fields, and is observe-only — dsh-cc has no agent teams, so this bridges the subagent-idle shape of the event."
+      }
+    },
     "hooks.user-prompt-expansion": {
       "title": "UserPromptExpansion hook",
       "category": "hooks",
@@ -3122,7 +3672,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -3161,7 +3711,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -3209,7 +3759,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/hooks",
-            "retrieved": "2026-09-14"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -3410,6 +3960,40 @@
       ],
       "deviation": {
         "kind": "none"
+      }
+    },
+    "commands.cd": {
+      "title": "/cd",
+      "category": "commands",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Moves the session to a new working directory without breaking the prompt cache mid-session.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/changelog",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented — the session working directory is fixed at startup (workspace roots, MCP roots, and the session header all bind to it); no command rebinds it mid-session."
       }
     },
     "commands.commit-split": {
@@ -3714,6 +4298,56 @@
       "deviation": {
         "kind": "divergent",
         "summary": "always-on one-way secret redaction of exported transcripts (dsh-cc extension; CC exports the transcript verbatim). Known gap: on web profiles the native CC /export bypasses this redaction."
+      }
+    },
+    "commands.goal": {
+      "title": "/goal",
+      "category": "commands",
+      "plane": "host",
+      "upstream": {
+        "summary": "Sets a completion condition and keeps the session working across turns until it is met, with a live overlay of elapsed time, turns, and token spend.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/goal",
+            "retrieved": "2026-11-18"
+          },
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/changelog",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.shared.cordis.yml",
+          "anchor": "- id: tool-goal"
+        },
+        {
+          "type": "test",
+          "path": "packages/preset/cc/tests/composition.spec.ts",
+          "anchor": "'command-goal'"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "The goal service, its session driver, and `/goal` stay on the host plane — the preset mounts only the model-facing goal tool, and the composition test records `command-goal` as a deliberate host-plane row. The TUI has no elapsed/turns/tokens overlay panel."
       }
     },
     "commands.help": {
@@ -4437,6 +5071,40 @@
         "upstream_dependency": "session-file-snapshot-seam"
       }
     },
+    "commands.scroll-speed": {
+      "title": "/scroll-speed",
+      "category": "commands",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Tunes mouse-wheel scroll speed with a live preview.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/changelog",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented — the TUI exposes no scroll-speed setting and no live preview; transcript navigation runs through the transcript view keys."
+      }
+    },
     "commands.skills": {
       "title": "/skills",
       "category": "commands",
@@ -4546,6 +5214,40 @@
       ],
       "deviation": {
         "kind": "none"
+      }
+    },
+    "commands.subtask": {
+      "title": "/subtask",
+      "category": "commands",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Starts a fork subagent (`/subtask <task>`) that inherits the conversation and prompt cache.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/whats-new/2026-w33",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented as a slash command — forking exists only through the Task tool's `subagent_type: \"fork\"` sentinel (see subagents.fork)."
       }
     },
     "commands.tasks": {
@@ -4913,6 +5615,89 @@
         "summary": "Per-repo isolation (worktrees/subdirs share one store), shared global layer, memory_save as the save channel, recall reference-doc suppression, and opt-in team memory all work. The prompt surface diverges by design: CC injects each MEMORY.md body verbatim (first 200 lines or 25 KB) while dsh-cc injects ONE scope-tagged catalog of the parsed topic files, ordered by the maintained pointer order then by filename, with UTF-8-safe description trimming and a byte budget — MEMORY.md stays on disk as the curator index and ordering source but is not prompt-visible, so entrypoint-only prose requires an explicit read. CC's mtime-threaded recall and memoryAge aging are deferred until the harness FsInfo seam grows an mtime field."
       }
     },
+    "skills.frontmatter-hooks": {
+      "title": "Hooks in skill/agent frontmatter",
+      "category": "skills",
+      "plane": "preset",
+      "upstream": {
+        "summary": "`hooks` declared in a SKILL.md or subagent frontmatter run for the skill's remaining session (agent hooks only while that agent runs, with a Stop hook converted to SubagentStop on completion).",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/skills",
+            "retrieved": "2026-11-18"
+          },
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/sub-agents",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/skill/skill-claude-code/src/frontmatter.ts",
+          "anchor": "hooks: unknown"
+        },
+        {
+          "type": "test",
+          "path": "packages/skill/skill-claude-code/tests/frontmatter.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Parsed but not executed — the skill loader and the agents preset preserve the `hooks` field verbatim as metadata, and no consumer registers or runs it."
+      }
+    },
+    "skills.hot-reload": {
+      "title": "Skill hot reload",
+      "category": "skills",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Skills created or modified in `~/.claude/skills` or `.claude/skills` become available immediately, without restarting the session.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/changelog",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented — the skills catalog is a session-start snapshot of the skills directories; a new or edited SKILL.md is picked up on the next session only."
+      }
+    },
     "skills.manage-skill": {
       "title": "ManageSkill tool (learned-skill CRUD)",
       "category": "skills",
@@ -5013,7 +5798,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/skills",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           },
           {
             "source": "cc-docs",
@@ -5184,6 +5969,60 @@
         "summary": "dsh-cc extension: no CC counterpart exists. Listing hygiene is mechanism-limited: the harness 0.2.0-rc.2 SubagentStartRequest carries no resume-visibility flag, so /agents hides one-shot rows via the listChildren mode field while /resume filters by parentSession + ccOneShotLedger membership — ledger rows prune (5 min after end), so a long-settled ephemeral child can reappear in /resume."
       }
     },
+    "subagents.fork": {
+      "title": "Fork subagent (inherit completed turns + prompt cache)",
+      "category": "subagents",
+      "plane": "preset",
+      "upstream": {
+        "summary": "Fork mode: `/subtask` (or `subagent_type: \"fork\"`) starts a child that inherits the parent's completed turns and prompt cache; upstream is on by default and CLAUDE_CODE_FORK_SUBAGENT=0 turns it off.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/whats-new/2026-w33",
+            "retrieved": "2026-11-18"
+          },
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/sub-agents",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": true
+        },
+        "mounted": {
+          "status": true
+        },
+        "behavioral": {
+          "status": "partial"
+        },
+        "ux": {
+          "status": "partial"
+        }
+      },
+      "evidence": [
+        {
+          "type": "source",
+          "path": "packages/preset/cc/agent.cordis.yml",
+          "anchor": "- id: tool-task"
+        },
+        {
+          "type": "source",
+          "path": "packages/subagent/task/src/tool.ts",
+          "anchor": "FORK_SENTINEL"
+        },
+        {
+          "type": "test",
+          "path": "packages/subagent/task/tests/tool.spec.ts"
+        }
+      ],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "The fork sentinel works (`subagent_type: \"fork\"` inherits completed parent turns and the prompt cache), but the `/subtask` slash command is not mounted, a fork child cannot run in the background (upstream harness issue #2124), and the fork wins over a same-named declaration rather than being selectable by name."
+      }
+    },
     "subagents.isolation": {
       "title": "Subagent isolation: worktree",
       "category": "subagents",
@@ -5194,7 +6033,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/sub-agents",
-            "retrieved": "2026-09-14"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -5312,7 +6151,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/sub-agents",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           },
           {
             "source": "cc-docs",
@@ -5966,6 +6805,45 @@
         "summary": "State root split: every /plugin mutation writes under the dsh home ($DSH_HOME / ~/.claude never written), the Claude home stays read-visible for compatibility, and both homes merge per key with dsh-wins (null tombstones hide claude-only marketplaces). Claude Code reads only its own home, so the fork is one-way; ids materialized into the dsh installed file stop tracking later claude-side changes (takeover staleness). Setting CLAUDE_CONFIG_DIR no longer relocates writes; a claudeHome-alone caller keeps legacy single-root behavior. Dialect tolerance (PR-A/PR-C): both loader and manager read cursor-flavored plugins and marketplaces through the shared manifest-candidate helper (dual-dialect dirs, first-hit precedence) — the manager's add/update/install/enable flows consume .cursor-plugin marketplace and manifest files identically. State-file byte shapes are unchanged either way."
       }
     },
+    "plugins.mods": {
+      "title": "Mods (JavaScript hook modules)",
+      "category": "plugins",
+      "plane": "preset",
+      "upstream": {
+        "summary": "A plugin component kind: hooks written as JavaScript functions that can also draw panes and add commands. Mods receive their own events (`skill.prompt`, `prompt.autocomplete`) that the JSON hook system does not, and some mods are built into Claude Code.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/plugins",
+            "retrieved": "2026-11-18"
+          },
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/plugins/mods/reference",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented — the plugin loader mounts skills/commands/agents/hooks (JSON command|http|prompt|agent)/mcp/settings components, but has no JavaScript module runtime, no pane API, and no mods-only events."
+      }
+    },
     "plugins.rules": {
       "title": "Plugin rules (cursor dialect)",
       "category": "plugins",
@@ -6094,6 +6972,40 @@
         "summary": "Deliberate dsh-cc extension with no Claude Code analog: the opt-in `actor-contract` settings namespace ({ models: string[] }, default ['glm-*']) decides whether a `<!-- actor-contract -->`-marked persona block inside a subagent definition survives into the child's system prompt, matched case-insensitively against the child's resolved model. The gate is installed via installSectionSafe in packages/subagent/task and packages/compat/cc-plugin-loader (inside already-mounted plugins — no new preset mount line), so the surface is host-plane; the task plugin's `ccActorContractGate` service sits behind the preset cc-services isolate realm (agent.cordis.yml)."
       }
     },
+    "settings.disable-bundled-skills": {
+      "title": "disableBundledSkills",
+      "category": "settings",
+      "plane": "host",
+      "upstream": {
+        "summary": "Hides the skills and workflows bundled with Claude Code from the model (env equivalent CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1); skills from plugins, `.claude/skills/`, and `.claude/commands/` are unaffected and built-in commands stay typable.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/settings-reference",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented — bundled skills are composed into the catalog unconditionally; no setting or environment variable hides them."
+      }
+    },
     "settings.hot-reload": {
       "title": "Settings hot reload",
       "category": "settings",
@@ -6104,7 +7016,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/settings-reference",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -6234,7 +7146,7 @@
           {
             "source": "cc-docs",
             "path": "/docs/en/settings-reference",
-            "retrieved": "2026-09-03"
+            "retrieved": "2026-11-18"
           }
         ]
       },
@@ -6265,6 +7177,74 @@
       ],
       "deviation": {
         "kind": "none"
+      }
+    },
+    "settings.respect-gitignore": {
+      "title": "respectGitignore (@-mention picker)",
+      "category": "settings",
+      "plane": "host",
+      "upstream": {
+        "summary": "Controls whether the `@` file picker omits files matching `.gitignore` patterns (default true; also settable in `~/.claude.json` via the /config toggle).",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/settings-reference",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented as a setting — `@`-mentions are served by the file-search tool rather than a picker with a gitignore preference."
+      }
+    },
+    "settings.response-language": {
+      "title": "language (default response language)",
+      "category": "settings",
+      "plane": "host",
+      "upstream": {
+        "summary": "Passes a language name to Claude as an instruction to always respond in that language; the same value also drives dictation and auto-generated session titles.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/settings-reference",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented — no settings key injects a response-language instruction; users express this through CLAUDE.md / AGENTS.md guidance instead."
       }
     },
     "settings.subagent-catalog-budget": {
@@ -6307,6 +7287,40 @@
       "deviation": {
         "kind": "divergent",
         "summary": "Deliberate dsh-cc extension: the `cc-subagent-catalog` settings namespace ({ truncate: bool default true, max-bytes: int default 8192, bounds 1024..65536, min-entry-bytes: int default 40, bounds 20..400; defaults provisional }) byte-caps the subagent catalog section render. Pass 1 preserves every agent name and truncates each whenToUse with UTF-8-safe byte slicing; pass 2 keeps the first K alphabetical entries and collapses the rest into a names-only line; a documented oversized-names floor drops names only with an explicit ellipsis line. truncate: false restores the uncapped render. Settings are read live per render."
+      }
+    },
+    "permissions.agent-disable": {
+      "title": "Disable specific agents (Task(AgentName) rules)",
+      "category": "permissions",
+      "plane": "preset",
+      "upstream": {
+        "summary": "`Task(AgentName)` rules in settings.json permissions — and the `--disallowedTools` CLI flag — disable named subagents.",
+        "refs": [
+          {
+            "source": "cc-docs",
+            "path": "/docs/en/changelog",
+            "retrieved": "2026-11-18"
+          }
+        ]
+      },
+      "dimensions": {
+        "recognized": {
+          "status": false
+        },
+        "mounted": {
+          "status": false
+        },
+        "behavioral": {
+          "status": "missing"
+        },
+        "ux": {
+          "status": "missing"
+        }
+      },
+      "evidence": [],
+      "deviation": {
+        "kind": "downgrade",
+        "summary": "Not implemented as a permission rule — agent definitions carry their own `tools`/`disallowedTools` tool restrictions, but no permission rule or CLI flag disables a named agent at dispatch time."
       }
     },
     "permissions.mcp-tool-classes": {
