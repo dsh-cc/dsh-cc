@@ -65,7 +65,7 @@ describe('hooks-claude-code README event enumerations', () => {
         const names = eventNames(end === -1 ? rest : rest.slice(0, end))
         expect(Number(count)).toBe(names.length)
         expect(names).toContain('UserPromptCancel')
-        expect(Number(count)).toBe(12)
+        expect(Number(count)).toBe(15)
       })
     })
   }
