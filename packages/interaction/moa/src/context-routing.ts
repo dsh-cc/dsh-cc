@@ -46,7 +46,7 @@ import type {
 } from '@dsh-cc/systemone'
 import type { MoaSettings } from './settings.ts'
 import { DEFAULT_JUDGE_ALIAS } from './judge-route.ts'
-import { ROUTING_QUESTION, textOf } from './router-tiers.ts'
+import { ROUTING_CRITERIA_REVISION, ROUTING_QUESTION, textOf } from './router-tiers.ts'
 import { collapseAppliedTier, tierAt, type TierLadder } from './tiers.ts'
 import { buildRoutingContext, fitRoutingContextToBudget } from './routing-context.ts'
 import { chooseRoutingTier, type RoutingTierLabel } from './routing-policy.ts'
@@ -55,7 +55,7 @@ import { chooseRoutingTier, type RoutingTierLabel } from './routing-policy.ts'
 export const CONTEXT_ROUTE_FEATURE = 'moa-context-routing'
 
 /** Question version, declared next to the question text it pins. */
-export const CONTEXT_ROUTE_QUESTION_VERSION = 'moa-context-route-v1'
+export const CONTEXT_ROUTE_QUESTION_VERSION = 'moa-context-route-v2'
 
 /** Policy version of the tail-risk selector this caller applies. */
 export const CONTEXT_ROUTE_POLICY_VERSION = 'tail-risk-v1'
@@ -130,6 +130,8 @@ export interface RouteRowFields {
   v2LatencyMs?: number
   /** The fixed reason the v2 decision fell back (present only on a fallback). */
   fallbackReason?: ContextRoutingFallbackReason
+  /** Routing-criteria generation (`ROUTING_CRITERIA_REVISION`); see router-tiers.ts. */
+  criteriaRevision?: string
 }
 
 /**
@@ -344,7 +346,7 @@ export function createContextRouting(host: ContextRoutingHost): ContextRouting {
     const failOpen = async (reason: ContextRoutingFallbackReason, latencyMs: number): Promise<void> => {
       if (mode === 'active') {
         host.serveLive(agent, live)
-        host.park({ opening, tier: undefined, row: { mode, v2: true, fallbackReason: reason, latencyMs, truncated: false } })
+        host.park({ opening, tier: undefined, row: { mode, v2: true, fallbackReason: reason, latencyMs, truncated: false, criteriaRevision: ROUTING_CRITERIA_REVISION } })
         return
       }
       await finishLegacy({ mode, v2: true, fallbackReason: reason, v2LatencyMs: latencyMs })
@@ -483,7 +485,7 @@ export function createContextRouting(host: ContextRoutingHost): ContextRouting {
         mode,
         v2: true,
         latencyMs,
-        truncated: false,
+        truncated: false, criteriaRevision: ROUTING_CRITERIA_REVISION,
         // The legacy field names too, so the resume rehydration's `route` row
         // path (`tier`) keeps working for v2-routed turns.
         ...(appliedAlias === undefined ? {} : { tier: appliedAlias, appliedTier: appliedAlias }),
