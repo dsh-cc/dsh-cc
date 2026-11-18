@@ -221,22 +221,22 @@ agent 会等待任务结束后生成报告。获准修订的相关内容发生�
 <!-- parity:matrix:start -->
 | Category | Full | Partial | Missing | Non-goal |
 | --- | --- | --- | --- | --- |
-| Engine subsystems | 11 | 31 | 4 | 2 |
-| Hook events | 9 | 8 | 4 | 0 |
-| Command surface | 22 | 10 | 1 | 1 |
+| Engine subsystems | 11 | 31 | 7 | 2 |
+| Hook events | 9 | 10 | 14 | 0 |
+| Command surface | 22 | 11 | 4 | 1 |
 | Sessions and context | 0 | 2 | 1 | 0 |
 | Memory and CLAUDE.md | 0 | 1 | 1 | 0 |
-| Skills | 2 | 2 | 0 | 0 |
-| Subagents | 0 | 4 | 0 | 0 |
+| Skills | 2 | 2 | 2 | 0 |
+| Subagents | 0 | 5 | 0 | 0 |
 | MCP | 2 | 1 | 0 | 0 |
-| Plugins and marketplaces | 0 | 6 | 0 | 0 |
-| Settings | 2 | 3 | 1 | 0 |
-| Permissions | 0 | 1 | 0 | 0 |
+| Plugins and marketplaces | 0 | 6 | 1 | 0 |
+| Settings | 2 | 3 | 4 | 0 |
+| Permissions | 0 | 2 | 1 | 0 |
 | Models | 0 | 1 | 0 | 0 |
 | Workspace | 0 | 4 | 0 | 0 |
 | Interactive UX | 1 | 2 | 0 | 0 |
 
-Statuses were verified against upstream documentation retrieved as of 2026-09-23 (freshness threshold: 120 days).
+Statuses were verified against upstream documentation retrieved as of 2026-11-18 (freshness threshold: 120 days).
 
 For the exact feature-by-feature status and known gaps, see the **[Claude Code parity matrix](docs/cc-parity-matrix.md)**.
 <!-- parity:matrix:end -->
