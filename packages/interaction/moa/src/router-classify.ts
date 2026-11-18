@@ -16,7 +16,7 @@ import { resolveJudgeRoute } from './judge-route.ts'
 import type { MoaSettings } from './settings.ts'
 import type { MoaRouteBackend } from './router-arming.ts'
 import { collapseAppliedTier, TIER_ALIASES, tierAt, type TierLadder } from './tiers.ts'
-import { ROUTING_QUESTION, textOf } from './router-tiers.ts'
+import { ROUTING_CRITERIA_REVISION, ROUTING_QUESTION, textOf } from './router-tiers.ts'
 import type { RouteRowFields } from './context-routing.ts'
 
 /** Truncation marker handed to `capMiddleToTokenBudget` (head 2/3 + tail 1/3). */
@@ -65,11 +65,11 @@ export function createLegacyClassifier(
     const state = capMiddleToTokenBudget(textOf(opening), settings.classifyBudgetTokens, CROP_MARKER)
     const now = deps.now
     const startedAt = now()
-    if (!judge.ok) return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: judge.reason } }
+    if (!judge.ok) return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: judge.reason, criteriaRevision: ROUTING_CRITERIA_REVISION } }
     // Resolution guarantees a model on the ok branch; if it somehow does
     // not, fail open rather than substitute a model string.
     if (judge.route.model === undefined) {
-      return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: 'judge route has no model' } }
+      return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: 'judge route has no model', criteriaRevision: ROUTING_CRITERIA_REVISION } }
     }
     const backend = deps.resolveBackend?.(judge.route)
     if (backend === undefined) {
@@ -77,7 +77,7 @@ export function createLegacyClassifier(
         backendWarned = true
         deps.warn(`moa: no System One backend baseURL for judge route ${judge.route.provider}/${judge.route.model}; failing open`)
       }
-      return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: 'no backend baseURL' } }
+      return { tier: undefined, row: { latencyMs: now() - startedAt, truncated: false, failure: 'no backend baseURL', criteriaRevision: ROUTING_CRITERIA_REVISION } }
     }
     const result = await systemoneDecide({
       baseURL: backend.baseURL,
@@ -95,7 +95,7 @@ export function createLegacyClassifier(
     })
     const latencyMs = now() - startedAt
     if (!result.ok) {
-      return { tier: undefined, row: { latencyMs, truncated: false, failure: result.failure } }
+      return { tier: undefined, row: { latencyMs, truncated: false, failure: result.failure, criteriaRevision: ROUTING_CRITERIA_REVISION } }
     }
     const probabilities = result.answers.route?.probabilities
     let tier: number | undefined
@@ -131,6 +131,7 @@ export function createLegacyClassifier(
         ...(probabilities === undefined ? {} : { probabilities }),
         latencyMs,
         truncated,
+        criteriaRevision: ROUTING_CRITERIA_REVISION,
       },
     }
   }

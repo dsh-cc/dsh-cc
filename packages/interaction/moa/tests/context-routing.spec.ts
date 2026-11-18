@@ -33,7 +33,7 @@ import {
   CONTEXT_ROUTE_QUESTION,
   CONTEXT_ROUTE_QUESTION_VERSION,
 } from '../src/context-routing.ts'
-import { ROUTING_QUESTION } from '../src/router-tiers.ts'
+import { ROUTING_CRITERIA_REVISION, ROUTING_QUESTION } from '../src/router-tiers.ts'
 import { buildRoutingContext, type RoutingContext } from '../src/routing-context.ts'
 import { resetRuntimeCore } from '../src/runtime-state.ts'
 import { BOOT_PAIR, DRAFT_PROBABILITIES, escalationOpening, makeRig, textOf, userOpening, type Rig } from './rig.ts'
@@ -169,6 +169,10 @@ describe('context-routing v2 — off is the legacy path', () => {
     expect(rows[0]!.v2).toBeUndefined()
     expect(rows[0]!.mode).toBeUndefined()
     expect(rows[0]!.fallbackReason).toBeUndefined()
+    // The legacy path has no decision identity of its own: the criteria
+    // revision on the row is the only way to slice traffic across a criteria
+    // change, so it must be present on a mode-off row too.
+    expect(rows[0]!.criteriaRevision).toBe(ROUTING_CRITERIA_REVISION)
   })
 })
 
@@ -217,6 +221,7 @@ describe('context-routing v2 — shadow records only', () => {
       suggestedTier: 'blueprint',
       suggestedProbabilities: EDGE,
       probabilities: DRAFT_PROBABILITIES,
+      criteriaRevision: ROUTING_CRITERIA_REVISION,
     })
     expect(typeof row.v2LatencyMs).toBe('number')
     expect(row.fallbackReason).toBeUndefined()

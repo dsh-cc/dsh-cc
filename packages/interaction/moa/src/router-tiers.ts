@@ -7,16 +7,33 @@ import { ReasoningEffortId, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type { ModelRoutes } from '@dsh-cc/model-aliases'
 import { tierAt } from './tiers.ts'
 
-/** The moa-local 4-way routing question (criteria ported from the P4 corpus probe). */
+/**
+ * Criteria revision, emitted on every route row (`RouteRowFields.criteriaRevision`)
+ * so production traffic can be sliced across a criteria change. The legacy
+ * classifier has no decision identity at all (it calls `systemoneDecide`
+ * directly, never the DecisionRunner whose input hash carries a question
+ * version), so without this an armed deployment could not tell pre-change rows
+ * from post-change ones. Bump it whenever the criteria text changes.
+ */
+export const ROUTING_CRITERIA_REVISION = 'routing-criteria-v2'
+
+/**
+ * The moa-local 4-way routing question (criteria ported from the P4 corpus
+ * probe). Domain-neutral: the complexity axis is stated in both coding and
+ * data-analysis terms so a non-coding request is not classified by analogy
+ * alone. The draft/blueprint fence is load-bearing — a draft exemplar must not
+ * capture multi-source work, or a single reconciliation query would read as a
+ * one-step aggregation.
+ */
 export const ROUTING_QUESTION = {
   type: 'choice',
   instructions: 'Classify the user request into the LOWEST capability tier that can fully handle it.',
   criteria: {
-    sketch: 'trivial: typo fixes, one-line edits, simple factual questions, renames, single-command explanations',
-    draft: 'moderate: single-function utilities, small localized feature edits, explaining short code snippets',
-    blueprint: 'complex: multi-file or multi-module design, architecture proposals, root-cause analysis of subtle bugs, phased refactors',
+    sketch: 'trivial: typo fixes, one-line edits, simple factual questions, renames, single-command explanations, a single lookup or simple filter of one known table or metric',
+    draft: 'moderate: single-function utilities, small localized feature edits, explaining short code snippets, one-step aggregation or summary over one table, a single SQL query over one table',
+    blueprint: 'complex: multi-file or multi-module design, architecture proposals, root-cause analysis of subtle bugs, phased refactors, multi-source reconciliation, metric-caliber disputes, attribution analysis, a single query that joins or spans several sources',
     masterplan:
-      'very hard or ambiguous: cross-cutting strategy, long-horizon multi-team planning, organization-scale tradeoff decisions, platform migrations',
+      'very hard or ambiguous: cross-cutting strategy, long-horizon multi-team planning, organization-scale tradeoff decisions, platform migrations, redesigning a metrics system across organizations',
   },
 } as const
 
