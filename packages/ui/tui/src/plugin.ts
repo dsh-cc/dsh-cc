@@ -8,12 +8,13 @@ import type { Config } from './index.ts'
 import { createDriver } from './harness/driver.ts'
 import { acquireTerminal } from './terminal/lease.ts'
 import { buildRoot } from './components/root.ts'
+import type { TuiBands } from './bands.ts'
 import { printExitTip } from './exit-tip.ts'
 
 /**
  * Start the TUI inside a dsh process.
  */
-export async function mountTui(ctx: Context, config: Config): Promise<void> {
+export async function mountTui(ctx: Context, config: Config, bands?: TuiBands): Promise<void> {
   const driver = await createDriver(ctx, {
     ...config.cwd === undefined ? {} : { cwd: config.cwd },
     ...config.agentPreset === undefined ? {} : { agentPreset: config.agentPreset },
@@ -81,6 +82,7 @@ export async function mountTui(ctx: Context, config: Config): Promise<void> {
     ...(config.uiMode === undefined ? {} : { uiMode: config.uiMode }),
     ...(config.mouse === undefined ? {} : { mouse: config.mouse }),
     ...(config.theme === undefined ? {} : { theme: config.theme }),
+    ...(bands === undefined ? {} : { bands }),
   })
 
   root.tui.start()
