@@ -208,10 +208,10 @@ outline?: {
 **执法路径（r2 P0/P1 折叠：不走 finding 机制；r3 F1 收紧可观察行为口径）**：outline 不合规**不铸造 finding**。finding 只存在于 review 工件（`validateReview` 的 stage ∈ `STAGES`、category ∈ 封闭 `CATEGORIES`，`schema.lib.mjs:156-172`，且带 outline 违规没有的位置字段），check 记录步骤没有铸造 finding 的通道。改为把 `outline.status` 直接接进 **`evaluateCompletion`**（`mutation.lib.mjs:299-338`）：最新一次 check 的 `outline.status === "non-compliant"` 时 **finalize 被挡**（完成态判 `blocked`，理由指向 outline）。注意：`derivePhase`（`state.lib.mjs:167-199`）照旧把记录过 check 的 run 推到 `phase:'checked'`——本设计**不改 phase 推导**，「挡在 finalize 而非挡在 checked」是接受的行为口径，不在状态机上加新状态。修复路径就是工作流的常规路径：修订正文（proposal/apply 或重 draft）→ 重新 check → `outline.status` 转为 compliant。不新增 finding category、不新增 `PROPOSAL_INTENTS`、不动 review schema。
 
 **实现落点（r2 P1 折叠 + r3 F1/F5 补钉，钉到函数）**：
-1. `check-profile.lib.mjs` `validateCheck` 的 `readObject` 字段白名单增加**可选**顶层 `outline` 字段，嵌套形状固定为：`status ∈ {"compliant","non-compliant"}`（readEnum）、`missingRequiredSections: string[]`、`orderViolations: [{section, declaredOrder, actualOrder}]`（嵌套 readObject）。可选性是硬要求：profile-less run 与旧 run 的既有 check 工件都没有该字段。
+1. `check-profile.lib.mjs` `validateCheck` 的 `readObject` 字段白名单增加**可选**顶层 `outline` 字段，嵌套形状固定为：`status ∈ {"compliant","non-compliant"}`（readEnum）、`missingRequiredSections: string[]`、`orderViolations: [{section: string, declaredOrder: number, actualOrder: number}]`（嵌套 readObject）。可选性是硬要求：profile-less run 与旧 run 的既有 check 工件都没有该字段。
 2. `record.lib.mjs`（recordCheck）：outline 计算 + 按 body hash 重放校验（与 `verifyMechanicalChanges` 同处，after-snapshot 已在此读取）。
-3. `mutation.lib.mjs`（evaluateCompletion）：增加 outline 输入（见上）。
-4. `commands.lib.mjs:234-252`（nextRequiredStage）：最新 check 的 outline 不合规时返回新 stage token `re-check`（词表加一项；`finalize` 之外唯一新增出口），文案「补齐 required 节后重新 check」。
+3. `mutation.lib.mjs`（evaluateCompletion）：增加 outline 输入（见上）。出口口径（r4 P2 补钉）：outline 不合规时**复用既有 run `outcome:"blocked"`**（contracts.md:53 已含该值，不改枚举），`missing` 加 `"outline"` 项——不新增 outcome 值。
+4. `commands.lib.mjs:234-252`（nextRequiredStage）：最新 check 的 outline 不合规时返回新 stage token `re-check`（词表加一项；`finalize` 之外唯一新增出口），文案「补齐 required 节后重新 check」。插入位置钉死：write 分支优先链 `finalize` 判定的**紧前**（即 structure/semantic review 都齐、check 已记录之后才可能返回 `re-check`）。
 5. 匹配器边界（r2 P2 折叠）：一个 H2 标题至多服务一个骨架节（两个 section 的备选列表命中同一标题时，declaredOrder 靠前者获得匹配）；同一 section 被多个相同标题命中时取第一个匹配。
 6. `outline` 字段仅当 profile 声明了 `structure` 时出现；其余 profile 的 check 工件形状不变。
 
