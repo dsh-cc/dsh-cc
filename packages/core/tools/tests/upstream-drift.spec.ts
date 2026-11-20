@@ -54,8 +54,8 @@ const upstreamSrc = (name: string): string => join(HARNESS, UPSTREAM_PACKAGE, 's
 
 /** Vendored files with an upstream counterpart (`src/x.ts` ↔ upstream `src/x.ts`). */
 const PAIRS = [
-  'batch', 'contracts', 'events', 'executor', 'index', 'json-schema',
-  'pipeline', 'presentation', 'schema',
+  'batch', 'contracts', 'error-codes', 'events', 'executor', 'index',
+  'json-schema', 'pipeline', 'presentation', 'schema',
 ]
 
 /**
@@ -211,34 +211,34 @@ const DRIFT_ALLOWANCE: Record<string, { why: string, forkOnly: string[], upstrea
     ],
   },
   'src/pipeline.ts': {
-    why: 'D2.1 — the approval-seam denial copy (ask-reason hygiene + guidance tails), a documented fork divergence carried across every harness bump; D1 (executor reliability) moves the denial-copy helpers and the ASK_*_GUIDANCE constants into fork-only ask-guidance.ts (re-imported below, one prefix per import line) and adds the delegated-session structured deny to serviceAsk',
+    why: 'D2.1 — the fork rewrites the model-facing approval-seam denial copy (ask-reason hygiene + guidance tails), a documented divergence carried across every harness bump; the rc.5 ApprovalError structured identity IS folded — every fork denial is wrapped in upstream\'s approvalDenial, only the reason copy diverges; D1 (executor reliability) moves the denial-copy helpers and the ASK_*_GUIDANCE constants into fork-only ask-guidance.ts (re-imported below, one prefix per import line) and adds the delegated-session structured deny to serviceAsk',
     forkOnly: [
       "import { askRaisedClause, ASK_CHANNEL_GUIDANCE, ASK_DENIAL_GUIDANCE, sanitizeAskReason } from './ask-guidance.ts'",
       "import { approvalPolicyIsNever, isDelegatedSession, subagentAskGuidance } from './ask-guidance.ts'",
       'if (isDelegatedSession(exec.agent)) {',
-      'return { decision: { kind: \'deny\', reason: subagentAskGuidance(exec.name, ask.reason) }, approvalCancelled: false }',
-      'decision: { kind: \'deny\', reason: this.unattendedAskDeny(exec, ask) ?? `the user rejected tool "${exec.name}"${askRaisedClause(ask)}',
-      'decision: { kind: \'deny\', reason: this.unattendedAskDeny(exec, ask) ?? `tool "${exec.name}" requires approval, but no approval channel',
+      'return { decision: approvalDenial(subagentAskGuidance(exec.name, ask.reason), APPROVAL_UNAVAILABLE), approvalCancelled: false }',
+      'const reason = ask.reason === undefined',
+      '? `tool "${exec.name}" requires approval (not yet supported)`',
+      ': sanitizeAskReason(ask.reason)',
+      'decision: approvalDenial(`${reason}. ${ASK_CHANNEL_GUIDANCE}`, APPROVAL_UNAVAILABLE),',
+      'decision: approvalDenial(`tool "${exec.name}" requires approval, but the call has no agent to route it through${askRaisedClause(ask)}. ${ASK_CHANNEL_GUIDANCE}`, APPROVAL_UNAVAILABLE),',
+      'decision: approvalDenial(this.unattendedAskDeny(exec, ask) ?? `the user rejected tool "${exec.name}"${askRaisedClause(ask)}. ${ASK_DENIAL_GUIDANCE}`, APPROVAL_REJECTED),',
+      'decision: approvalDenial(this.unattendedAskDeny(exec, ask) ?? `tool "${exec.name}" requires approval, but no approval channel is available${askRaisedClause(ask)}. ${ASK_CHANNEL_GUIDANCE}`, APPROVAL_UNAVAILABLE),',
+      'private unattendedAskDeny(',
+      'exec: ToolExecution,',
+      "ask: Extract<PreToolDecision, { kind: 'ask' }>,",
+      '): string | undefined {',
+      'const agent = exec.agent',
       'if (agent === undefined || !isDelegatedSession(agent)) return undefined',
       'return approvalPolicyIsNever(agent.session.snapshotEvents())',
       '? subagentAskGuidance(exec.name, ask.reason)',
       ': undefined',
-      'const agent = exec.agent',
-      'exec: ToolExecution,',
-      "ask: Extract<PreToolDecision, { kind: 'ask' }>,",
-      'private unattendedAskDeny(',
-      '): string | undefined {',
-      'const reason = ask.reason === undefined',
-      '? `tool "${exec.name}" requires approval (not yet supported)`',
-      ': sanitizeAskReason(ask.reason)',
-      'decision: { kind: \'deny\', reason: `${reason}. ${ASK_CHANNEL_GUIDANCE}` },',
-      'decision: { kind: \'deny\', reason: `tool "${exec.name}" requires approval, but the call has no agent',
     ],
     upstreamOnly: [
-      'decision: { kind: \'deny\', reason: ask.reason ?? `tool "${exec.name}" requires approval (not yet supported)` },',
-      'decision: { kind: \'deny\', reason: `tool "${exec.name}" requires approval, but the call has no agent to route it through` },',
-      'decision: { kind: \'deny\', reason: `the user rejected tool "${exec.name}"` },',
-      'decision: { kind: \'deny\', reason: `tool "${exec.name}" requires approval, but no approval channel is available` },',
+      'decision: approvalDenial(ask.reason ?? `tool "${exec.name}" requires approval (not yet supported)`, APPROVAL_UNAVAILABLE),',
+      'decision: approvalDenial(`tool "${exec.name}" requires approval, but the call has no agent to route it through`, APPROVAL_UNAVAILABLE),',
+      'decision: approvalDenial(`the user rejected tool "${exec.name}"`, APPROVAL_REJECTED),',
+      'decision: approvalDenial(`tool "${exec.name}" requires approval, but no approval channel is available`, APPROVAL_UNAVAILABLE),',
     ],
   },
 }

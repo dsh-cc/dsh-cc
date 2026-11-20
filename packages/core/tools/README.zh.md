@@ -77,7 +77,7 @@ executor:
 - `ToolExecutionResult`：带判别标记的执行局部结果。成功形态为 `{ isError:false, value:JsonValue, content, meta?, additionalContexts? }`；失败形态为 `{ isError:true, error:{ message, info? }, content, meta?, additionalContexts? }`，且不含值。调用身份保留在不可变的 `ToolExecution` 上。注册表会在呈现前快照、验证并冻结规范值，随后在最终观测前实体化持久呈现字段。`ToolFailure.info` 携带内部的 `{ name, code }`，用于表示 `HarnessError`；`additionalContexts` 会保留每个通过延迟或 post-execute 加入且带标识的 `UserMessage`，供循环在结果后按 FIFO 顺序处理。
 - `PreToolDecision`：`{kind:'allow'}` | `{kind:'deny', reason}` | `{kind:'ask', reason?}`。该类型有意不提供输入改写；`ask` 在挂载 `ctx.approval` 时由它处理，否则退化为拒绝。
 - `PostToolDecision`：接受决定可以替换 `content` 或 `value`（不能同时替换），并可附加 `additionalContexts`；阻止决定会把反馈变成无值失败。替换内容会保留规范值和元数据。替换值会重新验证，并重新呈现内容／元数据。接受决定会先保留工具延迟的上下文，再附加决定上下文；阻止决定会丢弃工具延迟的上下文，只公开阻止决定显式提供的上下文。
-- `ToolGuard`：`(execution) => string | undefined`；返回的字符串是最终单调拒绝理由，在可重排的前置执行 waterfall 之后、分发之前求值。
+- `ToolGuard`：`(execution) => string | ToolGuardDenial | undefined`；返回的字符串或 `{ reason, info? }` 拒绝是最终单调拒绝理由，在可重排的前置执行 waterfall 之后、分发之前求值，可选的结构化 `info` 记录为失败调用的错误标识。
 - `ToolCallView` / `ToolResultView`：提供方无关、带 `card` 标签的呈现意图；工具通过 `presentCall` / `presentResult` 返回该意图，从而拥有 UI 呈现其自身调用的方式（参见「工具拥有的 UI 呈现」）。
 
 ### 扩展点
