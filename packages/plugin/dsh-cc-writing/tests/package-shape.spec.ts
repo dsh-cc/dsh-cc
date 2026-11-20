@@ -20,7 +20,16 @@ const PKG_DIR = dirname(import.meta.dirname)
 const REPO_ROOT = join(PKG_DIR, '..', '..', '..')
 const WORKFLOW = 'skills/writing-workflow'
 const PUBLIC_SKILLS = ['article-writing', 'article-review', 'language-editing']
-const PROFILE_IDS = ['technical', 'research', 'opinion', 'technical-ste']
+const PROFILE_IDS = [
+  'technical',
+  'research',
+  'opinion',
+  'technical-ste',
+  'technical-essay',
+  'academic',
+  'natural-prose',
+  'engineering-strategy',
+]
 
 const scratch: string[] = []
 const temporary = (prefix: string) => {

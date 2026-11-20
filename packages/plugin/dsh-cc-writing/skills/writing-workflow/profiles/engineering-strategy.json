@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "id": "engineering-strategy",
+  "description": "Engineering strategy document reporting technical strategy or roadmap choices to management: the Rumelt kernel (diagnosis / guiding policy / coherent actions), a SCQA opening, and a policy-first reading order.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "engineering-strategy-three-policy-questions",
+      "instruction": "Every guiding policy passes Applicable / Enforced / Creates Leverage (the Primer quality gate).",
+      "rationale": "design §5.4; Engineering Executives' Primer, Ch. 3 (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-explicit-tradeoffs",
+      "instruction": "A policy must state what it gives up (\"choosing A means not doing B\"); a policy without a tradeoff is fluff.",
+      "rationale": "design §5.4; Rumelt, Good Strategy Bad Strategy, Ch. 5 (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-four-banned-anti-patterns",
+      "instruction": "Fluff, failure to face the challenge, goals-as-strategy, bad objectives — checked item by item at review.",
+      "rationale": "design §5.4; Rumelt, Good Strategy Bad Strategy, Ch. 3-4 (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-specificity",
+      "instruction": "Policies are stated as ratios / thresholds / mechanisms (\"new services default to Rust unless X\", \"20% platform time each quarter\"), not direction adjectives.",
+      "rationale": "design §5.4; Staff Engineer (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-length-discipline",
+      "instruction": "Assume a 1-2 page budget (vision-class documents cap at 2 pages), details behind links; assume the reader vanishes at page three.",
+      "rationale": "design §5.4; Staff Engineer (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-show-your-work",
+      "instruction": "The diagnosis retains data and reasoning (roadmap, competitive pressure, financial constraints, issues collected in 1:1s) for future readers to trace.",
+      "rationale": "design §5.4; Staff Engineer and Crafting Engineering Strategy, Ch. 11 (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-document-carries-its-metadata",
+      "instruction": "Date, approval status, canonical-source link, and where to ask questions (a named channel or person).",
+      "rationale": "design §5.4; Engineering Executives' Primer, Ch. 11 (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-before-release-uninvolved-reader-flags-unclear-areas",
+      "instruction": "Before release, an uninvolved reader flags unclear areas (carried by the workflow's review stage; noted in the SKILL.md routing text).",
+      "rationale": "design §5.4; Engineering Executives' Primer, Ch. 11 (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-close-with-self-audit-and-a-revisit-commitment",
+      "instruction": "Close by turning each policy back on the reader as a yes/no audit question, and commit to a named revisit point (a date, an event, or an observable threshold) at which the strategy's effect will be reviewed; a strategy that ends on a restatement of its own goals has no way to be judged later.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (four closing audit questions), Engineering Executives' Primer, Ch. 3 (review impact after two months) (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-name-the-policies",
+      "instruction": "Give each guiding policy a short name that survives being quoted out of context (\"High-Velocity Decision Making\", \"Resist Proxies\"); the name is the unit the organization repeats back, so an unnamed policy decays into a section number.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (four named defenses as section headings) (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-calibrated-honesty",
+      "instruction": "State plainly what you do not know and how confident you are (\"I don't know the whole answer, but I may know bits of it\"); this is not fluff — fluff is empty confidence, while a stated limit tells the reader how much weight the reasoning carries.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (explicit epistemic downgrade), Rumelt, Ch. 3 (fluff is its own anti-pattern) (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-anecdotes-before-averages",
+      "instruction": "Support the diagnosis with named incidents and first-hand observations, not only survey averages: a single traced anecdote carries the mechanism and the stakes, where a percentage alone is hard to interpret and can mislead.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (many anecdotes rather than only survey averages) (§2.2)",
+      "severity": "advisory"
+    }
+  ],
+  "protectedTerms": [],
+  "structure": {
+    "openingPattern": "scqa",
+    "sections": [
+      { "id": "summary", "headingHint": "TL;DR / Summary / 摘要", "required": true, "order": 1 },
+      { "id": "policy", "headingHint": "Guiding Policy / 指导方针", "required": true, "order": 2 },
+      { "id": "operations", "headingHint": "Operations / 落实机制", "required": false, "order": 3 },
+      { "id": "diagnosis", "headingHint": "Diagnosis / 诊断", "required": true, "order": 4 },
+      { "id": "explore", "headingHint": "Explore / 背景与调研", "required": false, "order": 5 }
+    ],
+    "audienceVariantNote": "Approval audience: policy first. Org rollout: policy + operations first. Diagnosis and explore go last but must not be deleted. / 审批场景 policy 前置；组织落地场景 policy+operations 前置；diagnosis/explore 殿后但不可删。"
+  }
+}

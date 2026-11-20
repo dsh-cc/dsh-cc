@@ -14,7 +14,7 @@
     {
       "name": "dsh-cc-writing",
       "source": "./packages/plugin/dsh-cc-writing",
-      "description": "Official dsh-cc plugin: article-writing, article-review, and language-editing skills for structured, meaning-preserving revision of Chinese and English articles."
+      "description": "Official dsh-cc plugin: article-writing, article-review, and language-editing skills for structured, meaning-preserving revision of Chinese and English articles, including technical essays, academic papers, everyday prose, and engineering strategy documents."
     },
     {
       "name": "cc-codex-bridge",

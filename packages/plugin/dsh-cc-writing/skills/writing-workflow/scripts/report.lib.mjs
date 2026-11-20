@@ -58,6 +58,29 @@ function loadProposals(ctx) {
   return proposals
 }
 
+/**
+ * Outline reason lines (design §7 row 17): the finalize failure must be
+ * attributable to the missing required sections and their order. The report
+ * repeats stored values as read; finalize is the recompute authority.
+ */
+function outlineNotes(check) {
+  if (check === null || check.outline === undefined || check.outline === null) return []
+  const outline = check.outline
+  const status = typeof outline.status === 'string' ? outline.status : 'unknown'
+  const missing = Array.isArray(outline.missingRequiredSections) ? outline.missingRequiredSections : []
+  const violations = Array.isArray(outline.orderViolations) ? outline.orderViolations : []
+  const notes = [`outline status: ${status} (required sections are matched by H2 heading text)`]
+  if (missing.length > 0) notes.push(`missing required sections: ${missing.join(', ')}`)
+  if (violations.length > 0) {
+    notes.push(
+      `order violations: ${violations
+        .map((violation) => `${violation.section} (declared order ${violation.declaredOrder}, seen at ${violation.actualOrder})`)
+        .join('; ')}`,
+    )
+  }
+  return notes
+}
+
 function vwaLine(ctx) {
   if (ctx.run.vwa === null) return 'VWA evidence review: not performed.'
   const vwa = ctx.run.vwa
@@ -142,6 +165,10 @@ export function renderReport(ctx, outcome, extra = {}) {
     list(protectedChanges, 'No mechanical differences recorded.'),
     '',
     `- ${semanticOutcome}`,
+    '',
+    '## Outline',
+    '',
+    list(outlineNotes(check), 'No outline recorded; the run profile declares no structure.'),
     '',
     `## Coverage limitations`,
     '',

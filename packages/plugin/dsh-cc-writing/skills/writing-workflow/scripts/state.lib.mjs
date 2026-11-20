@@ -50,10 +50,12 @@ export function loadContext(root, runPath) {
 
 const PROFILE_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), '..', 'profiles')
 
-/** Profiles are plugin resources; a missing profile contributes no terms. */
+/** Profiles are plugin resources; an in-enum id with no file is a broken install, not a soft null. */
 export function loadProfile(profileId) {
   const raw = readJsonIfExists(join(PROFILE_DIRECTORY, `${profileId}.json`), `profile ${profileId}`)
-  if (raw === null) return { profile: null, protectedTerms: [] }
+  if (raw === null) {
+    fail('INVALID_INPUT', `profile ${profileId}: no such profile file in the plugin's profiles directory`)
+  }
   const profile = validateOrFail(validateProfile(raw), `profile ${profileId}`)
   return { profile, protectedTerms: profile.protectedTerms }
 }

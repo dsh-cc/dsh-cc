@@ -37,6 +37,8 @@ import {
 } from './state.lib.mjs'
 import { checkSpans, compareBodies } from './preservation.lib.mjs'
 import { hashInput, schemaCall } from './inputs.lib.mjs'
+import { computeOutline, verifyOutline } from './outline.lib.mjs'
+import { profileStructure } from './record.lib.mjs'
 import { renderReport } from './report.lib.mjs'
 
 const LANGUAGE_INTENTS = ['clarity', 'concision', 'style']
@@ -188,13 +190,18 @@ export function compareCommand(ctx, shape) {
   if (beforeBytes === null || afterBytes === null) {
     fail('PREREQUISITE_MISSING', 'compare: both snapshots must be recorded before comparing')
   }
+  const afterText = decodeUtf8(afterBytes, 'after snapshot')
   const changes =
     beforeHash === afterHash
       ? []
-      : compareBodies(decodeUtf8(beforeBytes, 'before snapshot'), decodeUtf8(afterBytes, 'after snapshot'), {
+      : compareBodies(decodeUtf8(beforeBytes, 'before snapshot'), afterText, {
           protectedTerms: ctx.brief.protectedTerms,
           profileProtectedTerms: ctx.profileTerms ?? [],
         }).map((change) => ({ ...change, disposition: 'pending', reason: null }))
+  // The second checks writer: the compare path takes no model payload, so the
+  // outline is computed here and verified by construction (§6).
+  const structure = profileStructure(ctx)
+  const outline = structure === null ? null : computeOutline(structure, afterText)
   const check = {
     schemaVersion: 1,
     kind: 'check',
@@ -206,6 +213,7 @@ export function compareCommand(ctx, shape) {
     semanticStatus: 'not-run',
     changes,
     semanticReviewId: null,
+    ...(outline === null ? {} : { outline }),
   }
   validateOrFail(validateCheck(check), 'check')
   const bytes = Buffer.from(`${JSON.stringify(check, null, 2)}\n`, 'utf8')
@@ -220,6 +228,7 @@ export function compareCommand(ctx, shape) {
     mechanicalStatus: check.mechanicalStatus,
     semanticStatus: 'not-run',
     changes,
+    outline: outline ?? null,
     profile: ctx.profile === null ? null : ctx.profile.id,
   }
 }
@@ -285,7 +294,9 @@ export function finalizeCommand(ctx, shape) {
     saveRun(ctx)
     return { ...report, editorialOutcome: report.outcome, phase: ctx.run.phase, outcome: 'completed' }
   }
-  ctx.run.outcome = completion.blocked ? 'blocked' : 'active'
+  // The disjunction keeps the existing snapshot-loss 'blocked' semantics of
+  // completion.blocked untouched (design §6 (c)).
+  ctx.run.outcome = completion.outcome === 'blocked' || completion.blocked ? 'blocked' : 'active'
   saveRun(ctx)
   fail('REVIEW_INCOMPLETE', 'finalize: completion predicates are not met', {
     reportPath: report.reportPath,
@@ -296,21 +307,40 @@ export function finalizeCommand(ctx, shape) {
 
 function evaluateCompletion(ctx) {
   const reviews = currentReviews(ctx)
-  const check = currentCheck(ctx)
+  const rawCheck = currentCheck(ctx)
   const missing = []
   if (ctx.brief.operation === 'write') {
     if (!projectionMatches(ctx, 'plan', ctx.run.planHash)) missing.push('plan')
     if (!contextComplete(ctx)) missing.push('context')
     if (reviews.structure === undefined) missing.push('structure-review')
     if (reviews.semantics === undefined) missing.push('semantic-review')
-    if (check === null) missing.push('final-check')
+    if (rawCheck === null) missing.push('final-check')
   } else if (ctx.brief.operation === 'edit') {
     if (reviews.language === undefined) missing.push('language-review')
     if (reviews.semantics === undefined) missing.push('semantic-review')
-    if (check === null) missing.push('final-check')
+    if (rawCheck === null) missing.push('final-check')
   } else {
     if (reviews.structure === undefined) missing.push('structure-review')
     if (reviews.language === undefined) missing.push('language-review')
+  }
+  // Check-consuming replay (design §6): validate the stored shape, then
+  // recompute the outline from the afterHash snapshot and compare field by
+  // field. A missing snapshot skips the recompute — and the skip short-circuits
+  // before presence symmetry — so the check is unavailable: 'final-check' enters
+  // `missing`, the stored outline is not consumed, and finalize persists
+  // 'blocked' through the existing completion.blocked arm.
+  const check = rawCheck === null ? null : validateOrFail(validateCheck(rawCheck), 'check')
+  const structure = profileStructure(ctx)
+  if (check !== null && structure !== null) {
+    const snapshot = readSnapshot(ctx.runAbs, check.afterHash)
+    if (snapshot === null) {
+      missing.push('final-check')
+    } else {
+      const outline = verifyOutline(check, decodeUtf8(snapshot, 'check after snapshot'), structure)
+      if (outline.status === 'non-compliant') missing.push('outline')
+    }
+  } else if (check !== null && check.outline !== undefined) {
+    fail('INVALID_INPUT', 'check.outline: the profile declares no structure')
   }
   const majorOpen = Object.values(reviews).some((current) =>
     current.review.findings.some((finding) => finding.status === 'open' && finding.severity === 'major'),
@@ -318,7 +348,9 @@ function evaluateCompletion(ctx) {
   const blockingChanges =
     check !== null && check.changes.some((change) => change.disposition === 'pending' || change.disposition === 'defect')
   let outcome = 'checked-no-major-findings'
-  if (missing.length > 0) {
+  if (missing.length === 1 && missing[0] === 'outline') {
+    outcome = 'blocked'
+  } else if (missing.length > 0) {
     outcome = 'incomplete'
   } else if (majorOpen) {
     outcome = 'findings-present'

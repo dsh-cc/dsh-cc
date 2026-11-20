@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "academic",
+  "description": "Strictly argued academic writing in Chinese or English. Keep the paper skeleton complete, pair every claim with its evidence, protect hedges, and give every citation a carrying sentence.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "academic-paper-skeleton",
+      "instruction": "Abstract/introduction (contribution list), related work, method, evaluation/argument, limitations, conclusion. A missing limitations section is itself a defect.",
+      "rationale": "user genre requirement (design §5.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "academic-claim-evidence-pairing",
+      "instruction": "Every non-trivial claim is backed by a citation, data, or a formal argument; claim strength matches evidence strength (correlational evidence must not be worded as causal).",
+      "rationale": "user genre requirement (design §5.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "academic-hedge-protection",
+      "instruction": "Hedges such as \"may\" / \"suggest\" / \"consistent with\" must not be weakened or removed during copy editing (a semantic rule beyond protectedTerms; goes into the review rubric).",
+      "rationale": "user genre requirement (design §5.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "academic-terminology-consistency",
+      "instruction": "One concept, one name throughout; synonymous paraphrase appears only at first definition.",
+      "rationale": "user genre requirement (design §5.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "academic-citation-discipline",
+      "instruction": "Every citation has a carrying sentence in the body (no parenthetical stacking), and the citation supports what the sentence actually says.",
+      "rationale": "user genre requirement (design §5.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "academic-tense-and-voice",
+      "instruction": "Method in past tense / passive or the venue's established convention; contribution list in present tense.",
+      "rationale": "user genre requirement (design §5.2)",
+      "severity": "advisory"
+    }
+  ],
+  "protectedTerms": []
+}

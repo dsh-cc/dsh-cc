@@ -16,6 +16,7 @@ import {
 } from './contracts.lib.mjs'
 import { checkSpans, compareBodies, validateCoverage } from './preservation.lib.mjs'
 import { scanBlocks } from './markdown.lib.mjs'
+import { computeOutline } from './outline.lib.mjs'
 import { atomicWrite, fail, jsonBytes, sha256 } from './files.lib.mjs'
 import {
   addArtifact,
@@ -29,7 +30,7 @@ import {
   validateOrFail,
 } from './state.lib.mjs'
 
-const INJECTED_HASH_FIELDS = ['bodyHash', 'planHash', 'beforeHash', 'afterHash']
+const INJECTED_FIELDS = ['bodyHash', 'planHash', 'beforeHash', 'afterHash', 'outline']
 const ARTIFACT_DIRECTORIES = { review: 'reviews', proposal: 'proposals', check: 'checks' }
 
 export function recordCommand(ctx, input) {
@@ -38,9 +39,9 @@ export function recordCommand(ctx, input) {
   if (typeof kind !== 'string' || !['research', 'plan', 'context', 'review', 'proposal', 'check'].includes(kind)) {
     fail('INVALID_INPUT', 'artifact.kind: expected research, plan, context, review, proposal, or check')
   }
-  for (const field of INJECTED_HASH_FIELDS) {
+  for (const field of INJECTED_FIELDS) {
     if (Object.hasOwn(artifact, field)) {
-      fail('INVALID_INPUT', `artifact.${field}: hash fields are supplied by the script, not the model`)
+      fail('INVALID_INPUT', `artifact.${field}: supplied by the script, not the model`)
     }
   }
   checkExpectedHashes(ctx, input)
@@ -342,6 +343,13 @@ function verifyFindingReferences(ctx, proposal) {
 
 // ------------------------------------------------------------------- check
 
+/** The profile's optional skeleton, or null when the profile declares none. */
+export function profileStructure(ctx) {
+  return ctx.profile === null || ctx.profile === undefined || ctx.profile.structure === undefined
+    ? null
+    : ctx.profile.structure
+}
+
 function recordCheck(ctx, artifact) {
   if (ctx.run.acceptedBodyHash === null || ctx.run.bodyHash === null) {
     fail('PREREQUISITE_MISSING', 'check: a body baseline and a final body snapshot are required')
@@ -367,7 +375,11 @@ function recordCheck(ctx, artifact) {
   if (check.mechanicalStatus !== mechanicalStatus) {
     fail('INVALID_INPUT', `check.mechanicalStatus: expected ${mechanicalStatus} for these changes`)
   }
-  const stored = storeImmutable(ctx, ARTIFACT_DIRECTORIES.check, check.id, check)
+  // The outline is script-owned (the record payload may not carry it) and is
+  // present iff the run profile declares a structure (design §6).
+  const structure = profileStructure(ctx)
+  const record = structure === null ? check : { ...check, outline: computeOutline(structure, after) }
+  const stored = storeImmutable(ctx, ARTIFACT_DIRECTORIES.check, check.id, record)
   addArtifact(ctx.run, stored.path, stored.hash, 'check')
   const blocking = check.changes.some((change) => change.disposition === 'pending' || change.disposition === 'defect')
   if (check.semanticStatus === 'no-issue-found' && !blocking) {

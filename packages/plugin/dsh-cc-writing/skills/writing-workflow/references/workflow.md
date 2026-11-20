@@ -125,8 +125,15 @@ Completion requires these items:
 | Operation | Required for `finalize` |
 | --- | --- |
 | write | current plan, complete context, complete structure review, complete final semantic review |
+| write, profile with `structure` | a check whose `outline` is compliant: every required section heading exists, in the declared relative order |
 | edit | complete language review, compare, complete final semantic review |
 | review | complete current structure review and complete current language review; no semantic compare |
+
+A non-compliant outline reports the next stage `re-check`: add the missing
+required H2 headings (or fix their order), snapshot the new body, re-review, and
+record a new check. `finalize` is blocked only when `outline` is the sole
+missing item; the stored outline is advisory in `status` and recomputed by
+`finalize`.
 
 A write or edit with no language change still runs a semantic check with equal
 before and after hashes. The compare yields no changes, the semantic review

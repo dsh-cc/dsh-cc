@@ -226,6 +226,11 @@ describe('valid artifacts', () => {
       expect(result.value.targetLength).toBeNull()
     }
   })
+  it('accepts the three genre profiles as a brief profile', () => {
+    for (const profile of ['technical-essay', 'academic', 'natural-prose'] as const) {
+      expect(validateBrief({ ...brief(), profile }).ok, profile).toBe(true)
+    }
+  })
   it('accepts a run', () => {
     expect(validateRun(run()).ok).toBe(true)
   })

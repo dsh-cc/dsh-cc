@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "id": "natural-prose",
+  "description": "Informal, conversational Chinese or English prose for blogs, essays, and newsletters. Remove templated phrasing, vary the rhythm, and keep one human voice from the first sentence to the last.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "natural-prose-ban-templated-openings-and-templated-endings",
+      "instruction": "Ban templated openings (\"in today's rapidly developing era\"; \"with the growing popularity of …\") and templated endings (\"in conclusion … let us look forward together\").",
+      "rationale": "user genre requirement (design §5.3)",
+      "severity": "advisory"
+    },
+    {
+      "id": "natural-prose-paragraph-breathing",
+      "instruction": "Average paragraph length is at most five sentences; three consecutive equal-length paragraphs is a defect (monotone rhythm).",
+      "rationale": "user genre requirement (design §5.3)",
+      "severity": "advisory"
+    },
+    {
+      "id": "natural-prose-no-filler-triads",
+      "instruction": "Delete three-part summaries that carry no information.",
+      "rationale": "user genre requirement (design §5.3)",
+      "severity": "advisory"
+    },
+    {
+      "id": "natural-prose-consistent-voice-and-reader-distance",
+      "instruction": "One \"speaker\" throughout; no mid-piece switch from chatting to preaching.",
+      "rationale": "user genre requirement (design §5.3)",
+      "severity": "advisory"
+    },
+    {
+      "id": "natural-prose-first-sentence-hook",
+      "instruction": "The opening sentence puts the reader inside a concrete scene or problem; no background survey openers.",
+      "rationale": "user genre requirement (design §5.3)",
+      "severity": "advisory"
+    },
+    {
+      "id": "natural-prose-every-sentence-survives-being-read-aloud-without-stumbling",
+      "instruction": "Every sentence survives being read aloud without stumbling (the read-aloud test).",
+      "rationale": "user genre requirement (design §5.3)",
+      "severity": "advisory"
+    }
+  ],
+  "protectedTerms": []
+}

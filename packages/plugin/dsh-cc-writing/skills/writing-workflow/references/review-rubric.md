@@ -36,6 +36,43 @@ judges clarity inside the same claims. A semantic review compares the before and
 after text for changed meaning. Do not silently downgrade a structure defect
 into a style note.
 
+Hedges are protected meaning. Under the `academic` profile, hedges such as
+"may", "suggest", and "consistent with" must not be weakened or removed during
+copy editing; a claim that drops its hedge, or promotes it to "is" or "shows",
+is a `meaning-change` finding even when every number, quotation, and term
+survives. `protectedTerms` does not cover this: judge the hedge's effect on the
+claim and quote the changed span.
+
+Under the `engineering-strategy` profile, judge the skeleton as well as the
+prose. The opening should read as SCQA: a situation, a complication that creates
+the tension, the question it forces, and the answer the document adopts. An
+opening that only announces the topic is a structural finding, not a style note.
+A guiding policy names one approach and states what it gives up; a policy with
+no tradeoff rests on an unstated premise, which is a `missing-premise` finding.
+Lint the four Rumelt anti-patterns item by item: fluff (empty high-level
+verbiage), failure to face the challenge (no defined challenge, so the strategy
+cannot be evaluated or improved), goals mistaken for strategy (a wish list
+rather than a plan for overcoming obstacles), and bad objectives (goals that
+address no critical issue or cannot be executed). A document over its 1-2 page
+vision budget, or a diagnosis with no retained data and reasoning, is a
+structural finding too. These are model judgments; the outline check confirms
+only that the required headings exist in the declared order.
+
+Four further judgments for this profile. These are advisory-grade — the
+profile rules they enforce are `advisory`, so judge them as `minor` style or
+advisory notes, not major findings, unless an independent reasoning defect is
+also present. An unnamed policy — one the reader cannot quote as a short phrase
+that means the same thing out of context — is a style note, because the
+organization repeats names, not section numbers. A document that ends by
+restating its goals rather than turning each policy back on the reader as an
+audit question, or that names no point at which its effect will be reviewed,
+is an advisory note about durability, not a structural finding. Confidence that
+outruns the reasoning is worth flagging as a style note — but do not confuse a
+stated limit with fluff: "I don't know the whole answer, but I may know bits
+of it" is calibrated honesty, whereas fluff is empty confidence. A diagnosis
+supported only by survey averages and no named incident merits an advisory
+note that the evidence type is weak, not a `reasoning` finding on its own.
+
 ## 2. Severity
 
 `major` covers:
