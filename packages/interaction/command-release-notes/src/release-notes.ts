@@ -17,6 +17,38 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.9.6-rc.3 — a new harness line and a name-addressed subagent surface
+
+- **Harness 0.2.2-rc.5** — the verified dsh line moves from \`0.2.2-rc.1\`
+  to \`0.2.2-rc.5\`, and the launcher's minimum requirement rises with it:
+  an older dsh stops at startup with an upgrade message. The peer floors
+  across 78 packages, the CI harness ref and the ACP pin follow the same
+  line.
+- **Subagents address by name** — \`send_message\` and \`interrupt_agent\`
+  now take the model-facing name (\`lead\`, a slash path, or a bare token
+  that falls back to session-id semantics) instead of an id. The resume
+  gates resolve that name before comparing, so pins, tombstone release and
+  the delegation advisory keep working, and a name that cannot be
+  attributed passes through instead of blocking. The new \`wait_agent\`
+  tool joins the CC surface (inbox wait, not delegation control).
+- **Release evicts one child** — \`/agents release\` and the
+  \`release_agent\` tool ride parent-scoped retained dispose receipts:
+  releasing a child leaves its own delegates resident (each is released by
+  its creating session), and an execution restored by a later
+  \`send_message\` refuses with a remedy instead of reporting success.
+  Plugin agents are discovered from a root-realm registration snapshot,
+  because upstream removed the seam's provider enumeration.
+- **Routing criteria, domain-neutral** — the tier classifier states its
+  complexity axis in data-analysis terms alongside the coding ones, so a
+  multi-source reconciliation reads as \`blueprint\` rather than a one-step
+  aggregation, and every route row carries a criteria revision for
+  slicing traffic across the change.
+- **Four more writing genres** — \`technical-essay\`, \`academic\`,
+  \`natural-prose\` and \`engineering-strategy\` join the document-type
+  profiles, the last with a Rumelt-kernel section skeleton. A profile may
+  declare a \`structure\` outline, and check artifacts verify required
+  sections and their relative order before finalize.
+
 ## 0.9.6-rc.2 — an executor that fails fast and reports honestly
 
 - **Delegated ask rejections** — a permission ask denied by policy
