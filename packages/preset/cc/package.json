@@ -95,7 +95,7 @@
     "@dsh-cc/workflow-journal": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-tool-schedule": ">=0.2.2-rc.1"
+    "@deepseek-ai/dsh-tool-schedule": ">=0.2.2-rc.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",

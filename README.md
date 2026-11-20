@@ -23,7 +23,7 @@ npm install -g @deepseek-ai/dsh @dsh-cc/cli
 dsh-cc
 ```
 
-The launcher must have `dsh >= 0.2.2-rc.1`. If dsh is an earlier version, the launcher stops with an upgrade message.
+The launcher must have `dsh >= 0.2.2-rc.5`. If dsh is an earlier version, the launcher stops with an upgrade message.
 
 If the necessary dsh version is installed, install only the launcher.
 
@@ -74,7 +74,7 @@ Each release has one dsh version for CI verification. The launcher also uses tha
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
-| `main` (unreleased, after v0.9.5) | 0.2.2-rc.1 |
+| `main` (unreleased, after v0.9.5) | 0.2.2-rc.5 |
 | v0.9.4 – v0.9.5 | 0.2.2-rc.1 |
 | v0.9.3 | 0.2.1-rc.5 |
 | v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
