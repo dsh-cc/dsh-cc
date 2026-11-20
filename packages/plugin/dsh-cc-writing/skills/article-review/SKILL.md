@@ -37,6 +37,7 @@ Apply these defaults and record each adopted default in
 | requiredQuestions | from the user, or exactly `[{id:"q1", text: question}]` | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L157-L157〕
 | allowBodyChanges | false | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L159-L159〕
 | plan | descriptive only |
+| profile | the closest profile for the article under review: `technical`, `research`, `opinion`, `technical-ste`, `technical-essay`, `academic`, or `natural-prose`; ask if ambiguous |
 | repairRounds | 0 unless the user asks for a repair plan | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L140-L140〕
 | evidenceMode | `ordinary` unless VWA review is requested explicitly | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L135-L135〕
 

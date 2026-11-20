@@ -37,7 +37,7 @@ Then apply these defaults and record each adopted default in
 | --- | --- |
 | operation | `write` |
 | evidenceMode | `ordinary`; never downgrade an explicit VWA request | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L135-L135〕
-| profile | `technical` for a technical explanation, `research` for a literature review, `opinion` for an argumentative essay; ask if ambiguous |
+| profile | `technical` for a technical explanation, `research` for a literature review, `opinion` for an argumentative essay, `technical-essay` for a long-form technical essay, `academic` for an academic paper, `natural-prose` for everyday conversational prose; ask if ambiguous |
 | targetLength | null | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L138-L138〕
 | allowBodyChanges | true; a new output for a new body, gated by `replaceExisting` for an existing file | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L139-L139〕
 | repairRounds | 1; the range is 0 to 3 | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L140-L140〕
@@ -69,8 +69,14 @@ question early, defines terms, separates observation from inference and
 recommendation, and keeps conditions. The `research` profile separates source
 reports from synthesis, compares methods and evidence, and explains disagreement
 and gaps. The `opinion` profile states the thesis and criteria, addresses a
-material objection, and separates preference from fact. `technical-ste` applies
-to English only, on request, and is not ASD-STE100 certification.
+material objection, and separates preference from fact. The `technical-essay`
+profile holds one throughline, defines each concept before its mechanism, and
+lands on a concrete example after two paragraphs of abstraction. The `academic`
+profile keeps the paper skeleton complete, pairs every claim with its evidence,
+protects hedges, and gives every citation a carrying sentence. The
+`natural-prose` profile bans templated openings and endings, varies the
+paragraph rhythm, and keeps one human voice. `technical-ste` applies to English
+only, on request, and is not ASD-STE100 certification.
 
 ## 3. Draft
 

@@ -36,6 +36,13 @@ judges clarity inside the same claims. A semantic review compares the before and
 after text for changed meaning. Do not silently downgrade a structure defect
 into a style note.
 
+Hedges are protected meaning. Under the `academic` profile, hedges such as
+"may", "suggest", and "consistent with" must not be weakened or removed during
+copy editing; a claim that drops its hedge, or promotes it to "is" or "shows",
+is a `meaning-change` finding even when every number, quotation, and term
+survives. `protectedTerms` does not cover this: judge the hedge's effect on the
+claim and quote the changed span.
+
 ## 2. Severity
 
 `major` covers:

@@ -30,7 +30,7 @@ Common rules:
 
 `schemaVersion`, `kind:"brief"`, `runId`, `operation` (`write|review|edit`),
 `question`, `audience`, `language` (`zh|en`), `bodyPath`, `companionPath`,
-`profile` (`technical|research|opinion|technical-ste`), `targetLength`
+`profile` (`technical|research|opinion|technical-ste|technical-essay|academic|natural-prose`), `targetLength`
 (`null` or `{min,max}` with `0 < min <= max`), `requiredQuestions`
 (`[{id,text}]`, at least `q1`), `sourceScope`
 (`{localPaths,webAllowed,description}`), `evidenceMode` (`ordinary|vwa`),

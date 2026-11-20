@@ -35,7 +35,7 @@ Apply these defaults:
 | plan | none; `record` rejects plan and research artifacts |
 | allowBodyChanges | true, but only through applied proposals |
 | repairRounds | 0 |
-| profile | the closest profile, or ask; use `styleOverrides` for explicit user rules |
+| profile | the closest profile of `technical`, `research`, `opinion`, `technical-ste`, `technical-essay`, `academic`, `natural-prose`, or ask; use `styleOverrides` for explicit user rules |
 
 Run `init` with a fresh UUID v4 `runId`, the existing body path, and the default
 companion directory.

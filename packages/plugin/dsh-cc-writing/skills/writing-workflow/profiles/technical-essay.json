@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "technical-essay",
+  "description": "Long-form technical essay in Chinese or English. Carry one throughline, define each concept before its mechanism, and land on a concrete example whenever the text has stayed abstract.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "technical-essay-single-throughline",
+      "instruction": "The whole piece can state in one sentence \"what this article makes the reader understand\"; every H2 serves that line.",
+      "rationale": "user genre requirement (design §5.1)",
+      "severity": "advisory"
+    },
+    {
+      "id": "technical-essay-concept-before-mechanism",
+      "instruction": "Every new term is defined in plain language before first use; the first occurrence is bolded or given an inline definition.",
+      "rationale": "user genre requirement (design §5.1)",
+      "severity": "advisory"
+    },
+    {
+      "id": "technical-essay-example-ratio",
+      "instruction": "After more than two consecutive paragraphs of abstraction, the text must land on a concrete example (code, data, incident, scenario).",
+      "rationale": "user genre requirement (design §5.1)",
+      "severity": "advisory"
+    },
+    {
+      "id": "technical-essay-figure-discipline",
+      "instruction": "Every figure is referenced in the body (\"see Figure N\") and has a self-contained caption — legible even when screenshotted alone.",
+      "rationale": "user genre requirement (design §5.1)",
+      "severity": "advisory"
+    },
+    {
+      "id": "technical-essay-uncertainty-stated-honestly",
+      "instruction": "Performance / cost / risk claims carry conditions and magnitudes; no bare assertions.",
+      "rationale": "user genre requirement (design §5.1)",
+      "severity": "advisory"
+    }
+  ],
+  "protectedTerms": []
+}

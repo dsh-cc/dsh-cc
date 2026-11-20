@@ -138,7 +138,7 @@ export function readIdPattern(value, path, pattern, label) {
 
 export const OPERATIONS = ['write', 'review', 'edit']
 export const LANGUAGES = ['zh', 'en']
-export const PROFILES = ['technical', 'research', 'opinion', 'technical-ste']
+export const PROFILES = ['technical', 'research', 'opinion', 'technical-ste', 'technical-essay', 'academic', 'natural-prose']
 export const EVIDENCE_MODES = ['ordinary', 'vwa']
 export const PHASES = [
   'initialized',

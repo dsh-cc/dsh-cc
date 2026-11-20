@@ -13,7 +13,7 @@
 | `language-editing` | 通过局部修改提升清晰度、简洁度和风格 | 是 |
 | `writing-workflow` | 共享运行协议、schema、profile 和脚本 | 否 |
 
-三个公开 skill 支持中文和英文文章，覆盖技术说明、文献综述和观点文章。
+三个公开 skill 支持中文和英文文章，覆盖技术说明、文献综述、观点文章、技术随笔、学术论文和日常随笔。
 
 `writing-workflow` 是支撑 skill。公开 skill 从已安装目录读取它，它不会作为独立任务出现。
 
@@ -110,7 +110,7 @@
 [阶段流程](skills/writing-workflow/references/workflow.md)、
 [产物契约](skills/writing-workflow/references/contracts.md)、
 [评审细则](skills/writing-workflow/references/review-rubric.md)、
-[VWA 适配器](skills/writing-workflow/references/vwa-adapter.md)、四个 profile，
+[VWA 适配器](skills/writing-workflow/references/vwa-adapter.md)、七个 profile，
 以及[中文](skills/writing-workflow/examples/zh.md)和
 [英文](skills/writing-workflow/examples/en.md)修改示例。
 
