@@ -1,5 +1,5 @@
 // Vendored from @deepseek-ai/dsh-acp (packages/acp/acp/src/session.ts)
-// Source ref: 2f97f60455605e915b8176d9170cae337bfedcc6 (deepseek-harness, MIT — see LICENSE-harness)
+// Source ref: 9c2670d3bce5275e0d1610272958121af87787bb (deepseek-harness, MIT — see LICENSE-harness)
 // Copied 2026-10-09. Structural fixes flow from upstream during harness
 // migrations; CC-specific divergences must be recorded in DIVERGENCE.md.
 /** One standard ACP session's Agent, configuration, prompt, update, and teardown lifecycle. */
@@ -34,8 +34,8 @@ import { assistantUpdates, toolCallUpdate, toolResultUpdate } from './updates.ts
 interface SubagentLifecycle {
   /** Dispose subagent descendants below exact host-owned parents child-first. */
   drainDescendants(parents: readonly Agent[]): Promise<void>
-  /** Observe currently managed descendants without closing future admission. */
-  waitForChildren(parent: Agent): Promise<boolean>
+  /** Join progressing work in the root's subagent tree without closing future admission. */
+  waitForTreeWork(root: Agent): Promise<boolean>
 }
 
 /** Inputs shared by fresh and resumed ACP session construction. */

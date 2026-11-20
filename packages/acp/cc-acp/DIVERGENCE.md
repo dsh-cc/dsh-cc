@@ -1,9 +1,10 @@
 # DIVERGENCE.md — @dsh-cc/acp vs upstream @deepseek-ai/dsh-acp
 
 Vendored from `packages/acp/acp` (deepseek-harness, source ref
-`2f97f60455605e915b8176d9170cae337bfedcc6`, `release(dsh): 0.2.2-rc.1`,
-@deepseek-ai/dsh-acp 0.2.2-rc.1), **re-vendored in full** for the
-harness-0.2.2-rc.1 migration (design D4): every source and test file is the
+`9c2670d3bce5275e0d1610272958121af87787bb`, `release(dsh): 0.2.2-rc.5`,
+@deepseek-ai/dsh-acp 0.2.2-rc.5), **re-vendored in full** for the
+harness-0.2.2-rc.5 migration (design D4, carried by the 2026-11-20 true-up
+§3.5): every source and test file is the
 upstream file with the deltas below re-applied, and the drift gate
 (`tests/upstream-drift.spec.ts`) compares them line by line against a sibling
 checkout at that ref 〔src:ws:packages/acp/cc-acp/tests/upstream-drift.spec.ts#L83-L83〕.

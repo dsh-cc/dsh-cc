@@ -25,7 +25,7 @@ export interface InflightSettlement {
 
 /** Subagent descendant observation without depending on the subagent package. */
 export interface SubagentWaiter {
-  waitForChildren(parent: Agent): Promise<boolean>
+  waitForTreeWork(root: Agent): Promise<boolean>
 }
 
 /**
@@ -114,7 +114,7 @@ export async function awaitQuiescence(
     await Promise.race([agent.whenIdle(), cancelled])
     if (isCancelled()) break
     const idleSeq = agent.session.seq
-    const children = await Promise.race([subagents?.waitForChildren(agent), cancelled])
+    const children = await Promise.race([subagents?.waitForTreeWork(agent), cancelled])
     if (isCancelled()) break
     if (children || !idleAt(idleSeq)) continue
     await outputTail()
