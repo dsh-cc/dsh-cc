@@ -58,18 +58,20 @@ vision budget, or a diagnosis with no retained data and reasoning, is a
 structural finding too. These are model judgments; the outline check confirms
 only that the required headings exist in the declared order.
 
-Four further judgments for this profile. An unnamed policy — one the reader
-cannot quote as a short phrase that means the same thing out of context — is a
-style finding, because the organization repeats names, not section numbers. A
-document that ends by restating its goals rather than turning each policy back
-on the reader as an audit question, or that names no point at which its effect
-will be reviewed, is a structural finding: it cannot be judged later. Confidence
-that outruns the reasoning (assertion where the document should state a limit)
-is a `missing-premise` finding — but do not confuse a stated limit with fluff:
-"I don't know the whole answer, but I may know bits of it" is calibrated honesty,
-whereas fluff is empty confidence. Finally, a diagnosis supported only by survey
-averages and no named incident is a reasoning finding: a percentage alone is hard
-to interpret, while a traced anecdote carries the mechanism.
+Four further judgments for this profile. These are advisory-grade — the
+profile rules they enforce are `advisory`, so judge them as `minor` style or
+advisory notes, not major findings, unless an independent reasoning defect is
+also present. An unnamed policy — one the reader cannot quote as a short phrase
+that means the same thing out of context — is a style note, because the
+organization repeats names, not section numbers. A document that ends by
+restating its goals rather than turning each policy back on the reader as an
+audit question, or that names no point at which its effect will be reviewed,
+is an advisory note about durability, not a structural finding. Confidence that
+outruns the reasoning is worth flagging as a style note — but do not confuse a
+stated limit with fluff: "I don't know the whole answer, but I may know bits
+of it" is calibrated honesty, whereas fluff is empty confidence. A diagnosis
+supported only by survey averages and no named incident merits an advisory
+note that the evidence type is weak, not a `reasoning` finding on its own.
 
 ## 2. Severity
 

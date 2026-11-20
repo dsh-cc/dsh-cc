@@ -42,7 +42,7 @@ Mapping: writing-workflow already *is* that loop (draft → review → proposal 
 
 ### 2.2 The four books and one specimen (genre spec for engineering strategy)
 
-The four books converge strongly on what a strategy document looks like; they yield the genre rules for engineering-strategy:
+The four books converge strongly on what a strategy document looks like; the 2016 shareholder letter (end of this section) adds four rules they leave implicit. Together they yield the genre rules for engineering-strategy:
 
 **Skeleton (Rumelt, *Good Strategy Bad Strategy*, Ch. 5; both Larson books adopt it verbatim)**:
 - Diagnosis: defines and explains the nature of the challenge, singling out the critical aspects of an overwhelming reality.
@@ -171,10 +171,10 @@ Rule highlights (style rules beyond the structure):
 - Show your work: the diagnosis retains data and reasoning (roadmap, competitive pressure, financial constraints, issues collected in 1:1s) for future readers to trace.
 - The document carries its metadata: date, approval status, canonical-source link, and where to ask questions (a named channel or person).
 - Before release, an uninvolved reader flags unclear areas (carried by the workflow's review stage; noted in the SKILL.md routing text).
-- Close with a self-audit and a revisit commitment: turn each policy back on the reader as a yes/no audit question, and name the point at which the strategy's effect will be reviewed (a date, an event, or an observable threshold); ending on a restatement of the goals leaves the document unjudgeable later.
-- Name the policies: each guiding policy gets a short name that survives being quoted out of context ("High-Velocity Decision Making", "Resist Proxies") — the name is the unit the organization repeats back, so an unnamed policy decays into a section number.
-- Calibrated honesty: state plainly what you do not know and how confident you are; fluff is empty confidence, whereas a stated limit tells the reader how much weight the reasoning carries.
-- Anecdotes before averages: support the diagnosis with named incidents and first-hand observations, not only survey averages — one traced anecdote carries the mechanism and the stakes, where a percentage alone is hard to interpret and can mislead.
+- Close with a self-audit and a revisit commitment: turn each policy back on the reader as a yes/no audit question, and name the point at which the strategy's effect will be reviewed (a date, an event, or an observable threshold); ending on a restatement of the goals leaves the document unjudgeable later (2016 Letter to Shareholders, closing audit questions; Primer, Ch. 3, review after two months).
+- Name the policies: each guiding policy gets a short name that survives being quoted out of context ("High-Velocity Decision Making", "Resist Proxies") — the name is the unit the organization repeats back, so an unnamed policy decays into a section number (2016 Letter to Shareholders, four named defenses).
+- Calibrated honesty: state plainly what you do not know and how confident you are; fluff is empty confidence, whereas a stated limit tells the reader how much weight the reasoning carries (2016 Letter to Shareholders, epistemic downgrade; Rumelt, Ch. 3).
+- Anecdotes before averages: support the diagnosis with named incidents and first-hand observations, not only survey averages — one traced anecdote carries the mechanism and the stakes, where a percentage alone is hard to interpret and can mislead (2016 Letter to Shareholders, anecdotes vs. survey averages).
 
 `applicableLanguages: ["zh","en"]`.
 
