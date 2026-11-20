@@ -21,7 +21,9 @@ function flatten(rows: any[]): any[] {
 }
 
 /**
- * The 22 host rows the CC preset owns. This list is deliberately restated in
+ * The 24 host rows vacated by the cc-shell patch: the 22 the CC preset owns,
+ * plus the two Agent Teams rows (upstream-only surface the CC composition
+ * deliberately never mounts). This list is deliberately restated in
  * the specs of the bundles that must NOT declare it, so a row creeping back
  * into a surface bundle fails a test instead of silently re-mounting a second
  * copy of the agent plane.
@@ -33,6 +35,7 @@ export const HOST_AGENT_PLANE_IDS = [
   'tool-subagent-control', 'tool-subagent',
   'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
   'agent-instructions', 'tool-todo', 'tool-web',
+  'agent-team', 'tool-agent-team',
 ] as const
 
 const shell = flatten(load(new URL('../cordis.patch.yml', import.meta.url)))

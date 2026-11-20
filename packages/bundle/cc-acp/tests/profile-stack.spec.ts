@@ -45,6 +45,7 @@ const HOST_AGENT_PLANE_IDS = [
   'tool-subagent-control', 'tool-subagent',
   'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
   'agent-instructions', 'tool-todo', 'tool-web',
+  'agent-team', 'tool-agent-team',
 ] as const
 
 describe('acp profile stack (permissions + shell + acp)', () => {
@@ -56,7 +57,7 @@ describe('acp profile stack (permissions + shell + acp)', () => {
   it('vacates the whole host agent plane through bundle-shell', () => {
     // The roster moved out of this bundle (PR-4) and into cc-shell so the TUI
     // and ACP lanes cannot drift; the folded profile must still end up with
-    // all 22 rows disabled.
+    // all 24 rows disabled.
     for (const id of HOST_AGENT_PLANE_IDS) {
       expect(stacked.get(id)?.disabled, id).toBe(true)
     }

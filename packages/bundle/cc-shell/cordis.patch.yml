@@ -89,6 +89,7 @@
       - subagent_fork
       - todo_write
       - update_goal
+      - wait_agent
       - web_fetch
       - web_search
       - workflow
@@ -209,6 +210,20 @@
   disabled: true
 
 - id: tool-web
+  disabled: true
+
+# Harness 0.2.2-rc.5 added Agent Teams to the base roster: `agent-team` mounts
+# the ctx.agentTeams service, `tool-agent-team` the model-facing team_task_*
+# tools and the team:policy prompt section. Agent Teams is upstream-only
+# surface, deliberately not adopted by the CC composition (dsh-cc dispatches
+# subagents from a declarations catalog — no shared task board, no named
+# teammates), so parity stays `engine.agent-teams: Missing`. Same disable
+# discipline as the block above: never delete a base row the shared base may
+# serve to non-CC profiles.
+- id: agent-team
+  disabled: true
+
+- id: tool-agent-team
   disabled: true
 
 - insert:

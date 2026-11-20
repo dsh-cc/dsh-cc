@@ -22,6 +22,6 @@ CC 壳层的 **host-plane infra** 组合包。本包承载真正属于宿主层�
 
 ## 已知限制 / 说明
 
-- 本包不再全局挂载任何 agent-face 表面。其 `cordis.patch.yml` 只承载 host-plane 行：tools 注册表替换（`tools` 的禁用、`tool-executor-native` 的腾空，以及在 root 作用域插入的 `tool-executor-cc`）、顶层 `system-prompt` 重述（钉住 39 项 `toolOrder` 前缀，由 `<unlisted-tools>` 收尾）、`web-fetch-http` 的出站上限（`timeoutMs: 20000`、`maxResponseBytes: 2000000`、`maxRedirects: 3` 与 dsh-cc 的 user agent）、`subagent.maxActiveSubagents: 25`、原生 `session-title-llm` 的禁用与 CC 版 `session-title-llm-cc` 的重挂，以及 host-plane 的 `schedule` 挂载。glue 插件与所有 agent 表面由 `@dsh-cc/preset-cc` 挂载，从而限定在该 preset 内。
+- 本包不再全局挂载任何 agent-face 表面。其 `cordis.patch.yml` 只承载 host-plane 行：tools 注册表替换（`tools` 的禁用、`tool-executor-native` 的腾空，以及在 root 作用域插入的 `tool-executor-cc`）、顶层 `system-prompt` 重述（钉住 40 项 `toolOrder` 前缀，由 `<unlisted-tools>` 收尾）、`web-fetch-http` 的出站上限（`timeoutMs: 20000`、`maxResponseBytes: 2000000`、`maxRedirects: 3` 与 dsh-cc 的 user agent）、`subagent.maxActiveSubagents: 25`、原生 `session-title-llm` 的禁用与 CC 版 `session-title-llm-cc` 的重挂，以及 host-plane 的 `schedule` 挂载。glue 插件与所有 agent 表面由 `@dsh-cc/preset-cc` 挂载，从而限定在该 preset 内。
 - tool-web executor 行在 peer 基线（`>=0.2.2-rc.5`）即已携带，因此基于 fetch 的 web 工具由 preset 组合（原生 `tool-web` 配 `fetch: false`，外加 `tool-web-fetch` 行），而非此处；当前 fetch 状态见 preset 的「已知限制」。
 - 项目/local `enabledPlugins` 偏向 boot cwd（glue 是 host-plane 单例，与 `.mcp.json` 相同）。`/reload-plugins` 是热更新出口。插件状态是双 home 的：`$CLAUDE_CONFIG_DIR` 保持可读供发现使用，而插件管理写入落在 `$DSH_HOME`（`~/.dsh`）——设置 `CLAUDE_CONFIG_DIR` 不再决定插件写入位置；`.mcp.json` 仍写死 `~/.claude`。

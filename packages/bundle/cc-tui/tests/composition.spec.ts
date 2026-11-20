@@ -24,6 +24,7 @@ const HOST_TOOL_IDS = [
   'tool-subagent-control', 'tool-subagent',
   'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
   'agent-instructions', 'tool-todo', 'tool-web',
+  'agent-team', 'tool-agent-team',
 ]
 
 function flatten(rows: any[]): any[] {
