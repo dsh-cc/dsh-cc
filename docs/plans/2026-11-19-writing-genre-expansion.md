@@ -183,7 +183,7 @@ structure?: {
 约束：
 - `sections` 非空时 `id` 唯一、`order` 严格递增、`order` 从 1 起。
 - `openingPattern` 目前仅 `"scqa" | "none"` 两个值——枚举保持最小，未来有书证再扩。
-- 无 `structure` 字段的 profile（全部既有 profile 与三个 Tier A 新 profile）行为不变。**加法、可选、向后兼容**；`schemaVersion` 保持 `1`（旧 reader 读新 profile 只是忽略未知字段失败——注意：现有 `readObject` 拒绝未知字段，所以这不是「旧 reader 兼容」而是「同版本内加可选字段」。若未来有跨版本 profile 流转需求再升 v2，当前 profile 只在包内分发，无此需求）。
+- 无 `structure` 字段的 profile（全部既有 profile 与三个 Tier A 新 profile）行为不变。加法、可选；`schemaVersion` 保持 `1`。注意现有 `readObject` 拒绝未知字段，所以「同版本内加可选字段」意味着所有读取方（`validateProfile`）必须与字段同 PR 扩展白名单；profile 只在包内分发，不存在旧版本 reader 读新 profile 的跨版本流转场景，若未来出现再升 v2。
 
 **机械验证边界（关键决策 D5）**：check 阶段对 `outline`（结构骨架，刻意不叫 `structure`——那是既有 review stage 的名字，见下）只验证两件事：
 1. `required:true` 的节在最终正文中存在（按 heading 匹配，见下）；
@@ -204,8 +204,15 @@ outline?: {
 ```
 
 - `outline` 是 after-body 的纯函数：check 记录时计算，重放时按 body hash 重新计算比对——与 `checks/` 工件「可独立验证」的契约同构，且**完全不动** `CHANGE_TYPES`、`compareBodies`、`verifyMechanicalChanges` 与 `mechanicalStatus`（`clean` 仍只表示机械 diff 为空，不再隐含 outline 合规——二者分离，各自诚实）。
-- `outline.status === "non-compliant"` 产生一个类别为 `outline` 的 open finding，走既有 proposal→apply→re-check 循环（finding 不可变 + addressed 派生标签语义原样复用），不新增状态机状态。
-- `outline` 字段仅当 profile 声明了 `structure` 时出现；其余 profile 的 check 工件形状不变。
+
+**执法路径（r2 P0/P1 折叠：不走 finding 机制）**：outline 不合规**不铸造 finding**。finding 只存在于 review 工件（`validateReview` 的 stage ∈ `STAGES`、category ∈ 封闭 `CATEGORIES`，`schema.lib.mjs:156-172`，且带 outline 违规没有的位置字段），check 记录步骤没有铸造 finding 的通道。改为把 `outline.status` 直接接进 **`evaluateCompletion`**（`mutation.lib.mjs:299-338`）：最新一次 check 的 `outline.status === "non-compliant"` 时，run 无法进入 `checked`/finalizable 完成态，`status`/`nextRequiredStage` 报「补齐 required 节后重新 check」。修复路径就是工作流的常规路径：修订正文（proposal/apply 或重 draft）→ 重新 check → `outline.status` 转为 compliant。不新增 finding category、不新增 `PROPOSAL_INTENTS`、不动 review schema——这比把 outline 塞进 `structure` review stage（名实都不符）或扩 finding 枚举（为一种无位置信息的违规开洞）都便宜。
+
+**实现落点（r2 P1 折叠，钉到函数）**：
+1. `check-profile.lib.mjs` `validateCheck` 的 `readObject` 字段白名单**增加顶层 `outline` 字段**（否则每次记录 check 都过不了校验——正是本设计自己在 Phase-1 分期里引用的那个陷阱）。
+2. outline 的计算与按 body hash 重放校验放进 `recordCheck`（`record.lib.mjs`，与 `verifyMechanicalChanges` 同处，after-snapshot 已在此读取）。
+3. `evaluateCompletion`（`mutation.lib.mjs:299-338`）增加 outline 输入（见上）。
+4. 匹配器边界补充（r2 P2 折叠）：一个 H2 标题至多服务一个骨架节（两个 section 的备选列表命中同一标题时，declaredOrder 靠前者获得匹配）；同一 section 被多个相同标题命中时取第一个匹配。
+5. `outline` 字段仅当 profile 声明了 `structure` 时出现；其余 profile 的 check 工件形状不变。
 
 **匹配器规格（P1-3 折叠，钉死为纯 heading 匹配）**：
 - 只匹配 **H2**（ATX `##`）。setext 标题按 `markdown.lib.mjs:136` 现状视作 prose，不参与匹配——这是已知限制，写进 contracts.md。无 H2 的文档 ⇒ 所有 required 节报 missing。
@@ -219,8 +226,8 @@ outline?: {
 |---|---|---|
 | 1 | `scripts/schema.lib.mjs:141` | PROFILES 增加 4 个 id |
 | 2 | `profiles/technical-essay.json` 等 ×4 | 新 profile（§5 规格） |
-| 3 | `scripts/check-profile.lib.mjs` | validateProfile 增加 structure 校验 |
-| 4 | `scripts/commands.lib.mjs` / check 相关 | check 工件增加顶层 `outline` 字段（§6 规格：纯函数计算 + 按 body hash 重放；`CHANGE_TYPES`/`compareBodies`/`verifyMechanicalChanges`/`mechanicalStatus` 全部不动） |
+| 3 | `scripts/check-profile.lib.mjs` | validateProfile 增加 `structure` 校验；validateCheck 的 `readObject` 字段白名单增加顶层 `outline` 字段 |
+| 4 | `scripts/record.lib.mjs`（recordCheck）+ `scripts/mutation.lib.mjs`（evaluateCompletion） | outline 计算 + 按 body hash 重放校验 + finalize 门（§6 执法路径；`CHANGE_TYPES`/`compareBodies`/`verifyMechanicalChanges`/`mechanicalStatus` 全部不动） |
 | 5 | `references/contracts.md` | Brief.profile enum 文案 + §6 增 structure 契约 |
 | 6 | `article-writing/SKILL.md` | 路由表加 4 行（:40）+ profile 描述段（:67-73）+ 触发描述加「技术战略/路线汇报」 |
 | 7 | `article-review/SKILL.md` | 补 profile 行（现缺） |
@@ -228,7 +235,7 @@ outline?: {
 | 9 | `README.md` + `README.zh.md` | genre 句 + profile 数（four→eight）双语同步 |
 | 10 | `README.i18n.yaml` | `pnpm check:readme --write` 重录哈希（记忆里的坑：`pnpm docs:parity` 不透传，用 check:readme 的 write 通道） |
 | 11 | `tests/package-shape.spec.ts:23` | PROFILE_IDS 加 4 id（驱动 schema 校验循环） |
-| 12 | `tests/contracts.spec.ts` | enum pin 补新 id 用例 + structure 校验正反用例 + poetry 仍失败 |
+| 12 | `tests/contracts.spec.ts` | Phase 1 部分：enum pin 补三个新 id 用例（`poetry` 仍失败）；Phase 2 部分：structure 校验正反用例 + validateCheck 的 outline 字段正反用例 |
 | 13 | `tests/workflow.spec.ts` / fixtures | 增加 engineering-strategy 的 structure lint 用例（节缺失→open finding→apply→绿） |
 | 14 | 仓库根 `.claude-plugin/marketplace.json:16-19`（注意：**不在**插件包内——插件包只带 `.claude-plugin/plugin.json`；评审 P2-5 纠正了原稿的错误路径） | 描述句更新（无测试 pin，纯文案） |
 
@@ -237,7 +244,7 @@ outline?: {
 ## 8. 验证计划
 
 1. **单测**（vitest，包内）：structure 校验正反用例（缺失 required 节 / 顺序颠倒 / 无 structure 的 profile 不受影响）；profile 循环校验（package-shape 自动覆盖 4 个新 JSON）；enum pin（新 id 接受、`poetry` 拒绝）。
-2. **端到端**（fixtures 驱动 `writing.mjs`）：init(profile=engineering-strategy) → record research/plan/draft → check 报 `outline.status="non-compliant"`（missingRequiredSections 非空，`changes` 为空且 `mechanicalStatus:"clean"`——二者分离各自诚实）→ proposal+apply 补节 → re-check `outline.status="compliant"` → finalize。断言 exit code、finding 类别与重放一致性（重算 outline 与记录值逐字段相等）。
+2. **端到端**（fixtures 驱动 `writing.mjs`）：init(profile=engineering-strategy) → record research/plan/draft → check 报 `outline.status="non-compliant"`（missingRequiredSections 非空，`changes` 为空且 `mechanicalStatus:"clean"`——二者分离各自诚实）→ 此刻 finalize/完成态被 `evaluateCompletion` 的 outline 门挡住，`nextRequiredStage` 指向修订→重新 check → 修订正文补节（常规 draft/proposal/apply 路径，无 outline 专用 intent）→ re-check `outline.status="compliant"` → finalize 通过。断言 exit code、门控行为与重放一致性（重算 outline 与记录值逐字段相等）。
 3. **门禁**：`pnpm check:readme`、包内 vitest、（docs-only 部分不涉及）capability/parity 与本包无关已核实。
 4. **活体验收**（实现后另行会话）：用一段真实技术战略素材走 article-writing + engineering-strategy profile，人工核对 SCQA 开头、policy 前置、诊断殿后是否符合 §5.4 规格。
 
@@ -245,7 +252,7 @@ outline?: {
 
 **Phase 1（小 PR，纯数据，只含三个 Tier A profile）**：#1（enum 只加 technical-essay/academic/natural-prose 三个 id）、对应 #2 三个 JSON、#5-#10 文档同步、#11/#12。**engineering-strategy 整体推迟到 Phase 2**（评审 P1-2 折叠：`validateProfile` 的 `readObject` 拒绝未知字段，Phase 1 若带上含 `structure` 的 engineering-strategy.json 会直接红在 `package-shape.spec.ts:153-163` 的 profile 校验循环上；enum 条目与 profile 文件必须与 schema 能力同 PR 落地）。预计 diff ~450 行。
 
-- **Phase 2（逻辑 PR，叠在 Phase 1 上）**：#3/#4 `structure` schema + check 工件 `outline` 字段与匹配器（§6 折叠后规格）+ engineering-strategy profile 与 enum 条目 + #13 端到端用例 + contracts.md §6。预计 diff ~400 行。
+- **Phase 2（逻辑 PR，叠在 Phase 1 上）**：#3/#4 `structure` schema + check 工件 `outline` 字段、匹配器与 evaluateCompletion 门（§6 折叠后规格）+ engineering-strategy profile 与 enum 条目 + #12 的 Phase 2 部分 + #13 端到端用例 + contracts.md §6。预计 diff ~400 行。
 - 两期一个 worktree 栈式 PR，Phase 2 base Phase 1。
 
 ## 10. 风险与开放问题
