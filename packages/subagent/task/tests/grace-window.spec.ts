@@ -568,31 +568,36 @@ describe('release tombstone algebra', () => {
   function releaseDeps(status?: string) {
     const agents = { get: (_id: string) => (status === undefined ? undefined : { status }) }
     const subagents = {
-      listChildren: async () => [{ id: 'c1', mode: 'continuable' }],
-      drainChildren: async () => {},
+      // rc.5 descendant rows: the direct child is a depth-1 child-kind row.
+      listDescendants: async () => [{ id: 'c1', mode: 'continuable', depth: 1, kind: 'child' }],
     }
-    return { subagents, agents }
+    // Step 0 passes on the duck-typed receipt registry; the not-resident
+    // arms these tests pin short-circuit before any disposal would issue.
+    const disposals = { tryDispose: async () => ({ held: false as const, cause: 'no-receipt' as const }) }
+    return { subagents, agents, disposals }
   }
 
   it('T18b: manual release on a naturally settled child stays not-resident (no releasedEarlier)', async () => {
-    const { subagents, agents } = releaseDeps()
+    const { subagents, agents, disposals } = releaseDeps()
     const outcome = await runRelease({
       parent: fakeAgent,
       id: 'c1',
       subagents,
       agents,
+      disposals,
     })
     expect(outcome).toMatchObject({ kind: 'not-resident', releasedEarlier: false })
   })
 
   it('manual release on a tombstoned child renders not-resident with releasedEarlier: true', async () => {
-    const { subagents, agents } = releaseDeps()
+    const { subagents, agents, disposals } = releaseDeps()
     tombstoneReadyRow('c1')
     const outcome = await runRelease({
       parent: fakeAgent,
       id: 'c1',
       subagents,
       agents,
+      disposals,
     })
     expect(outcome).toMatchObject({ kind: 'not-resident', releasedEarlier: true })
   })

@@ -24,7 +24,29 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
-async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
+/**
+ * A delegating `ccContinuableDisposals` fake (§3.4.4): production publishes
+ * the task plugin's receipt registry; these tests only need startTracked to
+ * delegate (receipt lifecycle itself is pinned in the task package).
+ */
+function fakeDisposals() {
+  const calls: Array<{ seam: unknown; spec: unknown }> = []
+  return {
+    service: {
+      startTracked: async (seam: { startActivation(spec: never): Promise<unknown> }, spec: never) => {
+        calls.push({ seam, spec })
+        return seam.startActivation(spec)
+      },
+      tryDispose: async () => ({ held: false as const, cause: 'no-receipt' as const }),
+    },
+    calls,
+  }
+}
+
+async function setup(
+  script: ConstructorParameters<typeof MockAdapter>[0],
+  opts: { disposals?: 'delegate' | 'absent' } = {},
+) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
   const root = mkdtempSync(join(tmpdir(), 'dsh-coordinator-'))
@@ -35,6 +57,10 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
+  const disposals = fakeDisposals()
+  if (opts.disposals !== 'absent') {
+    ctx.provide('ccContinuableDisposals', disposals.service)
+  }
   // A small deployment tool surface: two write tools and two read-only tools,
   // so the coordinator's default mask can be observed removing the writers.
   ctx.tools.register(defineTool({ name: 'write', description: 'write', parameters: {}, output: { schema: { type: 'null' }, render: () => [] }, async execute() { return null } }))
@@ -44,7 +70,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0]) {
   ctx.llm.registerAdapter(['mock'], new MockAdapter(script))
   const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
   parkParent(ctx, parent)
-  return { ctx, parent }
+  return { ctx, parent, disposals }
 }
 
 /** Read one stored session's header + event log through the rc.1
@@ -206,6 +232,39 @@ describe('dsh-coordinator named worker routing', () => {
     expect(text(sent)).toContain('message delivered to worker alpha')
   })
 
+  it('spawn_worker routes its start through ccContinuableDisposals.startTracked (receipt retained by the shared registry)', async () => {
+    const { ctx, parent, disposals } = await setup([textResponse('first')])
+    coordinator.installCoordinatorMode(parent, ctx, { enabled: true })
+
+    const spawned = await callTool(ctx, 'spawn_worker', { name: 'alpha', prompt: 'do task' }, parent)
+    expect(spawned.isError).toBe(false)
+    // The spawn delegated to the service once, with the subagents seam and a
+    // spec that keeps provider/label/parent/signal/delivery at the top level.
+    // (Field-wise asserts: a toMatchObject tree traversal would touch the
+    // Agent proxy's private properties.)
+    expect(disposals.calls).toHaveLength(1)
+    // The seam handed to the service is the live subagents service (cordis
+    // hands a fresh proxy wrapper per access, so probe the function, not identity).
+    expect(typeof (disposals.calls[0]!.seam as { startActivation?: unknown }).startActivation).toBe('function')
+    const spec = disposals.calls[0]!.spec as Record<string, unknown>
+    expect(spec['provider']).toBe('spawn')
+    expect(spec['label']).toBe('alpha')
+    expect(spec['delivery']).toBe('parent')
+    // Identity compare without expect() traversals: the deep-equal matcher
+    // probes private properties on the cordis Agent proxy.
+    expect(spec['parent'] === parent).toBe(true)
+    expect(spec['prompt']).toEqual([{ type: 'text', text: 'do task' }])
+  })
+
+  it('spawn_worker without the ccContinuableDisposals service is a readable refusal, never a TypeError', async () => {
+    const { ctx, parent } = await setup([], { disposals: 'absent' })
+    coordinator.installCoordinatorMode(parent, ctx, { enabled: true })
+
+    const spawned = await callTool(ctx, 'spawn_worker', { name: 'alpha', prompt: 'do task' }, parent)
+    expect(spawned.isError).toBe(true)
+    expect(text(spawned)).toContain('spawn_worker requires the cc-shell composition (ccContinuableDisposals service unavailable)')
+  })
+
   it('send_to_worker\'s message reaches the spawned worker\'s persisted session via sendMessage', async () => {
     // The production delivery path end-to-end: the tool resolves the worker,
     // calls ctx.subagents.sendMessage (steer semantics), and the formatted
@@ -289,6 +348,7 @@ describe('dsh-coordinator completion notification (reused subagent-settled proto
     await ctx.plugin(AgentLoop, { agents: [] })
       await ctx.plugin(SubagentRuntime)
     await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
+    ctx.provide('ccContinuableDisposals', fakeDisposals().service)
     ctx.tools.register(defineTool({ name: 'write', description: 'write', parameters: {}, output: { schema: { type: 'null' }, render: () => [] }, async execute() { return null } }))
     ctx.tools.register(defineTool({ name: 'edit', description: 'edit', parameters: {}, output: { schema: { type: 'null' }, render: () => [] }, async execute() { return null } }))
     ctx.llm.registerAdapter(['mock'], new MockAdapter([textResponse('child answer'), textResponse('parent ack')]))

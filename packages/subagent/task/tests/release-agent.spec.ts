@@ -1,7 +1,9 @@
 /**
  * Tests for the shared release operation and the `release_agent` tool
- * (plan docs/plans/2026-09-30-subagent-release-valve.md §6). Every §5 variant
- * is `toEqual`-pinned (full string), never substring. The 10 s drain timeout
+ * (plan docs/plans/2026-09-30-subagent-release-valve.md §6, re-based onto the
+ * §3.4.4 receipt design: lineage via `listDescendants` depth, disposal via
+ * the `ccContinuableDisposals` receipt registry). Every §5 variant is
+ * `toEqual`-pinned (full string), never substring. The 10 s disposal timeout
  * is paid with REAL timers exactly once (the T13b primary); the T13b
  * late-continuation sub-variants re-run the timeout under fake timers.
  */
@@ -16,13 +18,18 @@ import {
   ReleaseFailure,
   isReleased,
   isReleasing,
+  isTombstoned,
   markReleased,
   renderReleaseOutcome,
   resetReleasedMarkers,
   runRelease,
+  tombstoneReadyRow,
+  type ReleaseDescendantRowLike,
+  type ReleaseDisposalsLike,
   type ReleaseRegistryLike,
   type ReleaseSubagentsLike,
 } from '@dsh-cc/command-agents/release'
+import { CcContinuableDisposals } from '../src/continuable-disposals.ts'
 import { RELEASE_AGENT_TOOL, registerReleaseAgentTool } from '../src/release-agent.ts'
 import * as CcToolExecutor from '@dsh-cc/tools/executor'
 import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
@@ -38,28 +45,26 @@ const COPY = {
     `No agent ${id} among this session's continuable children; use list_agents or /agents for current ids.`,
   notContinuable: (id: string, mode: string) =>
     `Agent ${id} is not a continuable child (mode: ${mode}); release only covers continuable children.`,
-  noDrainSeam: (id: string) =>
-    `Cannot release ${id}: this composition's subagents seam exposes no drainChildren; free capacity by letting children settle or by restarting the session.`,
+  noDisposals: (id: string) =>
+    `Cannot release ${id}: the ccContinuableDisposals service is not available in this composition.`,
   catalogUnreadable: (id: string, cause: string) =>
     `Cannot verify ${id} against this session's child catalog (${cause}); refusing to release blind. Retry, or restart the session if listing stays broken.`,
   notDirectChild: (id: string) =>
-    `Agent ${id} is not a direct child of this session (the drain seam refused with UNAUTHORIZED); release its direct parent instead — if that parent is one of this session's children. Releasing a parent evicts its whole resident subtree.`,
-  staleParent: () =>
-    `This session's agent handle is stale (the drain seam refused with UNAUTHORIZED against the parent identity); retry the release, or restart the turn if it persists.`,
+    `Agent ${id} is not a direct child of this session; only its creating session (its direct parent) can release it.`,
   releasedRunning: (id: string) =>
-    `Released agent ${id}: its in-flight turn was aborted and its resident activation evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk. Within this session it cannot be continued (send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
+    `Released agent ${id}: its in-flight turn was aborted and its resident activation evicted — the capacity slot it held is free. Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk. Within this session it cannot be continued (send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
   releasedIdle: (id: string) =>
-    `Released agent ${id}: its resident (idle) activation was evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
+    `Released agent ${id}: its resident (idle) activation was evicted — the capacity slot it held is free. Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
   releasedUnknown: (id: string) =>
-    `Released agent ${id}: its resident activation was evicted; any capacity slot it held is free (its running state could not be observed). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
+    `Released agent ${id}: its resident activation was evicted; any capacity slot it held is free (its running state could not be observed). Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`,
   registryOnlyPrepend: (id: string) =>
     `(Note: ${id} was absent from the readable child catalog — released via the live registry only.) `,
   catalogUnreadablePrepend: (cause: string) =>
     `(Note: the child catalog was unreadable (${cause}) — released via the live registry only.) `,
   issuedUnobservable: (id: string) =>
-    `Release of agent ${id} was issued against the authoritative drain seam; this composition cannot observe the registry, so residency after the drain could not be confirmed and the child is NOT marked released. Eviction, when it applies, also covers resident descendants. If it was resident, the drain evicts it by the seam's own contract; its continuation state here is unknown.`,
+    `Release of agent ${id} was issued against the authoritative drain seam; this composition cannot observe the registry, so residency after the drain could not be confirmed and the child is NOT marked released. Eviction, when it applies, covers the named child only — its resident delegates are unaffected. If it was resident, the drain evicts it by the seam's own contract; its continuation state here is unknown.`,
   evictedDegraded: (id: string, failure: string) =>
-    `Release of agent ${id} reported a teardown failure (${failure}), but the activation entry is removed before that failure surfaces per the seam's disposal order — any capacity slot is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued; /agents marks it [released] for the rest of this process.`,
+    `Release of agent ${id} reported a teardown failure (${failure}), but the activation entry is removed before that failure surfaces per the seam's disposal order — any capacity slot is free. Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk; within this session it cannot be continued; /agents marks it [released] for the rest of this process.`,
   notResident: (id: string) =>
     `Agent ${id} has no resident activation (settled or released); nothing was evicted and no capacity slot is held by it.`,
   notResidentEarlier: (id: string) =>
@@ -68,6 +73,10 @@ const COPY = {
     `Release of agent ${id} was issued, but the registry still reports it resident after the drain; check /agents detail ${id} and retry if it persists.`,
   stillResidentPending: (id: string) =>
     `Release of agent ${id} is in flight: its turn did not reach idle within 10s (a cancel-resistant turn). The release still completes by itself if the turn ever becomes idle — /agents then marks it [released] — but nothing locally force-evicts a cancel-resistant turn; a process restart is the only hard boundary.`,
+  refusalForeign: (id: string) =>
+    `Cannot release ${id}: a release receipt for it exists, but it belongs to a different parent session.`,
+  refusalNoReceipt: (id: string) =>
+    `Cannot release ${id}: this session holds no release receipt for it — it was either never spawned by this process, or it settled and was re-woken by send_message (the harness restores a new activation that no API can release by id; let it settle again or restart the session).`,
 }
 
 // --- fixture ----------------------------------------------------------------
@@ -81,27 +90,40 @@ function mkErr(message: string, code?: string): Error & { code?: string } {
   return error
 }
 
-interface DrainControl {
-  drain: (parent: unknown, ids: unknown[]) => Promise<void>
-  calls: { parent: unknown; ids: unknown[]; releasingAtCall: boolean }[]
-  resolveDrain: () => void
-  rejectDrain: (error: unknown) => void
+interface DisposalsControl {
+  disposals: ReleaseDisposalsLike
+  calls: { parent: unknown; child: unknown; releasingAtCall: boolean }[]
+  resolveDisposed: () => void
+  rejectDisposed: (error: unknown) => void
 }
 
-/** A recorded, externally-resolvable drainChildren stub. */
-function makeDrain(): DrainControl {
-  const calls: DrainControl['calls'] = []
-  let resolveDrain!: () => void
-  let rejectDrain!: (error: unknown) => void
-  const promise = new Promise<void>((resolve, reject) => {
-    resolveDrain = resolve
-    rejectDrain = reject
+/**
+ * A recorded, externally-resolvable `ccContinuableDisposals.tryDispose` stub:
+ * held:true with a memoized `disposed` promise (mirrors the service's
+ * in-flight memoization — a second call returns the SAME promise).
+ */
+function makeDisposals(): DisposalsControl {
+  const calls: DisposalsControl['calls'] = []
+  let resolveDisposed!: () => void
+  let rejectDisposed!: (error: unknown) => void
+  const memo = new Promise<void>((resolve, reject) => {
+    resolveDisposed = resolve
+    rejectDisposed = reject
   })
-  const drain = (parent: unknown, ids: unknown[]): Promise<void> => {
-    calls.push({ parent, ids, releasingAtCall: isReleasing(String((ids as string[])[0])) })
-    return promise
+  // Contained: the tests attach handlers on their own schedule.
+  memo.catch(() => {})
+  const disposals: ReleaseDisposalsLike = {
+    tryDispose: async (parent, child) => {
+      calls.push({ parent, child, releasingAtCall: isReleasing(String(child)) })
+      return { held: true, disposed: memo }
+    },
   }
-  return { drain, calls, resolveDrain, rejectDrain }
+  return { disposals, calls, resolveDisposed, rejectDisposed }
+}
+
+/** A fake registry always answering the same held:false refusal cause. */
+function refusingDisposals(cause: 'foreign' | 'no-receipt'): ReleaseDisposalsLike {
+  return { tryDispose: async () => ({ held: false, cause }) }
 }
 
 interface RegistryControl {
@@ -125,9 +147,18 @@ function makeRegistry(initial: Record<string, { status?: string }> = {}): Regist
   }
 }
 
-/** The continuable catalog row every drain-path test uses. */
-function catalogRow(mode = 'continuable'): { id: string; mode?: string } {
-  return { id: CHILD_ID, mode }
+/** A depth-1 catalog-kind descendant row (direct-child evidence, rc.5 shape). */
+function childRow(mode = 'continuable'): ReleaseDescendantRowLike {
+  return { id: CHILD_ID, mode, depth: 1, kind: 'child' }
+}
+
+/** A deeper descendant row (grandchild lineage evidence). */
+function grandchildRow(): ReleaseDescendantRowLike {
+  return { id: CHILD_ID, mode: 'continuable', depth: 2, kind: 'child' }
+}
+
+function descendantsOf(rows: readonly ReleaseDescendantRowLike[]): ReleaseSubagentsLike['listDescendants'] {
+  return async () => rows
 }
 
 function parentAgent(overrides: Record<string, unknown> = {}): Agent {
@@ -142,15 +173,12 @@ beforeEach(() => {
   resetReleasedMarkers()
 })
 
-describe('runRelease gate errors (no marking, no drain)', () => {
-  it('T1: clean catalog miss + registry miss → unknown-id, no drain', async () => {
-    const d = makeDrain()
+describe('runRelease gate errors (no marking, no disposal)', () => {
+  it('T1: clean catalog miss + registry miss → unknown-id, no disposal', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry()
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [],
-      drainChildren: d.drain as never,
-    }
-    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([]) }
+    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals }))
       .rejects.toEqual(new ReleaseFailure('unknown-id', COPY.unknownId(CHILD_ID)))
     expect(d.calls).toHaveLength(0)
     expect(isReleased(CHILD_ID)).toBe(false)
@@ -158,80 +186,96 @@ describe('runRelease gate errors (no marking, no drain)', () => {
   })
 
   it('T2: mode one-shot → not-continuable with the mode interpolated; T2b absent mode → the literal unknown', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow('one-shot')],
-      drainChildren: d.drain as never,
-    }
-    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow('one-shot')]) }
+    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals }))
       .rejects.toEqual(new ReleaseFailure('not-continuable', COPY.notContinuable(CHILD_ID, 'one-shot')))
-    const subagentsNoMode: ReleaseSubagentsLike = {
-      listChildren: async () => [{ id: CHILD_ID }],
-      drainChildren: d.drain as never,
-    }
-    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsNoMode, agents: reg.registry }))
+    const subagentsNoMode: ReleaseSubagentsLike = { listDescendants: descendantsOf([{ id: CHILD_ID, depth: 1, kind: 'child' }]) }
+    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsNoMode, agents: reg.registry, disposals: d.disposals }))
       .rejects.toEqual(new ReleaseFailure('not-continuable', COPY.notContinuable(CHILD_ID, 'unknown')))
     expect(d.calls).toHaveLength(0)
   })
 
-  it('T3: catalog hit continuable + registry miss → not-resident, no drain', async () => {
-    const d = makeDrain()
+  it('T3: catalog hit continuable + registry miss → not-resident, no disposal', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry()
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     expect(outcome).toEqual({ kind: 'not-resident', id: CHILD_ID, releasedEarlier: false })
     expect(renderCopy(outcome)).toEqual(COPY.notResident(CHILD_ID))
     expect(d.calls).toHaveLength(0)
   })
 
   it('T3b: releasedEarlier full text; a repeat release after released → same', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry()
     markReleased(CHILD_ID)
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     expect(outcome).toEqual({ kind: 'not-resident', id: CHILD_ID, releasedEarlier: true })
     expect(renderCopy(outcome)).toEqual(COPY.notResidentEarlier(CHILD_ID))
     // The pre-existing mark persists (grok r6 #5).
     expect(isReleased(CHILD_ID)).toBe(true)
-    const outcome2 = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const outcome2 = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     expect(outcome2).toEqual({ kind: 'not-resident', id: CHILD_ID, releasedEarlier: true })
   })
 
-  it('T11: no drain seam → no-drain-seam', async () => {
+  it('tombstone no-op: a grace-window-tombstoned (registry-absent) child is not-resident with releasedEarlier', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry()
-    const subagents: ReleaseSubagentsLike = { listChildren: async () => [catalogRow()] }
-    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
-      .rejects.toEqual(new ReleaseFailure('no-drain-seam', COPY.noDrainSeam(CHILD_ID)))
+    tombstoneReadyRow(CHILD_ID)
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
+    expect(outcome).toEqual({ kind: 'not-resident', id: CHILD_ID, releasedEarlier: true })
+    expect(renderCopy(outcome)).toEqual(COPY.notResidentEarlier(CHILD_ID))
+    expect(isTombstoned(CHILD_ID)).toBe(true)
+    expect(d.calls).toHaveLength(0)
   })
 
-  it('T10c: listChildren method absent + registry miss → catalog-unreadable with the exposes-no-listChildren cause, no drain', async () => {
-    const d = makeDrain()
+  it('T11: no ccContinuableDisposals service → no-disposals', async () => {
     const reg = makeRegistry()
-    const subagents: ReleaseSubagentsLike = { drainChildren: d.drain as never }
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
     await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
+      .rejects.toEqual(new ReleaseFailure('no-disposals', COPY.noDisposals(CHILD_ID)))
+  })
+
+  it('T11b: a service without tryDispose (duck gate) → no-disposals', async () => {
+    const reg = makeRegistry()
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: {} as never }))
+      .rejects.toEqual(new ReleaseFailure('no-disposals', COPY.noDisposals(CHILD_ID)))
+  })
+
+  it('not-direct-child: a grandchild (depth 2) catalog hit → refused with the new copy BEFORE any dispose attempt', async () => {
+    const d = makeDisposals()
+    const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([grandchildRow()]) }
+    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals }))
+      .rejects.toEqual(new ReleaseFailure('not-direct-child', COPY.notDirectChild(CHILD_ID)))
+    expect(d.calls).toHaveLength(0)
+    expect(isReleased(CHILD_ID)).toBe(false)
+    expect(isReleasing(CHILD_ID)).toBe(false)
+  })
+
+  it('T10c: listDescendants method absent + registry miss → catalog-unreadable with the exposes-no-listDescendants cause, no disposal', async () => {
+    const d = makeDisposals()
+    const reg = makeRegistry()
+    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: {}, agents: reg.registry, disposals: d.disposals }))
       .rejects.toEqual(new ReleaseFailure(
         'catalog-unreadable',
-        COPY.catalogUnreadable(CHILD_ID, 'the subagents seam exposes no listChildren'),
+        COPY.catalogUnreadable(CHILD_ID, 'the subagents seam exposes no listDescendants'),
       ))
     expect(d.calls).toHaveLength(0)
   })
 
-  it('T10b: listing throws + registry miss → catalog-unreadable error, no drain', async () => {
-    const d = makeDrain()
+  it('T10b: listing throws + registry miss → catalog-unreadable error, no disposal', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry()
     const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => { throw new Error('catalog io failed') },
-      drainChildren: d.drain as never,
+      listDescendants: async () => { throw new Error('catalog io failed') },
     }
-    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry }))
+    await expect(runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals }))
       .rejects.toEqual(new ReleaseFailure(
         'catalog-unreadable',
         COPY.catalogUnreadable(CHILD_ID, 'catalog io failed'),
@@ -242,22 +286,19 @@ describe('runRelease gate errors (no marking, no drain)', () => {
 
 /** Render via the shared renderer; the literal pins in the tests stay primary. */
 
-describe('runRelease drain paths', () => {
-  it('T5: catalog hit + running → released running-variant full text; drain args (exactParent, [SessionId(id)])', async () => {
-    const d = makeDrain()
+describe('runRelease disposal paths', () => {
+  it('T5: catalog hit + running → released running-variant full text; tryDispose args (parent, [child]) SessionIds', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
     const parent = parentAgent()
-    const pending = runRelease({ parent, id: CHILD_ID, subagents, agents: reg.registry })
+    const pending = runRelease({ parent, id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     expect(d.calls).toHaveLength(1)
-    expect(d.calls[0]!.parent).toBe(parent)
-    expect(d.calls[0]!.ids).toEqual([SessionId(CHILD_ID)])
-    reg.drop(CHILD_ID) // the seam's own disposal drops the resident entry
-    d.resolveDrain()
+    expect(d.calls[0]!.parent).toEqual(SessionId(PARENT_ID))
+    expect(d.calls[0]!.child).toEqual(SessionId(CHILD_ID))
+    reg.drop(CHILD_ID) // the activation's own disposal drops the resident entry
+    d.resolveDisposed()
     const outcome = await pending
     expect(outcome).toEqual({ kind: 'released', id: CHILD_ID, preStatus: 'running', catalogNote: 'catalog' })
     expect(renderCopy(outcome)).toEqual(COPY.releasedRunning(CHILD_ID))
@@ -266,79 +307,52 @@ describe('runRelease drain paths', () => {
   })
 
   it('T6: catalog hit + idle → released idle-variant full text (causation is positional per F4)', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'idle' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     reg.drop(CHILD_ID)
-    d.resolveDrain()
+    d.resolveDisposed()
     const outcome = await pending
     expect(outcome).toEqual({ kind: 'released', id: CHILD_ID, preStatus: 'idle', catalogNote: 'catalog' })
     expect(renderCopy(outcome)).toEqual(COPY.releasedIdle(CHILD_ID))
   })
 
   it('T6b: registry hit whose status is neither running nor idle → released unknown-preStatus variant', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'paused' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     reg.drop(CHILD_ID)
-    d.resolveDrain()
+    d.resolveDisposed()
     const outcome = await pending
     expect(outcome).toEqual({ kind: 'released', id: CHILD_ID, preStatus: 'unknown', catalogNote: 'catalog' })
     expect(renderCopy(outcome)).toEqual(COPY.releasedUnknown(CHILD_ID))
   })
 
   it('T4: clean catalog miss + registry hit → released with the registry-only prepend', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     reg.drop(CHILD_ID)
-    d.resolveDrain()
+    d.resolveDisposed()
     const outcome = await pending
     expect(outcome).toEqual({ kind: 'released', id: CHILD_ID, preStatus: 'running', catalogNote: 'registry-only' })
     expect(renderCopy(outcome)).toEqual(COPY.registryOnlyPrepend(CHILD_ID) + COPY.releasedRunning(CHILD_ID))
   })
 
-  it('T4b: as T4 but the drain rejects not-direct → not-direct-child; markers cleared', async () => {
-    const d = makeDrain()
-    const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
-    await flush()
-    d.rejectDrain(mkErr('subagent "x" is not a direct child of agent "p"'))
-    await expect(pending).rejects.toEqual(new ReleaseFailure('not-direct-child', COPY.notDirectChild(CHILD_ID)))
-    expect(isReleased(CHILD_ID)).toBe(false)
-    expect(isReleasing(CHILD_ID)).toBe(false)
-  })
-
   it('T7: ACTIVATION_TEARDOWN_FAILED + post absent → evicted-degraded full text, marked', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     reg.drop(CHILD_ID) // the seam deletes the resident entry BEFORE the failure surfaces (F4)
-    d.rejectDrain(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
+    d.rejectDisposed(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
     const outcome = await pending
     expect(outcome).toEqual({
       kind: 'evicted-degraded', id: CHILD_ID, failure: 'teardown boom', catalogNote: 'catalog',
@@ -348,48 +362,41 @@ describe('runRelease drain paths', () => {
   })
 
   it('T7b: evicted-degraded carries the registry-only prepend; T7c post present → rethrow, cleared', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagentsMiss: ReleaseSubagentsLike = {
-      listChildren: async () => [],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsMiss, agents: reg.registry })
+    const subagentsMiss: ReleaseSubagentsLike = { listDescendants: descendantsOf([]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsMiss, agents: reg.registry, disposals: d.disposals })
     await flush()
     reg.drop(CHILD_ID)
-    d.rejectDrain(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
+    d.rejectDisposed(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
     const outcome = await pending
     expect(renderCopy(outcome)).toEqual(
       COPY.registryOnlyPrepend(CHILD_ID) + COPY.evictedDegraded(CHILD_ID, 'teardown boom'),
     )
     resetReleasedMarkers()
 
-    const d3 = makeDrain()
+    const d3 = makeDisposals()
     const reg2 = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagentsHit: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d3.drain as never,
-    }
-    const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsHit, agents: reg2.registry })
+    const subagentsHit: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagentsHit, agents: reg2.registry, disposals: d3.disposals })
     await flush()
     const original = mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED')
-    d3.rejectDrain(original)
+    d3.rejectDisposed(original)
     await expect(pending2).rejects.toBe(original)
     expect(isReleased(CHILD_ID)).toBe(false)
     expect(isReleasing(CHILD_ID)).toBe(false)
   })
 
-  it('T10a: listing throws + registry hit → drain with the catalog-unreadable prepend', async () => {
-    const d = makeDrain()
+  it('T10a: listing throws + registry hit → disposal with the catalog-unreadable prepend', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
     const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => { throw new Error('catalog io failed') },
-      drainChildren: d.drain as never,
+      listDescendants: async () => { throw new Error('catalog io failed') },
     }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     reg.drop(CHILD_ID)
-    d.resolveDrain()
+    d.resolveDisposed()
     const outcome = await pending
     expect(outcome).toEqual({
       kind: 'released', id: CHILD_ID, preStatus: 'running',
@@ -401,92 +408,64 @@ describe('runRelease drain paths', () => {
   })
 
   it('T8: reject unknown code → verbatim rethrow; cleared', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     const original = mkErr('some other refusal')
-    d.rejectDrain(original)
+    d.rejectDisposed(original)
     await expect(pending).rejects.toBe(original)
     expect(isReleased(CHILD_ID)).toBe(false)
     expect(isReleasing(CHILD_ID)).toBe(false)
   })
 
-  it('T9: reject message-matched "exact live parent" → stale-parent; cleared', async () => {
-    const d = makeDrain()
+  it('T15: the pre-issuance releasing mark is visible to a collect resolving DURING the disposal; an unknown-code rejection clears it', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
-    await flush()
-    d.rejectDrain(mkErr('selected child teardown requires the exact live parent agent'))
-    await expect(pending).rejects.toEqual(new ReleaseFailure('stale-parent', COPY.staleParent()))
-    expect(isReleased(CHILD_ID)).toBe(false)
-    expect(isReleasing(CHILD_ID)).toBe(false)
-  })
-
-  it('T15: the pre-issuance releasing mark is visible to a collect resolving DURING the drain; T15b: cleared after a not-direct-child failure', async () => {
-    const d = makeDrain()
-    const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
     expect(d.calls[0]!.releasingAtCall).toBe(true)
     reg.drop(CHILD_ID)
-    d.resolveDrain()
+    d.resolveDisposed()
     await pending
     expect(isReleasing(CHILD_ID)).toBe(false)
 
-    const d2 = makeDrain()
-    resetReleasedMarkers() // part 1 marked the id released; T15b is a fresh attempt
+    const d2 = makeDisposals()
+    resetReleasedMarkers() // part 1 marked the id released; part 2 is a fresh attempt
     const reg2 = makeRegistry({ [CHILD_ID]: { status: 'running' } }) // the child is resident again
-    const subagents2: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d2.drain as never,
-    }
-    const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagents2, agents: reg2.registry })
+    const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg2.registry, disposals: d2.disposals })
     await flush()
-    d2.rejectDrain(mkErr('subagent "x" is not a direct child of agent "p"'))
-    await expect(pending2).rejects.toBeInstanceOf(ReleaseFailure)
+    d2.rejectDisposed(mkErr('late unknown refusal'))
+    await expect(pending2).rejects.toBeInstanceOf(Error)
     expect(isReleasing(CHILD_ID)).toBe(false)
   })
 
-  it('T15d: the join contract — drain resolves with the registry dropping the row, no end/cancel evidence, released (idle-variant) still renders in full', async () => {
-    const d = makeDrain()
+  it('T15d: the join contract — disposal resolves with the registry dropping the row, no end/cancel evidence, released (idle-variant) still renders in full', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'idle' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: (parent, ids) => {
-        void d.drain(parent, ids)
-        // The seam's own disposal drops the entry; no cancel/end signal of ours.
+    const disposals: ReleaseDisposalsLike = {
+      tryDispose: async (parent, child) => {
+        void d.disposals.tryDispose(parent, child)
+        // The activation's own disposal drops the entry; no cancel/end signal of ours.
         reg.drop(CHILD_ID)
-        return Promise.resolve()
+        return { held: true, disposed: Promise.resolve() }
       },
     }
-    const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const outcome = await runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals })
     expect(outcome).toEqual({ kind: 'released', id: CHILD_ID, preStatus: 'idle', catalogNote: 'catalog' })
     expect(renderCopy(outcome)).toEqual(COPY.releasedIdle(CHILD_ID))
   })
 
-  it('T13c: pre-read HIT, drain resolves, post-read THROWS → released with the preStatus from the hit (full text)', async () => {
-    const d = makeDrain()
+  it('T13c: pre-read HIT, disposal resolves, post-read THROWS → released with the preStatus from the hit (full text)', async () => {
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
-    d.resolveDrain()
+    d.resolveDisposed()
     reg.breakGets()
     const outcome = await pending
     expect(outcome).toEqual({ kind: 'released', id: CHILD_ID, preStatus: 'running', catalogNote: 'catalog' })
@@ -494,15 +473,12 @@ describe('runRelease drain paths', () => {
     expect(isReleased(CHILD_ID)).toBe(true)
   })
 
-  it('T14a: registry face absent + catalog hit, drain resolves → issued-unobservable full text, markers cleared', async () => {
-    const d = makeDrain()
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: undefined })
+  it('T14a: registry face absent + catalog hit, disposal resolves → issued-unobservable full text, markers cleared', async () => {
+    const d = makeDisposals()
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: undefined, disposals: d.disposals })
     await flush()
-    d.resolveDrain()
+    d.resolveDisposed()
     const outcome = await pending
     expect(outcome).toEqual({ kind: 'issued-unobservable', id: CHILD_ID, catalogNote: 'catalog' })
     expect(renderCopy(outcome)).toEqual(COPY.issuedUnobservable(CHILD_ID))
@@ -511,14 +487,11 @@ describe('runRelease drain paths', () => {
   })
 
   it('T14b: registry face absent + ACTIVATION_TEARDOWN_FAILED → evicted-degraded (marked)', async () => {
-    const d = makeDrain()
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: undefined })
+    const d = makeDisposals()
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: undefined, disposals: d.disposals })
     await flush()
-    d.rejectDrain(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
+    d.rejectDisposed(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
     const outcome = await pending
     expect(outcome).toEqual({
       kind: 'evicted-degraded', id: CHILD_ID, failure: 'teardown boom', catalogNote: 'catalog',
@@ -527,17 +500,74 @@ describe('runRelease drain paths', () => {
   })
 })
 
+describe('runRelease receipt refusals (held:false arms)', () => {
+  it('foreign child: the receipt exists but is bound to another parent → still-resident refusal copy, marks cleared', async () => {
+    const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const outcome = await runRelease({
+      parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry,
+      disposals: refusingDisposals('foreign'),
+    })
+    expect(outcome).toEqual({ kind: 'still-resident', id: CHILD_ID, drainPending: false, refusal: 'foreign' })
+    expect(renderCopy(outcome)).toEqual(COPY.refusalForeign(CHILD_ID))
+    expect(isReleased(CHILD_ID)).toBe(false)
+    expect(isReleasing(CHILD_ID)).toBe(false)
+  })
+
+  it('no-receipt live child: never tracked by this process → still-resident refusal copy, marks cleared', async () => {
+    const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const outcome = await runRelease({
+      parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry,
+      disposals: refusingDisposals('no-receipt'),
+    })
+    expect(outcome).toEqual({ kind: 'still-resident', id: CHILD_ID, drainPending: false, refusal: 'no-receipt' })
+    expect(renderCopy(outcome)).toEqual(COPY.refusalNoReceipt(CHILD_ID))
+    expect(isReleased(CHILD_ID)).toBe(false)
+    expect(isReleasing(CHILD_ID)).toBe(false)
+  })
+
+  it('restored-execution refusal end-to-end: spawn (tracked) → settle (receipt dropped) → registry-present release reports no-receipt and disposes nothing', async () => {
+    // The REAL service: spawn → natural settlement drops the receipt. A later
+    // send_message restores an activation no API can release by id (upgrade
+    // guide L16); the registry shows that execution resident, but the release
+    // is a refuse-with-remedy, never a silent success.
+    const service = new CcContinuableDisposals()
+    let resolveResult!: (value: unknown) => void
+    const result = new Promise<unknown>(resolve => { resolveResult = resolve })
+    let disposeCalls = 0
+    const activation = {
+      childId: CHILD_ID,
+      result,
+      dispose: () => { disposeCalls += 1; return Promise.resolve() },
+    }
+    await service.startTracked(
+      { startActivation: async () => activation },
+      { parent: { id: PARENT_ID } },
+    )
+    resolveResult({ stopReason: 'completed' })
+    await flush()
+    const outcome = await runRelease({
+      parent: parentAgent(),
+      id: CHILD_ID,
+      subagents: { listDescendants: descendantsOf([childRow()]) },
+      agents: makeRegistry({ [CHILD_ID]: { status: 'idle' } }).registry, // the restored execution
+      disposals: service,
+    })
+    expect(outcome).toEqual({ kind: 'still-resident', id: CHILD_ID, drainPending: false, refusal: 'no-receipt' })
+    expect(renderCopy(outcome)).toEqual(COPY.refusalNoReceipt(CHILD_ID))
+    expect(disposeCalls).toBe(0)
+  })
+})
+
 describe('runRelease timing arms', () => {
   it('T13: resolved + still present past the poll budget → still-resident (drainPending false); cleared', async () => {
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-    const subagents: ReleaseSubagentsLike = {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
-    }
-    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+    const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+    const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
     await flush()
-    d.resolveDrain()
+    d.resolveDisposed()
     const outcome = await pending
     expect(outcome).toEqual({ kind: 'still-resident', id: CHILD_ID, drainPending: false })
     expect(renderCopy(outcome)).toEqual(COPY.stillResidentSettled(CHILD_ID))
@@ -545,28 +575,25 @@ describe('runRelease timing arms', () => {
     expect(isReleasing(CHILD_ID)).toBe(false)
   }, 5_000)
 
-  it('T13b primary: drain never resolves within 10 s (real timers) → still-resident (drainPending true), the releasing mark STAYS; a late resolve to an absent registry flips it to released with no unhandled rejection', async () => {
+  it('T13b primary: disposal never resolves within 10 s (real timers) → still-resident (drainPending true), the releasing mark STAYS; a late resolve to an absent registry flips it to released with no unhandled rejection', async () => {
     expect(DRAIN_OBSERVE_TIMEOUT_MS).toBe(10_000)
     const unhandled: unknown[] = []
     const onUnhandled = (reason: unknown): void => { unhandled.push(reason) }
     process.on('unhandledRejection', onUnhandled)
     try {
-      const d = makeDrain()
+      const d = makeDisposals()
       const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-      const subagents: ReleaseSubagentsLike = {
-        listChildren: async () => [catalogRow()],
-        drainChildren: d.drain as never,
-      }
-      const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+      const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+      const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
       await flush()
       const outcome = await pending
       expect(outcome).toEqual({ kind: 'still-resident', id: CHILD_ID, drainPending: true })
       expect(renderCopy(outcome)).toEqual(COPY.stillResidentPending(CHILD_ID))
       expect(isReleasing(CHILD_ID)).toBe(true)
       expect(isReleased(CHILD_ID)).toBe(false)
-      // Late completion: the registry drops the row, the drain resolves.
+      // Late completion: the registry drops the row, the disposal resolves.
       reg.drop(CHILD_ID)
-      d.resolveDrain()
+      d.resolveDisposed()
       await flush()
       expect(isReleased(CHILD_ID)).toBe(true)
       expect(isReleasing(CHILD_ID)).toBe(false)
@@ -582,19 +609,16 @@ describe('runRelease timing arms', () => {
 
     interface TimeoutFixture {
       pending: Promise<Awaited<ReturnType<typeof runRelease>>>
-      d: DrainControl
+      d: DisposalsControl
       reg: RegistryControl
     }
 
     async function runToTimeout(): Promise<TimeoutFixture> {
       vi.useFakeTimers()
-      const d = makeDrain()
+      const d = makeDisposals()
       const reg = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-      const subagents: ReleaseSubagentsLike = {
-        listChildren: async () => [catalogRow()],
-        drainChildren: d.drain as never,
-      }
-      const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry })
+      const subagents: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+      const pending = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents, agents: reg.registry, disposals: d.disposals })
       await flush()
       await vi.advanceTimersByTimeAsync(DRAIN_OBSERVE_TIMEOUT_MS)
       expect(await pending).toEqual({ kind: 'still-resident', id: CHILD_ID, drainPending: true })
@@ -608,7 +632,7 @@ describe('runRelease timing arms', () => {
       const unhandled: unknown[] = []
       const onUnhandled = (reason: unknown): void => { unhandled.push(reason) }
       process.on('unhandledRejection', onUnhandled)
-      d.rejectDrain(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
+      d.rejectDisposed(mkErr('teardown boom', 'ACTIVATION_TEARDOWN_FAILED'))
       await flush()
       await vi.runAllTimersAsync()
       process.off('unhandledRejection', onUnhandled)
@@ -621,7 +645,7 @@ describe('runRelease timing arms', () => {
       const unhandled: unknown[] = []
       const onUnhandled = (reason: unknown): void => { unhandled.push(reason) }
       process.on('unhandledRejection', onUnhandled)
-      d.rejectDrain(mkErr('unknown late failure'))
+      d.rejectDisposed(mkErr('unknown late failure'))
       await flush()
       await vi.runAllTimersAsync()
       process.off('unhandledRejection', onUnhandled)
@@ -633,31 +657,28 @@ describe('runRelease timing arms', () => {
     it('(iv) late resolve with the registry unobservable at that read → the releasing mark is KEPT', async () => {
       const { d, reg } = await runToTimeout()
       reg.breakGets()
-      d.resolveDrain()
+      d.resolveDisposed()
       await flush()
       await vi.runAllTimersAsync()
       expect(isReleasing(CHILD_ID)).toBe(true)
       expect(isReleased(CHILD_ID)).toBe(false)
     })
 
-    it('(v) clobber-proofing: attempt 1 times out, attempt 2 completes released, attempt 1\'s drain then rejects → the tag survives', async () => {
+    it('(v) clobber-proofing: attempt 1 times out, attempt 2 completes released, attempt 1\'s disposal then rejects → the tag survives', async () => {
       const first = await runToTimeout()
       // Attempt 2 completes released against the same id.
-      const d2 = makeDrain()
+      const d2 = makeDisposals()
       const reg2 = makeRegistry({ [CHILD_ID]: { status: 'running' } })
-      const subagents2: ReleaseSubagentsLike = {
-        listChildren: async () => [catalogRow()],
-        drainChildren: d2.drain as never,
-      }
-      const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagents2, agents: reg2.registry })
+      const subagents2: ReleaseSubagentsLike = { listDescendants: descendantsOf([childRow()]) }
+      const pending2 = runRelease({ parent: parentAgent(), id: CHILD_ID, subagents: subagents2, agents: reg2.registry, disposals: d2.disposals })
       await flush()
       reg2.drop(CHILD_ID)
-      d2.resolveDrain()
+      d2.resolveDisposed()
       const outcome2 = await pending2
       expect(outcome2.kind).toBe('released')
       expect(isReleased(CHILD_ID)).toBe(true)
-      // Attempt 1's stale drain then rejects late — it must NOT unmark.
-      first.d.rejectDrain(mkErr('late stale failure'))
+      // Attempt 1's stale disposal then rejects late — it must NOT unmark.
+      first.d.rejectDisposed(mkErr('late stale failure'))
       await flush()
       await vi.runAllTimersAsync()
       expect(isReleased(CHILD_ID)).toBe(true)
@@ -670,7 +691,7 @@ describe('runRelease timing arms', () => {
         const { d, reg } = await runToTimeout()
         markReleased(CHILD_ID) // the concurrent retry already completed
         reg.drop(CHILD_ID)
-        d.resolveDrain()
+        d.resolveDisposed()
         await flush()
         await vi.runAllTimersAsync()
         expect(isReleased(CHILD_ID)).toBe(true)
@@ -679,9 +700,9 @@ describe('runRelease timing arms', () => {
       }
       // Present after an already-released retry: clearReleasing is refused.
       {
-        const { d, reg } = await runToTimeout()
+        const { d } = await runToTimeout()
         markReleased(CHILD_ID)
-        d.resolveDrain() // registry still reports the row present
+        d.resolveDisposed() // registry still reports the row present
         await flush()
         await vi.runAllTimersAsync()
         expect(isReleased(CHILD_ID)).toBe(true)
@@ -694,7 +715,7 @@ describe('runRelease timing arms', () => {
         const { d, reg } = await runToTimeout()
         markReleased(CHILD_ID)
         reg.breakGets()
-        d.resolveDrain()
+        d.resolveDisposed()
         await flush()
         await vi.runAllTimersAsync()
         expect(isReleased(CHILD_ID)).toBe(true)
@@ -708,7 +729,7 @@ describe('runRelease timing arms', () => {
       const onUnhandled = (reason: unknown): void => { unhandled.push(reason) }
       process.on('unhandledRejection', onUnhandled)
       reg.drop(CHILD_ID)
-      d.resolveDrain()
+      d.resolveDisposed()
       await flush()
       await vi.runAllTimersAsync()
       process.off('unhandledRejection', onUnhandled)
@@ -747,7 +768,7 @@ describe('release_agent tool surface', () => {
     const bare = new Context()
     expect(registerReleaseAgentTool(bare)).toBeUndefined()
 
-    const d = makeDrain()
+    const d = makeDisposals()
     const reg = makeRegistry({ [CHILD_ID]: { status: 'idle' } })
     const agent = {
       id: PARENT_ID,
@@ -756,14 +777,15 @@ describe('release_agent tool surface', () => {
     } as unknown as Agent
     registerReleaseAgentTool(ctx)
     ctx.provide('subagents', {
-      listChildren: async () => [catalogRow()],
-      drainChildren: d.drain as never,
+      listDescendants: descendantsOf([childRow()]),
     } satisfies ReleaseSubagentsLike)
+    ctx.provide('ccContinuableDisposals', d.disposals)
     const def = ctx.tools.get(RELEASE_AGENT_TOOL) as { description: string }
     expect(def.description).toBe(
-      'Release a direct continuable subagent: its resident activation is evicted, '
-      + 'and with it the resident activations of any descendants (a running turn is '
-      + 'aborted; no separate interrupt needed). Eviction is cooperative — a turn that '
+      'Release a direct continuable subagent: its resident activation is evicted '
+      + '(its own delegates stay resident — each is released individually by its '
+      + 'creating session; a running turn is aborted; no separate interrupt '
+      + 'needed). Eviction is cooperative — a turn that '
       + 'refuses cancellation keeps its slot until it settles (this tool reports that '
       + 'as still-resident with the release still in flight instead of hanging). '
       + 'Evicting a resident activation frees the capacity slot it held (running or '
@@ -785,7 +807,7 @@ describe('release_agent tool surface', () => {
     })
     await flush()
     reg.drop(CHILD_ID)
-    d.resolveDrain()
+    d.resolveDisposed()
     const result = (await pending) as { isError: boolean; content: { text: string }[] }
     expect(result.isError).toBe(false)
     expect(result.content[0]!.text).toEqual(COPY.releasedIdle(CHILD_ID))

@@ -28,6 +28,7 @@ import {
   isReleasing,
   renderReleaseOutcome,
   runRelease,
+  type ReleaseDisposalsLike,
   type ReleaseRegistryLike,
   type ReleaseSubagentsLike,
 } from '@dsh-cc/command-agents/release'
@@ -155,6 +156,9 @@ export function createAgentsSection(rt: DriverRunLocalCtx): AgentsSection {
           id: parsed.id,
           subagents: rt.ctx.get('subagents') as ReleaseSubagentsLike | undefined,
           agents: rt.ctx.agents as ReleaseRegistryLike | undefined, // property per F8
+          // §3.4.4: the receipt registry is root-published, so the TUI's
+          // host-plane ctx resolves the SAME registry the tool surface uses.
+          disposals: rt.ctx.get('ccContinuableDisposals') as ReleaseDisposalsLike | undefined,
         })
         return renderReleaseOutcome(outcome)
       } catch (failure) {

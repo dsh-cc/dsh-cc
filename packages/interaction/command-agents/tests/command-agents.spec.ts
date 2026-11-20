@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -12,6 +11,7 @@ import {
   isReleasing,
   markReleased,
   resetReleasedMarkers,
+  type ReleaseDisposalsLike,
 } from '@dsh-cc/command-agents/release'
 import {
   buildAgentsSnapshot,
@@ -35,7 +35,7 @@ interface FakeChild {
 function makeServices(
   children: readonly FakeChild[],
   agents: Record<string, { status?: string }> = {},
-  /** Child ids that carry durable sub-descendants (rc.2 `listDescendants` fold). */
+  /** Child ids that carry durable sub-descendants (rc.5 `listDescendants` `kind: 'child'` rows). */
   descendantParents: Map<string, boolean> = new Map(),
 ): SnapshotServices & {
   interrupts: { id: string; authority: unknown }[]
@@ -43,10 +43,14 @@ function makeServices(
   const interrupts: { id: string; authority: unknown }[] = []
   return {
     listChildren: async () => children,
-    // rc.2 re-derivation: the `[has children]` tag comes from descendant rows.
-    listDescendants: async () => [...descendantParents.entries()]
-      .filter(([, has]) => has)
-      .map(([id]) => ({ id, hasChildren: true })),
+    // rc.5 descendant rows: direct children are depth-1 `kind: 'child'` rows;
+    // the `[has children]` tag folds from the same walk.
+    listDescendants: async () => children.map(child => ({
+      ...child,
+      kind: 'child',
+      depth: 1,
+      hasChildren: descendantParents.get(child.id) === true,
+    })),
     getAgent: (id: string) => agents[id],
     readPin: (childId: string) => {
       if (childId === 'pinned-ok') {
@@ -62,6 +66,11 @@ function makeServices(
     interrupt: (id: string, authority: unknown) => { interrupts.push({ id, authority }) },
     interrupts,
   }
+}
+
+/** The dormant receipt-registry fake every mounted harness provides (inject). */
+function makeIdleDisposals(): ReleaseDisposalsLike {
+  return { tryDispose: async () => ({ held: false, cause: 'no-receipt' as const }) }
 }
 
 const PARENT = 'parent-1'
@@ -123,6 +132,19 @@ describe('buildAgentsSnapshot', () => {
     expect(list.find(r => r.id === 'pinned-deny')!.pin).toEqual({ state: 'blocked', denyCode: 'WORKSPACE_CHANGED' })
     expect(list.find(r => r.id === 'pinned-corrupt')!.pin).toEqual({ state: 'corrupt' })
     expect(list.find(r => r.id === 'unpinned')!.pin).toBeUndefined()
+  })
+
+  it('the descendant walk failing degrades the [has children] tag but not the rows', async () => {
+    const services = makeServices([{ id: 'c9', mode: 'continuable' }], {}, new Map([['c9', true]]))
+    expect((await rows(services))[0]!.hasChildren).toBe(true)
+    // A throwing descendant seam: the host adapter degrades read-side; here
+    // the snapshot's own catch keeps the tag absent while the row remains.
+    const degraded = {
+      ...services,
+      listChildren: services.listChildren,
+      listDescendants: async () => { throw new Error('projection unavailable') },
+    }
+    expect((await buildAgentsSnapshot(degraded, PARENT))[0]!.hasChildren).toBe(false)
   })
 })
 
@@ -234,15 +256,21 @@ function makeFakeAgent(ctx: Context, sessionId: string, status: 'idle' | 'runnin
   }
 }
 
+/** Compose the session/command/runtime backbone; caller provides the seams. */
+async function backbone(ctx: Context): Promise<void> {
+  await ctx.plugin(SessionStore)
+  await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
+  await ctx.plugin(AgentRegistry)
+}
+
 describe('/agents human command', () => {
   async function harness(services: ReturnType<typeof makeServices>) {
     const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(CommandRuntime)
-    await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(AgentRegistry)
+    await backbone(ctx)
     ctx.provide('subagents', services)
     ctx.provide('resumePinStore', { read: services.readPin, pathFor: services.pinPath })
+    ctx.provide('ccContinuableDisposals', makeIdleDisposals())
     await ctx.plugin(commandAgents)
     const agent = makeFakeAgent(ctx, `agents-${Math.random()}`)
     await ctx.agents.register(agent)
@@ -282,18 +310,33 @@ describe('/agents human command', () => {
     expect(idleText).toContain('No agent')
     expect(services.interrupts).toHaveLength(1)
   })
+
+  it('a listDescendants that throws SubagentError-style degrades /agents to the empty list (rc.5 service-throw guard)', async () => {
+    const ctx = new Context()
+    await backbone(ctx)
+    ctx.provide('subagents', {
+      listDescendants: async () => { throw new Error('SUBAGENT_CONTROL_UNAVAILABLE: sessionQuery is not mounted') },
+      interrupt: () => {},
+    })
+    ctx.provide('resumePinStore', { read: () => undefined, pathFor: (id: string) => `/p/${id}.json` })
+    ctx.provide('ccContinuableDisposals', makeIdleDisposals())
+    await ctx.plugin(commandAgents)
+    const agent = makeFakeAgent(ctx, `agents-degraded-${Math.random()}`)
+    await ctx.agents.register(agent)
+    const text = await (ctx.commands.execute(agent, '/agents', [], new AbortController().signal) as Promise<{ result?: { text?: string } }>)
+      .then(r => r.result?.text ?? '')
+    expect(text).toBe('No background agents.')
+  })
 })
 
 describe('/agents help interception', () => {
   async function harness(): Promise<{ ctx: Context; agent: Agent }> {
     const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(CommandRuntime)
-    await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(AgentRegistry)
+    await backbone(ctx)
     const services = makeServices([])
     ctx.provide('subagents', services)
     ctx.provide('resumePinStore', { read: services.readPin, pathFor: services.pinPath })
+    ctx.provide('ccContinuableDisposals', makeIdleDisposals())
     await ctx.plugin(commandAgents)
     const agent = makeFakeAgent(ctx, `agents-help-${Math.random()}`)
     await ctx.agents.register(agent)
@@ -314,46 +357,71 @@ describe('/agents help interception', () => {
 
 // --- release valve (T20–T22) -------------------------------------------------
 
+interface FakeDescendantRow {
+  id: string
+  mode?: 'one-shot' | 'continuable'
+  label?: string
+  /** Depth from the release root; 1 = direct child, deeper = refused lineage. */
+  depth?: number
+  kind?: 'child' | 'diagnostic'
+  reason?: string
+}
+
 interface ReleaseHarnessOptions {
-  /** The catalog rows listChildren answers (or a thrower), or 'absent'. */
-  children?: readonly FakeChild[]
-  listChildrenThrows?: boolean
-  /** The drain stub; receives the raw args for assertions. */
-  drain?: (parent: unknown, ids: unknown[]) => Promise<void>
+  /** The descendant rows listDescendants answers (fallback: direct children). */
+  descendants?: readonly FakeDescendantRow[]
+  listDescendantsThrows?: boolean
+  /** When 'absent', the harness is built WITHOUT a ccContinuableDisposals. */
+  disposals?: 'absent'
 }
 
 describe('/agents release <id> (T20–T22)', () => {
   beforeEach(() => { resetReleasedMarkers() })
 
+  function childDescendant(id: string, mode: 'one-shot' | 'continuable' = 'continuable'): FakeDescendantRow {
+    return { id, mode, depth: 1, kind: 'child' }
+  }
+
   async function harness(opts: ReleaseHarnessOptions = {}) {
-    const drains: { parent: unknown; ids: unknown[] }[] = []
+    const disposeCalls: { parent: unknown; child: unknown }[] = []
+    const disposers = new Map<string, () => void>()
     const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(CommandRuntime)
-    await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(AgentRegistry)
+    await backbone(ctx)
     const services = {
-      listChildren:
-        opts.listChildrenThrows === true
+      listDescendants:
+        opts.listDescendantsThrows === true
           ? async () => { throw new Error('catalog io failed') }
-          : async () => opts.children ?? [],
+          : async () => (opts.descendants ?? []).map(row => ({ depth: 1, kind: 'child', ...row })),
       interrupt: () => {},
-      ...(opts.drain === undefined ? {} : {
-        drainChildren: async (parent: unknown, ids: unknown[]) => {
-          drains.push({ parent, ids })
-          await opts.drain(parent, ids)
-        },
-      }),
     }
     ctx.provide('subagents', services)
     ctx.provide('resumePinStore', { read: () => undefined, pathFor: (id: string) => `/p/${id}.json` })
-    await ctx.plugin(commandAgents)
+    // The receipt-registry fake: held:true with a disposed promise that runs
+    // the per-test disposer (the fake eviction) when the body registers one.
+    const disposals: ReleaseDisposalsLike = {
+      tryDispose: async (parent, child) => {
+        disposeCalls.push({ parent, child })
+        const key = String(child)
+        return {
+          held: true,
+          disposed: Promise.resolve().then(() => disposers.get(key)?.()),
+        }
+      },
+    }
+    if (opts.disposals === 'absent') {
+      // Direct apply(): the inject-gated loader path always has the service
+      // in production; this composition honestly has none (Step 0).
+      commandAgents.apply(ctx)
+    } else {
+      ctx.provide('ccContinuableDisposals', disposals)
+      await ctx.plugin(commandAgents)
+    }
     const agent = makeFakeAgent(ctx, `rel-${Math.random()}`)
     await ctx.agents.register(agent)
     const execute = (input: string, signal?: AbortSignal) =>
       (ctx.commands.execute(agent, input, [], signal ?? new AbortController().signal) as Promise<{ result?: { text?: string } }>)
         .then(r => r.result?.text ?? '')
-    return { ctx, agent, drains, execute }
+    return { ctx, agent, disposeCalls, disposers, execute }
   }
 
   /** Register a controllable live agent; returns the detach closure (the fake eviction). */
@@ -376,105 +444,88 @@ describe('/agents release <id> (T20–T22)', () => {
     return await ctx.agents.register(fake as unknown as Agent)
   }
 
-  it('T20 matrix: unknown-id / not-resident / idle / running / no-drain-seam / not-continuable / not-direct-child / catalog-unreadable', async () => {
-    // unknown-id: clean catalog miss + registry miss (a drain stub exists so
-    // the unknown-id gate — not no-drain-seam — fires).
-    const unknown = await harness({ children: [], drain: async () => {} })
+  it('T20 matrix: unknown-id / not-resident / idle / running / no-disposals / not-continuable / not-direct-child / catalog-unreadable', async () => {
+    // unknown-id: clean catalog miss + registry miss (the receipts exist so
+    // the unknown-id gate — not no-disposals — fires).
+    const unknown = await harness({ descendants: [] })
     expect(await unknown.execute('/agents release ghost'))
       .toBe("No agent ghost among this session's continuable children; use list_agents or /agents for current ids.")
-    expect(unknown.drains).toHaveLength(0)
+    expect(unknown.disposeCalls).toHaveLength(0)
 
-    // not-resident: catalog hit continuable + registry miss, NO drain.
-    const settled = await harness({ children: [{ id: 'c1', mode: 'continuable' }], drain: async () => {} })
+    // not-resident: catalog hit continuable + registry miss, NO disposal.
+    const settled = await harness({ descendants: [childDescendant('c1')] })
     expect(await settled.execute('/agents release c1'))
       .toBe('Agent c1 has no resident activation (settled or released); nothing was evicted and no capacity slot is held by it.')
-    expect(settled.drains).toHaveLength(0)
+    expect(settled.disposeCalls).toHaveLength(0)
 
-    // idle + running: the drain detaches the live agent (the fake eviction).
-    const detachIdle = { fn: () => {} }
-    const idle = await harness({
-      children: [{ id: 'idle-1', mode: 'continuable' }],
-      drain: async () => { detachIdle.fn() },
-    })
-    detachIdle.fn = await registerLive(idle.ctx, 'idle-1', 'idle')
+    // idle + running: the dispose detaches the live agent (the fake eviction).
+    const idle = await harness({ descendants: [childDescendant('idle-1')] })
+    idle.disposers.set('idle-1', await registerLive(idle.ctx, 'idle-1', 'idle'))
     expect(await idle.execute('/agents release idle-1'))
       .toBe(
         'Released agent idle-1: its resident (idle) activation was evicted — the capacity slot it held '
-        + 'is free. Its resident descendants (if any) were evicted with it. The persisted session '
-        + 'survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain '
-        + 'gap); /agents marks it [released] for the rest of this process.',
+        + 'is free. Its resident delegates (if any) are unaffected and must be released individually. '
+        + 'The persisted session survives on disk; within this session it cannot be continued '
+        + '(upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.',
       )
 
-    const detachRun = { fn: () => {} }
-    const running = await harness({
-      children: [{ id: 'run-1', mode: 'continuable' }],
-      drain: async () => { detachRun.fn() },
-    })
-    detachRun.fn = await registerLive(running.ctx, 'run-1', 'running')
+    const running = await harness({ descendants: [childDescendant('run-1')] })
+    running.disposers.set('run-1', await registerLive(running.ctx, 'run-1', 'running'))
     expect(await running.execute('/agents release run-1'))
       .toBe(
         'Released agent run-1: its in-flight turn was aborted and its resident activation evicted — '
-        + 'the capacity slot it held is free. Its resident descendants (if any) were evicted with it. '
-        + 'The persisted session survives on disk. Within this session it cannot be continued '
-        + '(send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents '
-        + 'marks it [released] for the rest of this process.',
+        + 'the capacity slot it held is free. Its resident delegates (if any) are unaffected and must '
+        + 'be released individually. The persisted session survives on disk. Within this session it '
+        + 'cannot be continued (send_message resolves but runs no turn — upstream cold-resume-after-drain '
+        + 'gap); /agents marks it [released] for the rest of this process.',
       )
 
-    // no-drain-seam: the service exposes no drainChildren.
-    const noSeam = await harness({ children: [{ id: 'c2', mode: 'continuable' }] })
-    expect(await noSeam.execute('/agents release c2'))
-      .toBe(
-        "Cannot release c2: this composition's subagents seam exposes no drainChildren; "
-        + 'free capacity by letting children settle or by restarting the session.',
-      )
+    // no-disposals: this composition does not publish ccContinuableDisposals.
+    const noService = await harness({ descendants: [childDescendant('c2')], disposals: 'absent' })
+    expect(await noService.execute('/agents release c2'))
+      .toBe('Cannot release c2: the ccContinuableDisposals service is not available in this composition.')
 
     // not-continuable: a one-shot row.
-    const detachOneShot = { fn: () => {} }
-    const oneShot = await harness({
-      children: [{ id: 'one-1', mode: 'one-shot' }],
-      drain: async () => { detachOneShot.fn() },
-    })
-    detachOneShot.fn = await registerLive(oneShot.ctx, 'one-1', 'running')
+    const oneShot = await harness({ descendants: [childDescendant('one-1', 'one-shot')] })
+    await registerLive(oneShot.ctx, 'one-1', 'running')
     expect(await oneShot.execute('/agents release one-1'))
       .toBe('Agent one-1 is not a continuable child (mode: one-shot); release only covers continuable children.')
-    expect(oneShot.drains).toHaveLength(0)
+    expect(oneShot.disposeCalls).toHaveLength(0)
 
-    // not-direct-child: the drain refuses by lineage.
-    const lineage = await harness({
-      children: [{ id: 'c3', mode: 'continuable' }],
-      drain: async () => { throw new Error('subagent "c3" is not a direct child of agent "other"') },
-    })
+    // not-direct-child: a deeper descendant row (grandchild lineage) refused
+    // BEFORE any dispose attempt.
+    const lineage = await harness({ descendants: [{ ...childDescendant('c3'), depth: 2 }] })
     await registerLive(lineage.ctx, 'c3', 'running')
     expect(await lineage.execute('/agents release c3'))
-      .toBe(
-        'Agent c3 is not a direct child of this session (the drain seam refused with UNAUTHORIZED); '
-        + "release its direct parent instead — if that parent is one of this session's children. "
-        + 'Releasing a parent evicts its whole resident subtree.',
-      )
+      .toBe('Agent c3 is not a direct child of this session; only its creating session (its direct parent) can release it.')
+    expect(lineage.disposeCalls).toHaveLength(0)
 
-    // catalog-unreadable: listing throws + registry miss → refuse blind, no drain.
-    const unreadable = await harness({ listChildrenThrows: true, drain: async () => {} })
+    // catalog-unreadable: the descendant listing throws + registry miss →
+    // refuse blind, no disposal.
+    const unreadable = await harness({ listDescendantsThrows: true })
     expect(await unreadable.execute('/agents release c4'))
       .toBe(
         "Cannot verify c4 against this session's child catalog (catalog io failed); refusing to "
         + 'release blind. Retry, or restart the session if listing stays broken.',
       )
-    expect(unreadable.drains).toHaveLength(0)
+    expect(unreadable.disposeCalls).toHaveLength(0)
   })
 
   it('T20 matrix: issued-unobservable (registry get throws) renders the no-mark copy', async () => {
     const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(CommandRuntime)
-    await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(AgentRegistry)
-    const drains: unknown[][] = []
+    await backbone(ctx)
+    const disposeCalls: unknown[][] = []
     ctx.provide('subagents', {
-      listChildren: async () => [{ id: 'c5', mode: 'continuable' }],
+      listDescendants: async () => [{ id: 'c5', mode: 'continuable', depth: 1, kind: 'child' }],
       interrupt: () => {},
-      drainChildren: async (_parent: unknown, ids: unknown[]) => { drains.push(ids) },
     })
     ctx.provide('resumePinStore', { read: () => undefined, pathFor: (id: string) => `/p/${id}.json` })
+    ctx.provide('ccContinuableDisposals', {
+      tryDispose: async (parent: unknown, child: unknown) => {
+        disposeCalls.push([parent, child])
+        return { held: true as const, disposed: Promise.resolve() }
+      },
+    } satisfies ReleaseDisposalsLike)
     await ctx.plugin(commandAgents)
     const caller = makeFakeAgent(ctx, `rel-x-${Math.random()}`)
     await ctx.agents.register(caller)
@@ -497,55 +548,50 @@ describe('/agents release <id> (T20–T22)', () => {
     expect(text).toBe(
       'Release of agent c5 was issued against the authoritative drain seam; this composition cannot '
       + 'observe the registry, so residency after the drain could not be confirmed and the child is '
-      + 'NOT marked released. Eviction, when it applies, also covers resident descendants. If it was '
-      + "resident, the drain evicts it by the seam's own contract; its continuation state here is unknown.",
+      + 'NOT marked released. Eviction, when it applies, covers the named child only — its resident '
+      + "delegates are unaffected. If it was resident, the drain evicts it by the seam's own contract; "
+      + 'its continuation state here is unknown.',
     )
-    expect(drains).toHaveLength(1)
+    expect(disposeCalls).toHaveLength(1)
     expect(isReleasing('c5')).toBe(false)
     expect(isReleased('c5')).toBe(false)
   })
 
-  it('T20 abort pins: abort DURING listChildren (no drain) and at the pre-issuance checkpoint (no mark, no drain)', async () => {
+  it('T20 abort pins: abort DURING listDescendants (no disposal) and at the pre-issuance checkpoint (no mark, no disposal)', async () => {
     // CommandRuntime's own signal race rejects outside the awaited chain when
     // an invocation signal aborts; record the process-level rejections so the
-    // pins stay deterministic about OUR state (drain, markers).
+    // pins stay deterministic about OUR state (disposal, markers).
     const unhandled: unknown[] = []
     const onUnhandled = (reason: unknown): void => { unhandled.push(reason) }
     process.on('unhandledRejection', onUnhandled)
     try {
-      // (1) abort while the listing is in flight: the abort propagates, no drain.
+      // (1) abort while the listing is in flight: the abort propagates, no disposal.
       const controller1 = new AbortController()
-      const duringListing = await harness({
-        children: [{ id: 'c6', mode: 'continuable' }],
-        drain: async () => {},
-      })
+      const duringListing = await harness({ descendants: [childDescendant('c6')] })
       const services = duringListing.ctx.get('subagents') as unknown as {
-        listChildren: (id: unknown, signal?: AbortSignal) => Promise<unknown>
+        listDescendants: (id: unknown, signal?: AbortSignal) => Promise<unknown>
       }
-      const original = services.listChildren
-      services.listChildren = async (id: unknown, signal?: AbortSignal) => {
+      const original = services.listDescendants
+      services.listDescendants = async (id: unknown, signal?: AbortSignal) => {
         controller1.abort()
         signal?.throwIfAborted()
         return await original(id, signal)
       }
       await duringListing.ctx.commands.execute(duringListing.agent, '/agents release c6', [], controller1.signal).catch(() => {})
       await new Promise(resolve => setTimeout(resolve, 10))
-      expect(duringListing.drains).toHaveLength(0)
+      expect(duringListing.disposeCalls).toHaveLength(0)
       expect(isReleasing('c6')).toBe(false)
       expect(unhandled.some(reason => String(reason).includes('abort'))).toBe(true)
 
-      // (2) abort after a successful listing, before issuance: no mark, no drain.
+      // (2) abort after a successful listing, before issuance: no mark, no disposal.
       const controller2 = new AbortController()
-      const beforeIssuance = await harness({
-        children: [{ id: 'c7', mode: 'continuable' }],
-        drain: async () => {},
-      })
+      const beforeIssuance = await harness({ descendants: [childDescendant('c7')] })
       const pending = beforeIssuance.ctx.commands.execute(beforeIssuance.agent, '/agents release c7', [], controller2.signal) as Promise<unknown>
       await new Promise(resolve => setTimeout(resolve, 10))
       controller2.abort()
       await pending.catch(() => {})
       await new Promise(resolve => setTimeout(resolve, 10))
-      expect(beforeIssuance.drains).toHaveLength(0)
+      expect(beforeIssuance.disposeCalls).toHaveLength(0)
       expect(isReleasing('c7')).toBe(false)
     } finally {
       process.off('unhandledRejection', onUnhandled)
@@ -557,8 +603,8 @@ describe('/agents release <id> (T20–T22)', () => {
     const text = await execute('/agents help')
     expect(text).toContain('release')
     expect(text).toContain(
-      "Evict an agent's resident activation (and resident descendants'), freeing the capacity "
-      + 'slot it held; cooperative; one-way in this session',
+      "Evict an agent's resident activation, freeing the capacity slot it held (its delegates are "
+      + 'unaffected); cooperative; one-way in this session',
     )
     expect(text).toContain(
       'Interrupt a running agent\'s current turn (the activation stays resident; "/agents release <id>" evicts it)',
@@ -569,18 +615,16 @@ describe('/agents release <id> (T20–T22)', () => {
     // Tagged ready row renders [released] in the list.
     markReleased('tagged')
     const ctx = new Context()
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(CommandRuntime)
-    await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(AgentRegistry)
+    await backbone(ctx)
     ctx.provide('subagents', {
-      listChildren: async () => [
-        { id: 'tagged', mode: 'continuable' },
-        { id: 'live', mode: 'continuable' },
+      listDescendants: async () => [
+        { id: 'tagged', mode: 'continuable', depth: 1, kind: 'child' },
+        { id: 'live', mode: 'continuable', depth: 1, kind: 'child' },
       ],
       interrupt: () => {},
     })
     ctx.provide('resumePinStore', { read: () => undefined, pathFor: (id: string) => `/p/${id}.json` })
+    ctx.provide('ccContinuableDisposals', makeIdleDisposals())
     await ctx.plugin(commandAgents)
     const caller = makeFakeAgent(ctx, `tag-${Math.random()}`)
     await ctx.agents.register(caller)

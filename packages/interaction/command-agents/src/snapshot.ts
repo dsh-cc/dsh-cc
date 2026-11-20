@@ -41,11 +41,13 @@ export interface AgentRow {
 }
 
 /**
- * The duck-typed `listChildren` entry subset this snapshot consumes.
- * rc.2 shape (`SubagentCatalogEntry`, subagent projection-types.ts):
- * `{id, createdAt} & mode/label` — the old `activity`, `hasChildren`, and
- * `kind` fields are gone. Residency is re-derived from the live agents
- * registry and child presence from `listDescendants`.
+ * The duck-typed direct-child entry subset this snapshot consumes. rc.5
+ * sourcing (§3.4.2): the host adapter derives these rows from the subagents
+ * service's `listDescendants(rootSessionId)` walk filtered to `depth === 1`
+ * (`SubagentDescendantListEntry` — rows carry `mode`/`label` via
+ * `KnownSubagentCatalogFields` on `kind: 'child'` entries), degrading to an
+ * empty list when the call throws. Residency is re-derived from the live
+ * agents registry and child presence from the same descendant rows.
  */
 export interface ChildEntryLike {
   readonly id: string
@@ -71,8 +73,10 @@ export interface CorruptPinLike {
 }
 
 /**
- * The services the snapshot reads. `listChildren` comes from the host-plane
- * `subagents` registry, `getAgent` from the cordis `agents` registry, and the
+ * The services the snapshot reads. `listChildren` is the composed direct
+ * child listing — the host plane backs it with the subagents service's
+ * `listDescendants` walk (rc.5; rows at `depth === 1`, throw-guarded to an
+ * empty list) — `getAgent` comes from the cordis `agents` registry, and the
  * pin seam from the realm-interior `resumePinStore` service. `interrupt`
   * is consumed by the command handler only — never by the read-only snapshot.
  */
@@ -82,8 +86,8 @@ export interface SnapshotServices {
   readPin(childId: string): PinLike | CorruptPinLike | undefined
   pinPath(childId: string): string
   /**
-   * rc.2 re-derivation of the old catalog `hasChildren` flag: the
-   * `listDescendants` root rows carry per-child `hasChildren`
+   * rc.2 re-derivation of the old catalog `hasChildren` flag: the rc.5
+   * `listDescendants` `kind: 'child'` rows carry per-child `hasChildren`
    * (`SubagentListEntry`, subagent control-types.ts). Optional: when the
    * host seam does not expose it, children render without the
    * `[has children]` tag rather than falsely claiming childlessness is

@@ -44,6 +44,7 @@ import {
   isReleased,
   isReleasing,
 } from '@dsh-cc/command-agents/release'
+import { CcContinuableDisposals } from './continuable-disposals.ts'
 import type { ResumePin } from '@dsh-cc/subagent-resume-pins'
 
 export { AgentRegistry } from './registry.ts'
@@ -145,6 +146,12 @@ export {
 } from './suppress-settled.ts'
 export type { ResumePinsConfig, CaptureInput } from './resume-capture.ts'
 export { SpawnPinCapture, overlayRoute, probeWorkspace } from './resume-capture.ts'
+export { CcContinuableDisposals } from './continuable-disposals.ts'
+export type {
+  CcContinuableDisposalsLike,
+  ContinuableActivationLike,
+  ContinuableDisposalAttempt,
+} from './continuable-disposals.ts'
 
 /** Cordis plugin id. */
 export const name = 'cc-subagent-task'
@@ -193,7 +200,7 @@ export const BACKGROUND_SECTION_TEXT = [
   '- `subagent_type: "fork"` cannot run in the background (upstream harness issue #2124); use a',
   '  plain background spawn instead.',
   '- Exiting your session drains every background child\'s in-flight turn (whole-forest teardown); its persisted session survives on disk — a child that settled on its own stays cold-resumable, but a DRAINED child does not resume on the next send_message (known upstream gap; cross-session resume after a drain is unverified).',
-  '- A background child holds one of 25 tree-wide resident capacity slots until it is disposed or released — running children, idle parents waiting on child settlement, and cold-resumed children all count; a send_message follow-up to an already-resident child takes no new slot, while a cold resume of a settled child needs one and is refused at the cap with the same remedy. A settled child auto-releases after its inactivity grace window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so send_message promptly if you plan to continue it. release_agent <id> remains the interactive override for a RUNNING child: it evicts the resident activation (and resident descendants\') one-way — same-session continuation is unavailable after release; its persisted session survives; eviction is cooperative — a cancel-resistant turn keeps its slot until it settles.',
+  '- A background child holds one of 25 tree-wide resident capacity slots until it is disposed or released — running children, idle parents waiting on child settlement, and cold-resumed children all count; a send_message follow-up to an already-resident child takes no new slot, while a cold resume of a settled child needs one and is refused at the cap with the same remedy. A settled child auto-releases after its inactivity grace window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so send_message promptly if you plan to continue it. release_agent <id> remains the interactive override for a RUNNING child: it evicts the named child\'s resident activation one-way — its delegates stay resident and are released individually by their creating session; same-session continuation is unavailable after release; its persisted session survives; eviction is cooperative — a cancel-resistant turn keeps its slot until it settles.',
 ].join('\n')
 
 /**
@@ -277,6 +284,10 @@ export function apply(ctx: Context, config: TaskPluginConfig = {}): void {
   // one-shot visibility mount read the same runId-keyed rows.
   const agents = ctx.get('agents') as import('./one-shot-ledger.ts').OneShotLedgerDeps['agents']
   const ledger = createOneShotLedger({ bus: ctx, agents })
+  // §3.4.4: the receipt registry the release valve consults. Published on the
+  // ROOT realm BEFORE any tracked lane or release tool can run (both resolve
+  // the service lazily at call time).
+  publishContinuableDisposals(ctx)
   registerTaskTool(ctx, registry, capture, pluginIndex, ledger)
   registerReleaseAgentTool(ctx)
   mountActorContractGate(ctx)
@@ -358,6 +369,37 @@ function publishReleaseMarkers(ctx: Context): void {
   ctx.effect(() => () => {
     if (root.get('ccReleaseMarkers', false) === markers) root.set('ccReleaseMarkers', undefined)
   }, 'cc-subagent-task: clear host-realm ccReleaseMarkers publication on unload')
+}
+
+/**
+ * Publish the live {@link CcContinuableDisposals} receipt registry as the
+ * ROOT-realm `ccContinuableDisposals` service (design §3.4.4): the tracked
+ * lanes (this package's background starts, the coordinator's `spawn_worker`)
+ * retain parent-bound dispose receipts through it, and the release valve
+ * (`release_agent`, `/agents release`) attempts disposal through the SAME
+ * registry — realm-interior and host-plane consumers alike resolve the
+ * root publication (CcPlugins pattern, mirroring {@link publishReleaseMarkers}).
+ * Unload clears the publication AND the receipts: a later remount starts
+ * with an honest empty registry rather than stale receipts whose activations
+ * the unmounted composition no longer owns.
+ * @param ctx - the plug context.
+ */
+function publishContinuableDisposals(ctx: Context): void {
+  const root = ctx.root as unknown as {
+    get(key: string, optional?: boolean): unknown
+    provide(key: string, value: unknown): void
+    set(key: string, value: unknown): void
+  }
+  const disposals = new CcContinuableDisposals()
+  if (root.get('ccContinuableDisposals', false) === undefined) {
+    root.provide('ccContinuableDisposals', disposals)
+  } else {
+    root.set('ccContinuableDisposals', disposals)
+  }
+  ctx.effect(() => () => {
+    disposals.clear()
+    if (root.get('ccContinuableDisposals', false) === disposals) root.set('ccContinuableDisposals', undefined)
+  }, 'cc-subagent-task: clear host-realm ccContinuableDisposals publication (and receipts) on unload')
 }
 
 /**

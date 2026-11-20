@@ -1,12 +1,14 @@
 /**
  * Shared release operation: the single source of truth for evicting a direct
- * continuable child's resident activation via the harness
- * `drainChildren` seam (plan
- * docs/plans/2026-09-30-subagent-release-valve.md §4 D1). Consumed by the
+ * continuable child's resident activation via the root-realm
+ * `ccContinuableDisposals` receipt registry (design §3.4.4 — harness rc.5
+ * removed `drainChildren`; a release now disposes the retained activation
+ * receipt of the NAMED child only, so its own delegates survive and must be
+ * released individually by their creating session). Consumed by the
  * model-facing `release_agent` tool and the human-facing
  * `/agents release <id>` command, so both surfaces render ONE copy set (§5)
  * and share ONE process-local marker state (F14: released rows are not
- * representable upstream — the durable catalog survives a drain and reads
+ * representable upstream — the durable catalog survives an eviction and reads
  * `ready`).
  *
  * Residency derivation cross-reference: this module's registry reads derive
@@ -20,11 +22,39 @@
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
+/**
+ * One `listDescendants` row as release reads it (harness
+ * `SubagentDescendantListEntry`): `depth === 1` is direct-child evidence;
+ * `kind: 'child'` rows carry the catalog `mode`; `kind: 'diagnostic'` rows
+ * mark a corrupt/unreadable/unsupported branch. `depth` is always present on
+ * real rows; duck-typed fakes may omit it (treated as direct).
+ */
+export interface ReleaseDescendantRowLike {
+  readonly id: SessionId | string
+  readonly depth?: number
+  readonly kind?: string
+  readonly mode?: string
+  readonly reason?: string
+}
+
 /** The duck-typed subagents seam release needs (host duck compat). */
 export interface ReleaseSubagentsLike {
-  listChildren?(parentSessionId: SessionId, signal?: AbortSignal):
-    Promise<readonly { id: string; mode?: string }[]>
-  drainChildren?(parent: Agent, ids: SessionId[]): Promise<void>
+  listDescendants?(rootSessionId: SessionId, signal?: AbortSignal):
+    Promise<readonly ReleaseDescendantRowLike[]>
+}
+
+/**
+ * The outcome of one receipt-dispose attempt (mirrors
+ * `ContinuableDisposalAttempt` from `@dsh-cc/subagent-task`, duck-typed here
+ * so this package keeps its one-directional dependency).
+ */
+export type ReleaseDisposalAttempt =
+  | { readonly held: true; readonly disposed: Promise<void> }
+  | { readonly held: false; readonly cause: 'no-receipt' | 'foreign' }
+
+/** The duck-typed `ccContinuableDisposals` service slice release admits on. */
+export interface ReleaseDisposalsLike {
+  tryDispose(parentId: SessionId, childId: SessionId): Promise<ReleaseDisposalAttempt>
 }
 
 /** The duck-typed live-agents registry slice release reads. */
@@ -43,11 +73,12 @@ export type ReleaseOutcome =
       cause?: string /* present iff catalogNote === 'catalog-unreadable' */ }
   | { kind: 'not-resident'; id: string; releasedEarlier: boolean }
   | { kind: 'tombstoned'; id: string }
-  | { kind: 'still-resident'; id: string; drainPending: boolean }
+  | { kind: 'still-resident'; id: string; drainPending: boolean;
+      refusal?: 'foreign' | 'no-receipt' /* present on the receipt-refusal arms */ }
 
 export type ReleaseFailureReason =
-  | 'unknown-id' | 'not-continuable' | 'no-drain-seam'
-  | 'catalog-unreadable' | 'not-direct-child' | 'stale-parent'
+  | 'unknown-id' | 'not-continuable' | 'no-disposals'
+  | 'catalog-unreadable' | 'not-direct-child'
 
 /** A release gate error whose `message` IS the final §5 copy. */
 export class ReleaseFailure extends Error {
@@ -56,14 +87,14 @@ export class ReleaseFailure extends Error {
   }
 }
 
-/** How long a drain may run before the caller reports still-resident (F4). */
+/** How long a disposal may run before the caller reports still-resident (F4). */
 export const DRAIN_OBSERVE_TIMEOUT_MS = 10_000
 
 // ---------------------------------------------------------------------------
 // Process-local markers (F14) — TWO sets: `releasing` and `released`.
 // markReleasing(id) adds releasing-membership AFTER the final throwIfAborted
-// and BEFORE drain issuance (F12a: an armed first-epoch collect resolves
-// DURING the drain, so the releasing mark must already be visible then).
+// and BEFORE disposal issuance (F12a: an armed first-epoch collect resolves
+// DURING the disposal, so the releasing mark must already be visible then).
 // markReleased(id) moves the id releasing → released (removes releasing
 // membership).
 // clearReleasing(id) removes releasing membership ONLY and is refused while
@@ -77,9 +108,9 @@ export const DRAIN_OBSERVE_TIMEOUT_MS = 10_000
 
 const releasing = new Set<string>()
 const released = new Set<string>()
-// R8 tombstones: ready rows auto-released by the grace-window fire (no drain,
-// no parent authority). Cleared on the child's `subagent/start` via
-// `clearTombstone`. One-way only while the process lives.
+// R8 tombstones: ready rows auto-released by the grace-window fire (no
+// disposal, no parent authority). Cleared on the child's `subagent/start`
+// via `clearTombstone`. One-way only while the process lives.
 const tombstoned = new Set<string>()
 
 /** Enter the releasing state (pre-issuance; F12a). */
@@ -109,7 +140,7 @@ export function isReleasing(id: string): boolean {
 
 // ---------------------------------------------------------------------------
 // R8 tombstone algebra: the auto-release lane. `tombstoneReadyRow` marks a
-// READY (registry-absent, settled) row without any drain; `clearTombstone`
+// READY (registry-absent, settled) row without any disposal; `clearTombstone`
 // runs on the child's `subagent/start` (and equivalently on a gate pass), so
 // an in-flight send_message that lands after the fire gets its one extra
 // epoch and a fresh window (the accepted residual). The `tombstoned` outcome
@@ -118,7 +149,7 @@ export function isReleasing(id: string): boolean {
 
 /**
  * Tombstone a READY row (grace-window fire). Unlike {@link markReleased} this
- * needs no drain and no releasing transition — the child is already
+ * needs no disposal and no releasing transition — the child is already
  * registry-absent. Returns the outcome kind for the fire log.
  */
 export function tombstoneReadyRow(id: string): { kind: 'tombstoned'; id: string } {
@@ -165,24 +196,22 @@ function failureMessage(
       return `No agent ${id} among this session's continuable children; use list_agents or /agents for current ids.`
     case 'not-continuable':
       return `Agent ${id} is not a continuable child (mode: ${detail ?? 'unknown'}); release only covers continuable children.`
-    case 'no-drain-seam':
-      return `Cannot release ${id}: this composition's subagents seam exposes no drainChildren; free capacity by letting children settle or by restarting the session.`
+    case 'no-disposals':
+      return `Cannot release ${id}: the ccContinuableDisposals service is not available in this composition.`
     case 'catalog-unreadable':
       return catalogUnreadableCopy(id, detail ?? '')
     case 'not-direct-child':
-      return `Agent ${id} is not a direct child of this session (the drain seam refused with UNAUTHORIZED); release its direct parent instead — if that parent is one of this session's children. Releasing a parent evicts its whole resident subtree.`
-    case 'stale-parent':
-      return `This session's agent handle is stale (the drain seam refused with UNAUTHORIZED against the parent identity); retry the release, or restart the turn if it persists.`
+      return `Agent ${id} is not a direct child of this session; only its creating session (its direct parent) can release it.`
   }
 }
 
-const NO_LIST_CHILDREN_CAUSE = 'the subagents seam exposes no listChildren'
+const NO_LIST_DESCENDANTS_CAUSE = 'the subagents seam exposes no listDescendants'
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => { setTimeout(resolve, ms) })
 }
 
-/** The post-drain registry read, fully guarded (a throw degrades to unobservable). */
+/** The post-disposal registry read, fully guarded (a throw degrades to unobservable). */
 type GuardedRead =
   | { kind: 'present'; status: string | undefined }
   | { kind: 'absent' }
@@ -204,48 +233,69 @@ function preStatusOf(status: string | undefined): PreStatus {
 }
 
 /**
- * Run one release against the authoritative drain seam. Gate errors precede
- * any marking/drain; every transition is test-pinned (plan §4 D1 step list).
+ * Run one release against the receipt registry, with lineage evidence from
+ * the descendant catalog (a `depth === 1` row is direct-child evidence; a
+ * deeper hit is refused as `not-direct-child` BEFORE any dispose attempt).
+ * Gate errors precede any marking/disposal; every transition is test-pinned
+ * (design §3.4.4 step list).
  */
 export async function runRelease(deps: {
   parent: Agent
   id: string
   subagents: ReleaseSubagentsLike | undefined
   agents: ReleaseRegistryLike | undefined
+  disposals?: ReleaseDisposalsLike | undefined
   signal?: AbortSignal // absent → fresh never-aborted controller
 }): Promise<ReleaseOutcome> {
   const { parent, id } = deps
   const subagents = deps.subagents
   const agents = deps.agents
+  const disposals = deps.disposals
   const signal = deps.signal ?? new AbortController().signal
 
-  // Step 0: seam gates before any marking or drain.
-  if (subagents === undefined || typeof subagents.drainChildren !== 'function') {
-    throw new ReleaseFailure('no-drain-seam', failureMessage('no-drain-seam', id, undefined))
+  // Step 0: admit on the receipt registry (duck-typed, like `agents`).
+  if (disposals === undefined || typeof disposals.tryDispose !== 'function') {
+    throw new ReleaseFailure('no-disposals', failureMessage('no-disposals', id, undefined))
   }
   signal.throwIfAborted()
 
-  // Step 1: catalog read (guarded).
+  // Step 1: descendant-catalog read (guarded — the rc.5 service call throws
+  // `SubagentError` when sessionQuery/projections are absent, so the old
+  // seam-absence degrade extends to cover service throws).
   let catalog: 'clean-hit' | 'clean-miss' | 'unreadable'
   let catalogMode: string | undefined
   let catalogCause: string | undefined
-  if (typeof subagents.listChildren !== 'function') {
+  if (subagents === undefined || typeof subagents.listDescendants !== 'function') {
     catalog = 'unreadable'
-    catalogCause = NO_LIST_CHILDREN_CAUSE
+    catalogCause = NO_LIST_DESCENDANTS_CAUSE
   } else {
+    let rows: readonly ReleaseDescendantRowLike[] | undefined
+    let cause: string | undefined
     try {
-      const rows = await subagents.listChildren(SessionId(parent.id), signal)
+      rows = await subagents.listDescendants(SessionId(parent.id), signal)
+    } catch (error) {
+      if (signal.aborted) throw error // cancellation is never catalog failure
+      cause = errorText(error)
+    }
+    if (rows === undefined) {
+      catalog = 'unreadable'
+      catalogCause = cause
+    } else {
       const row = rows.find(entry => String(entry.id) === id)
       if (row === undefined) {
         catalog = 'clean-miss'
+      } else if ((row.depth ?? 1) > 1) {
+        // A deeper-tree hit: the id belongs to a session this parent did not
+        // create — refused BEFORE any dispose attempt (lineage evidence, not
+        // drain-error text parsing).
+        throw new ReleaseFailure('not-direct-child', failureMessage('not-direct-child', id, undefined))
+      } else if (row.kind === 'diagnostic') {
+        catalog = 'unreadable'
+        catalogCause = `the descendant listing returned a "${row.reason ?? 'unavailable'}" diagnostic for ${id}`
       } else {
         catalog = 'clean-hit'
         catalogMode = row.mode
       }
-    } catch (error) {
-      if (signal.aborted) throw error // cancellation is never catalog failure
-      catalog = 'unreadable'
-      catalogCause = errorText(error)
     }
   }
 
@@ -260,7 +310,7 @@ export async function runRelease(deps: {
 
   // Step 4: the catalog × registry matrix.
   if (catalog === 'clean-miss' && preRead.kind !== 'present') {
-    // miss × miss and miss × unobservable both refuse without a drain.
+    // miss × miss and miss × unobservable both refuse without a disposal.
     throw new ReleaseFailure('unknown-id', failureMessage('unknown-id', id, undefined))
   }
   if (catalog === 'unreadable' && preRead.kind !== 'present') {
@@ -274,7 +324,7 @@ export async function runRelease(deps: {
     return { kind: 'not-resident', id, releasedEarlier: isReleased(id) || isTombstoned(id) }
   }
 
-  // A drain row: catalogNote from the matrix.
+  // A disposal row: catalogNote from the matrix.
   const catalogNote: CatalogNote =
     catalog === 'clean-hit' ? 'catalog'
       : catalog === 'clean-miss' ? 'registry-only'
@@ -282,18 +332,32 @@ export async function runRelease(deps: {
 
   // Step 5: the honored-cancellation checkpoint comes FIRST, then the mark,
   // then issuance (critic r5 #1: an abort must never orphan a releasing mark
-  // on an unissued drain).
+  // on an unissued disposal).
   signal.throwIfAborted()
   markReleasing(id)
-  const drain = subagents.drainChildren!(parent, [SessionId(id)])
+  let attempt: ReleaseDisposalAttempt
+  try {
+    attempt = await disposals.tryDispose(SessionId(parent.id), SessionId(id))
+  } catch (error) {
+    clearReleasing(id)
+    throw error
+  }
+  if (!attempt.held) {
+    // Receipt refusals (never throws): the child was never tracked by this
+    // process (or was restored by send_message after settling), or its
+    // receipt belongs to a different creating parent.
+    clearReleasing(id)
+    return { kind: 'still-resident', id, drainPending: false, refusal: attempt.cause }
+  }
+  const drain = attempt.disposed
 
   const withCause = (): { cause?: string } =>
     catalogNote === 'catalog-unreadable' && catalogCause !== undefined
       ? { cause: catalogCause }
       : {}
 
-  // Race the drain against the observe timeout; the timer is cleared on BOTH
-  // settle arms (grok r5 #6: a leftover rejecting timer is an unhandled
+  // Race the disposal against the observe timeout; the timer is cleared on
+  // BOTH settle arms (grok r5 #6: a leftover rejecting timer is an unhandled
   // rejection on the happy path).
   let timer: ReturnType<typeof setTimeout> | undefined
   const timedOut = new Promise<'timeout'>(resolve => {
@@ -343,17 +407,11 @@ export async function runRelease(deps: {
   if (typeof settled === 'object' && settled !== null && 'kind' in settled && (settled as { kind: string }).kind === 'rejected') {
     const error = (settled as { kind: 'rejected'; error: unknown }).error
     const message = errorText(error)
-    if (message.includes('not a direct child')) {
-      clearReleasing(id)
-      throw new ReleaseFailure('not-direct-child', failureMessage('not-direct-child', id, undefined))
-    }
-    if (message.includes('exact live parent')) {
-      clearReleasing(id)
-      throw new ReleaseFailure('stale-parent', failureMessage('stale-parent', id, undefined))
-    }
     if ((error as { code?: string } | undefined)?.code === 'ACTIVATION_TEARDOWN_FAILED') {
       // F4's code-order pin: the resident entry is deleted BEFORE the throw,
       // so absent-or-unobservable after this rejection is degraded success.
+      // The service rejects `disposed` with the ORIGINAL teardown error —
+      // this arm stays live exactly as under the drain seam.
       const read = guardedRegistryRead(agents, id)
       if (read.kind !== 'present') {
         markReleased(id)
@@ -392,9 +450,9 @@ export async function runRelease(deps: {
     return { kind: 'released', id, preStatus: preStatus ?? 'unknown', catalogNote, ...withCause() }
   }
   if (read.kind === 'unobservable') {
-    // Observability died between pre- and post-read (grok r6 #3): the drain's
-    // resolution plus the pre-read hit is the eviction evidence; the tag's
-    // render degrades per §5's contradictions entry.
+    // Observability died between pre- and post-read (grok r6 #3): the
+    // disposal's resolution plus the pre-read hit is the eviction evidence;
+    // the tag's render degrades per §5's contradictions entry.
     markReleased(id)
     return { kind: 'released', id, preStatus: preStatus ?? 'unknown', catalogNote, ...withCause() }
   }
@@ -404,7 +462,7 @@ export async function runRelease(deps: {
     if (read.kind !== 'present') {
       // absent: the F4 causation rule (pre-hit + resolved + post-absent ⇒
       // released). unobservable after a pre-read HIT: observability died
-      // mid-flight (grok r6 #3) — the drain resolution is still eviction
+      // mid-flight (grok r6 #3) — the disposal resolution is still eviction
       // evidence; the tag's render degrades per §5's contradictions entry.
       markReleased(id)
       return { kind: 'released', id, preStatus: preStatus ?? 'unknown', catalogNote, ...withCause() }
@@ -432,8 +490,10 @@ function provenancePrepend(outcome: { catalogNote: CatalogNote; cause?: string }
 
 /**
  * Render a release outcome as the final user-facing text. Every §5 variant
- * is a verbatim contract; the descendant clause rides on every
- * eviction-claiming string.
+ * is a verbatim contract. §3.4.4 consequence: a release evicts the NAMED
+ * child only — its resident delegates are unaffected and must be released
+ * individually by their creating session (upstream `dispose()` does not
+ * cascade).
  */
 export function renderReleaseOutcome(outcome: ReleaseOutcome): string {
   const { id } = outcome
@@ -442,17 +502,17 @@ export function renderReleaseOutcome(outcome: ReleaseOutcome): string {
       const prepend = provenancePrepend(outcome, id)
       const body =
         outcome.preStatus === 'running'
-          ? `Released agent ${id}: its in-flight turn was aborted and its resident activation evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk. Within this session it cannot be continued (send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
+          ? `Released agent ${id}: its in-flight turn was aborted and its resident activation evicted — the capacity slot it held is free. Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk. Within this session it cannot be continued (send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
           : outcome.preStatus === 'idle'
-            ? `Released agent ${id}: its resident (idle) activation was evicted — the capacity slot it held is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
-            : `Released agent ${id}: its resident activation was evicted; any capacity slot it held is free (its running state could not be observed). Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
+            ? `Released agent ${id}: its resident (idle) activation was evicted — the capacity slot it held is free. Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
+            : `Released agent ${id}: its resident activation was evicted; any capacity slot it held is free (its running state could not be observed). Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk; within this session it cannot be continued (upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.`
       return prepend + body
     }
     case 'issued-unobservable':
-      return `Release of agent ${id} was issued against the authoritative drain seam; this composition cannot observe the registry, so residency after the drain could not be confirmed and the child is NOT marked released. Eviction, when it applies, also covers resident descendants. If it was resident, the drain evicts it by the seam's own contract; its continuation state here is unknown.`
+      return `Release of agent ${id} was issued against the authoritative drain seam; this composition cannot observe the registry, so residency after the drain could not be confirmed and the child is NOT marked released. Eviction, when it applies, covers the named child only — its resident delegates are unaffected. If it was resident, the drain evicts it by the seam's own contract; its continuation state here is unknown.`
     case 'evicted-degraded': {
       const prepend = provenancePrepend(outcome, id)
-      return prepend + `Release of agent ${id} reported a teardown failure (${outcome.failure}), but the activation entry is removed before that failure surfaces per the seam's disposal order — any capacity slot is free. Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued; /agents marks it [released] for the rest of this process.`
+      return prepend + `Release of agent ${id} reported a teardown failure (${outcome.failure}), but the activation entry is removed before that failure surfaces per the seam's disposal order — any capacity slot is free. Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk; within this session it cannot be continued; /agents marks it [released] for the rest of this process.`
     }
     case 'not-resident':
       return outcome.releasedEarlier
@@ -461,6 +521,12 @@ export function renderReleaseOutcome(outcome: ReleaseOutcome): string {
     case 'tombstoned':
       return `Agent ${id} was auto-released after inactivity (its settled grace window expired); the catalog row is tombstoned for the rest of this process. Nothing was drained — the child was already settled.`
     case 'still-resident':
+      if (outcome.refusal === 'foreign') {
+        return `Cannot release ${id}: a release receipt for it exists, but it belongs to a different parent session.`
+      }
+      if (outcome.refusal === 'no-receipt') {
+        return `Cannot release ${id}: this session holds no release receipt for it — it was either never spawned by this process, or it settled and was re-woken by send_message (the harness restores a new activation that no API can release by id; let it settle again or restart the session).`
+      }
       return outcome.drainPending
         ? `Release of agent ${id} is in flight: its turn did not reach idle within 10s (a cancel-resistant turn). The release still completes by itself if the turn ever becomes idle — /agents then marks it [released] — but nothing locally force-evicts a cancel-resistant turn; a process restart is the only hard boundary.`
         : `Release of agent ${id} was issued, but the registry still reports it resident after the drain; check /agents detail ${id} and retry if it persists.`

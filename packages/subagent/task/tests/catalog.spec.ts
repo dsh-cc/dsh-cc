@@ -16,7 +16,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { AgentProvider } from '@dsh-cc/plugin-loader'
 import { AgentRegistry } from '../src/registry.ts'
-import { PluginAgentIndex } from '../src/plugin-agents.ts'
+import { isPluginAgentProvider } from '../src/plugin-agents.ts'
 import {
   AgentCatalogSection,
   mountAgentCatalog,
@@ -30,7 +30,7 @@ import {
   resolveSubagentCatalogSettings,
 } from '../src/catalog-settings.ts'
 import type { SubagentCatalogSettings } from '../src/catalog-settings.ts'
-import type { SubagentsLike } from '../src/background-start.ts'
+import type { CcPluginAgentsLike } from '../src/plugin-agents.ts'
 
 const tmpRoots: string[] = []
 
@@ -57,10 +57,10 @@ afterEach(() => {
 })
 
 /** Mount the real SystemPrompt seam + catalog, returning a scoped assembler. */
-async function mount(opts: { seam?: SubagentsLike } = {}) {
+async function mount(opts: { pluginAgents?: CcPluginAgentsLike } = {}) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
-  if (opts.seam !== undefined) ctx.provide('subagents', opts.seam)
+  if (opts.pluginAgents !== undefined) ctx.provide('ccPluginAgents', opts.pluginAgents)
   const registry = new AgentRegistry()
   mountAgentCatalog(ctx, registry)
   // Assemble with a scope and read our section's rendered text ('' when the
@@ -94,29 +94,38 @@ function brandlessSeamEntry(id: string, whenToUse: string): unknown {
   }
 }
 
-/** A mutable fake seam holding plugin agent providers. */
-function fakePluginSeam(): {
-  seam: SubagentsLike
+/**
+ * A mutable fake of the plugin-agent world (§3.4.1): a `ccPluginAgents`-shaped
+ * snapshot (what `mountAgents` publishes — loader-branded registrations ONLY,
+ * exactly like the real registry) plus lifecycle-event delivery. The provider
+ * EVENTS can no longer satisfy the index (they only invalidate the catalog
+ * listener), so every case here publishes the SERVICE.
+ */
+function fakePluginAgents(): {
+  registry: CcPluginAgentsLike
   register(entry: unknown): () => void
   /** Wire lifecycle-event delivery to a host context (the real seam emits
    * `subagent/provider-added` / `subagent/provider-removed` on its ctx). */
   notify(fn: (event: string, arg: unknown) => void): void
 } {
-  const byName = new Map<string, unknown>()
+  const byId = new Map<string, AgentDefinition>()
   let emit: ((event: string, arg: unknown) => void) | undefined
-  const seam = {
-    async start() { throw new Error('not used') },
-    getProvider: (name: string) => byName.get(name),
-    list: () => [...byName.keys()],
-  } as unknown as SubagentsLike
   return {
-    seam,
+    registry: {
+      knownIds: () => [...byId.keys()],
+      get: (id: string) => byId.get(id),
+    },
     register(entry) {
-      byName.set((entry as { name: string }).name, entry)
+      const name = (entry as { name: string }).name
+      // The loader-written snapshot records only genuinely branded providers;
+      // a brandless shape-fake never reaches it (mountAgents owns the writes).
+      if (isPluginAgentProvider(entry)) {
+        byId.set(name, (entry as { definition: AgentDefinition }).definition)
+      }
       emit?.('subagent/provider-added', entry)
       return () => {
-        byName.delete((entry as { name: string }).name)
-        emit?.('subagent/provider-removed', (entry as { name: string }).name)
+        byId.delete(name)
+        emit?.('subagent/provider-removed', name)
       }
     },
     notify(fn) { emit = fn },
@@ -215,9 +224,9 @@ describe('AgentCatalog section', () => {
   it('lists plugin agents with their scoped ids beside the workspace definitions', async () => {
     const ws = freshDir('ws')
     writeAgent(ws, 'deep-reasoner', 'Review heavy work')
-    const plugin = fakePluginSeam()
+    const plugin = fakePluginAgents()
     plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
-    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    const { ctx, textOf } = await mount({ pluginAgents: plugin.registry })
     await vi.waitFor(async () => {
       const text = await textOf(agentAt(ws))
       expect(text).toContain('- p:researcher — Plugin research')
@@ -231,8 +240,8 @@ describe('AgentCatalog section', () => {
 
   it('fires system-prompt/change from the lifecycle listener (never inside a render frame) when a branded provider registers after mount', async () => {
     const ws = freshDir('ws')
-    const plugin = fakePluginSeam()
-    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    const plugin = fakePluginAgents()
+    const { ctx, textOf } = await mount({ pluginAgents: plugin.registry })
     // Deliver the seam's lifecycle events on the same cordis bus the real
     // harness seam uses (realm-delivery check: the listener must receive the
     // event even for a provider registered AFTER the catalog mounted).
@@ -261,8 +270,8 @@ describe('AgentCatalog section', () => {
 
   it('a brandless definition-shaped provider add does NOT fire system-prompt/change', async () => {
     const ws = freshDir('ws')
-    const plugin = fakePluginSeam()
-    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    const plugin = fakePluginAgents()
+    const { ctx, textOf } = await mount({ pluginAgents: plugin.registry })
     plugin.notify((event, arg) => ctx.emit(event as Parameters<typeof ctx.emit>[0], arg))
     const changes = vi.fn()
     ctx.on('system-prompt/change', changes)
@@ -283,12 +292,12 @@ describe('AgentCatalog section', () => {
 
   it('fires system-prompt/change when a provider mounted BEFORE the catalog listener starts is removed', async () => {
     const ws = freshDir('ws')
-    const plugin = fakePluginSeam()
+    const plugin = fakePluginAgents()
     // Register BEFORE the catalog mounts — production mounts cc-shell-glue
     // before subagent-task, so initial providers' add events predate the
     // listener; their removals must still invalidate the prompt.
     const disposeProvider = plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
-    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    const { ctx, textOf } = await mount({ pluginAgents: plugin.registry })
     plugin.notify((event, arg) => ctx.emit(event as Parameters<typeof ctx.emit>[0], arg))
     await vi.waitFor(async () => {
       expect(await textOf(agentAt(ws))).toContain('p:researcher')
@@ -306,8 +315,8 @@ describe('AgentCatalog section', () => {
 
   it('fires system-prompt/change when a provider is removed and drops the id from the next render', async () => {
     const ws = freshDir('ws')
-    const plugin = fakePluginSeam()
-    const { ctx, textOf } = await mount({ seam: plugin.seam })
+    const plugin = fakePluginAgents()
+    const { ctx, textOf } = await mount({ pluginAgents: plugin.registry })
     plugin.notify((event, arg) => ctx.emit(event as Parameters<typeof ctx.emit>[0], arg))
     const disposeProvider = plugin.register(pluginSeamEntry('p:researcher', 'Plugin research'))
     await vi.waitFor(async () => {

@@ -354,9 +354,16 @@ describe('Task background mode — parent teardown drain (§4.13)', () => {
     const childId = SessionId(agentId)
     await vi.waitFor(() => expect(ctx.agents.get(childId)).toBeDefined(), { timeout: 10_000 })
 
-    // The parent-teardown release path for one durable direct child
-    // (drainChildren — the per-child arm of the teardown drain).
-    await ctx.subagents.drainChildren(parent, [childId])
+    // The parent-teardown release path for one durable direct child — rc.5:
+    // `drainChildren` is gone from the subagents service; the per-child arm
+    // is the retained activation receipt (§3.4.4): the spawn rode through
+    // startBackground → startTracked, so the registry holds this receipt.
+    const disposals = ctx.get('ccContinuableDisposals') as {
+      tryDispose(parentId: SessionId, childId: SessionId): Promise<{ held: boolean; disposed?: Promise<void> }>
+    }
+    const attempt = await disposals.tryDispose(parent.session.id, childId)
+    expect(attempt.held).toBe(true)
+    await attempt.disposed!
 
     // The in-flight turn was stopped and the Activation released…
     await waitNoActivation(ctx, childId)
@@ -423,8 +430,8 @@ describe('Task background mode — release valve (T18–T18c)', () => {
     await waitNoActivation(ctx, childId)
     expect(text(release as never)).toBe(
       `Released agent ${agentId}: its in-flight turn was aborted and its resident activation evicted — `
-      + 'the capacity slot it held is free. Its resident descendants (if any) were evicted with it. '
-      + 'The persisted session survives on disk. Within this session it cannot be continued '
+      + 'the capacity slot it held is free. Its resident delegates (if any) are unaffected and must be '
+      + 'released individually. The persisted session survives on disk. Within this session it cannot be continued '
       + '(send_message resolves but runs no turn — upstream cold-resume-after-drain gap); /agents '
       + 'marks it [released] for the rest of this process.',
     )
@@ -453,8 +460,8 @@ describe('Task background mode — release valve (T18–T18c)', () => {
     expect(await loadStoredSession(ctx.sessionPersistence, childId)).toBeDefined()
   }, 20_000)
 
-  it('T18c: releasing a parent child evicts its whole resident subtree (the grandchild too)', async () => {
-    const { ctx, parent } = await setup([
+  it('T18c (retargeted, §3.4.4/§8.5): releasing a parent child evicts ONLY it — the running grandchild survives (dispose does not cascade)', async () => {
+    const { ctx, parent, adapter } = await setup([
       // Level 1, request 1: spawns its own background child (the grandchild).
       toolCallResponse('r1', 'subagent_fork', {
         description: 'inner task',
@@ -463,25 +470,25 @@ describe('Task background mode — release valve (T18–T18c)', () => {
       }),
       // The grandchild's request is served NEXT (cross-agent FIFO): it hangs.
       'hang',
-      // Level 1, request 2 (after the tool result): settles, leaving the
-      // grandchild running.
-      textResponse('level-1 settling with the grandchild running'),
-      textResponse('after release'),
+      // Level 1, request 2 (after the tool result) ALSO hangs, so level-1 is
+      // mid-turn at release time. (rc.5: a settled idle-continuable parent is
+      // closed by the harness even while a delegate stays resident — a
+      // resident parent at release time means a RUNNING parent.)
+      'hang',
     ])
 
     const level1Id = await startBackground(ctx, parent)
     const level1Session = SessionId(level1Id)
-    // Level-1 goes idle once its turn ends; it may stay RESIDENT while the
-    // grandchild runs (a live child can hold the parent activation) — wait
-    // for idle, not eviction.
+    // Level-1 re-engaged after the spawn tool result once its second model
+    // request lands.
     try {
       await vi.waitFor(() => {
-        const level1 = ctx.agents.get(level1Session)
-        expect(level1?.status ?? 'gone').toBe('idle')
+        const level1Requests = adapter.requests.filter(request => String(request.sessionId) === level1Id)
+        expect(level1Requests.length).toBeGreaterThanOrEqual(2)
       }, { timeout: 10_000, interval: 100 })
     } catch {
       const log = await loadStoredSession(ctx.sessionPersistence, level1Session)
-      throw new Error(`level-1 never went idle; log=${JSON.stringify(log?.events).slice(0, 1500)}`)
+      throw new Error(`level-1 never re-engaged after spawning; log=${JSON.stringify(log?.events).slice(0, 1500)}`)
     }
 
     // The grandchild's durable id is in level-1's log (the spawn notice);
@@ -507,9 +514,27 @@ describe('Task background mode — release valve (T18–T18c)', () => {
         if (ctx.agents.get(id) !== undefined) throw new Error(`${label} (${id}) still resident`)
       }, { timeout: 10_000, interval: 100 })
     }
+    // The NAMED child is evicted…
     await gone(level1Session, 'level-1')
-    await gone(grandSession, 'grandchild')
-    expect(releaseText).toContain('Its resident descendants (if any) were evicted with it.')
     expect(releaseText).toContain(`Released agent ${level1Id}`)
+    expect(releaseText).toContain('Its resident delegates (if any) are unaffected and must be released individually.')
+    expect(releaseText).not.toContain('were evicted with it')
+    // …but the grandchild (its delegate) SURVIVES: upstream dispose() does
+    // not cascade — the grandchild stays resident and keeps running.
+    const grand = ctx.agents.get(grandSession)
+    expect(grand, 'the running grandchild must survive its parent\'s release').toBeDefined()
+    // Only the grandchild's creating session (level-1) can release it: a
+    // release attempt by THIS session is the foreign-receipt refusal.
+    const foreignRelease = await callTool(ctx, 'release_agent', { agent_id: grandId }, parent)
+    expect(text(foreignRelease as never)).toContain('is not a direct child of this session')
+    // Cleanup: the retained receipt is bound to level-1 (its creating
+    // session), so the registry still disposes the grandchild by it.
+    const disposals = ctx.get('ccContinuableDisposals') as {
+      tryDispose(parentId: SessionId, childId: SessionId): Promise<{ held: boolean; disposed?: Promise<void> }>
+    }
+    const attempt = await disposals.tryDispose(level1Session, grandSession)
+    expect(attempt.held).toBe(true)
+    await attempt.disposed!
+    await gone(grandSession, 'grandchild')
   }, 30_000)
 })

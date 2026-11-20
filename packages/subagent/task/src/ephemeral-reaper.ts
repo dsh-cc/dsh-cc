@@ -14,7 +14,7 @@
  * The one-shot ledger is the KILL LOG, never the candidate set: this module
  * never sweeps ledger rows process-wide (a `memory-recall` labeled row past
  * TTL must be left alone) and never reuses `runRelease` /
- * `drainChildren` (the mode gate rejects one-shot ids).
+ * the release valve's disposal seam (the mode gate rejects one-shot ids).
  *
  * @module @dsh-cc/subagent-task/ephemeral-reaper
  */

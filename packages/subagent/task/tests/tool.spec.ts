@@ -289,6 +289,22 @@ async function mount(opts: {
   const { seam, runs, continuableStarts, startedChildIds, disposedChildIds, emitEnd } = makeSeam(opts.seamProviders ?? defaultProviders(), emit)
   if (opts.omitStartActivation === true) delete (seam as Record<string, unknown>)['startActivation']
   ctx.provide('subagents', seam)
+  // §3.4.1: plugin-agent discovery rides the loader-written `ccPluginAgents`
+  // snapshot (the seam has no enumeration at rc.5); mirror the writes
+  // `mountAgents` would publish for the fake plugin providers (branded,
+  // colon-scoped, definition-carrying).
+  const pluginEntries = new Map(
+    (opts.seamProviders ?? defaultProviders())
+      .filter(provider =>
+        (provider as unknown as Record<symbol, unknown>)[PLUGIN_AGENT_PROVIDER_BRAND] === true
+        && provider.name.includes(':')
+        && provider.definition !== undefined)
+      .map(provider => [provider.name, provider.definition as AgentDefinition] as const),
+  )
+  ctx.provide('ccPluginAgents', {
+    knownIds: () => [...pluginEntries.keys()],
+    get: (id: string) => pluginEntries.get(id),
+  })
   if (opts.routes !== undefined) ctx.provide('ccModelRoutes', opts.routes)
   const registry = new AgentRegistry()
   let capture: SpawnPinCapture | undefined
@@ -1440,14 +1456,21 @@ describe('Task tool', () => {
       expect(refused.isError).toBe(true)
       expect(refused.content[0]!.text).toBe(`Error: ${LIVE_CAPACITY_REFUSAL}`)
 
-      // release_agent drains a resident activation; the fake pool reflects
-      // the freed slot by no longer refusing the next activation.
+      // release_agent disposes a resident activation's retained receipt (§3.4.4);
+      // the fake pool reflects the freed slot by no longer refusing the next activation.
       registerReleaseAgentTool(ctx)
       const seam = ctx.get('subagents') as Record<string, unknown>
-      seam['drainChildren'] = async (): Promise<void> => { full.value = false }
+      seam['listDescendants'] = async (): Promise<{ id: string; mode: string; depth: number; kind: string }[]> => [
+        { id: 'child-0', mode: 'continuable', depth: 1, kind: 'child' },
+      ]
+      ctx.provide('ccContinuableDisposals', {
+        tryDispose: async (): Promise<{ held: true; disposed: Promise<void> }> => {
+          full.value = false
+          return { held: true, disposed: Promise.resolve() }
+        },
+      })
       // release_agent's liveness check consults the agents registry for the id.
       ctx.provide('agents', { get: (id: string) => (full.value && id === 'child-0' ? { status: 'running' } : undefined) })
-      seam['listChildren'] = async (): Promise<{ id: string; mode: string }[]> => [{ id: 'child-0', mode: 'continuable' }]
       const agent = agentWithCtx(ctx)
       const released = (await executeModelToolFixture(ctx, {
         signal: new AbortController().signal,
@@ -1540,8 +1563,9 @@ describe('Task tool', () => {
         + 'window (foreground deliveries 30 minutes, background 2 hours; a definition\'s `autoReleaseMs` '
         + 'frontmatter overrides this, `0` disables) — after expiry its send_message is refused, so '
         + 'send_message promptly if you plan to continue it. release_agent <id> remains the interactive '
-        + 'override for a RUNNING child: it evicts the resident activation (and resident descendants\') '
-        + 'one-way — same-session continuation is unavailable after release; its persisted session survives; '
+        + 'override for a RUNNING child: it evicts the named child\'s resident activation one-way — its '
+        + 'delegates stay resident and are released individually by their creating session; same-session '
+        + 'continuation is unavailable after release; its persisted session survives; '
         + 'eviction is cooperative — a cancel-resistant turn keeps its slot until it settles.',
       )
       // R8 reconciliation: auto-tombstone is the routine lane; manual release

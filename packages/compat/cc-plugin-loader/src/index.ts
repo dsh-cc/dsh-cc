@@ -59,7 +59,7 @@ export {
 } from './discovery.ts'
 export type { DiscoveredCcPlugin, DiscoverCcPluginRootsOptions } from './discovery.ts'
 export { AgentProvider, STANDARD_AGENTS_DIR, PLUGIN_AGENT_PROVIDER_BRAND, isPluginAgentProvider } from './agents.ts'
-export type { ResolveModel } from './agents.ts'
+export type { ResolveModel, CcPluginAgentsService } from './agents.ts'
 export type { McpSeam, HooksSeam, RulesSeam } from './seams.ts'
 export { ComponentTally } from './seams.ts'
 export type { RuleEntry, TurnRuleChannel } from './types.ts'
@@ -164,6 +164,7 @@ export async function mountCcPlugin(ctx: Context, options: MountCcPluginOptions)
       subagentsPresent: probed.subagents !== undefined,
     }), mountWarnings)
     fold(components, disposers, await mountAgents({
+      ctx,
       pluginRoot: root,
       manifest,
       subagents: probed.subagents,

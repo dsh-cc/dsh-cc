@@ -9,8 +9,10 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Fiber } from '@deepseek-ai/cordis'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import * as taskPlugin from '../src/index.ts'
 import { registerCollector, unregisterCollector, collectorKey } from '../src/epoch-collector.ts'
+import type { CcContinuableDisposalsLike } from '../src/continuable-disposals.ts'
 
 interface RegistryService {
   collectorFor(key: string): { childId: string } | undefined
@@ -67,5 +69,48 @@ describe('ccOneShotLedger root-realm publication (/resume filter seam)', () => {
     expect(service).toBeDefined()
     expect(service!.oneShotChildIds().size).toBe(0)
     await fiber.dispose()
+  })
+})
+
+describe('ccContinuableDisposals root-realm publication (§3.4.4)', () => {
+  it('publishes the receipt registry on apply, tracking a start through a fake seam', async () => {
+    const { ctx, fiber } = await mounted()
+    const service = ctx.get('ccContinuableDisposals') as CcContinuableDisposalsLike | undefined
+    expect(service).toBeDefined()
+    // A tracked start delegates to the seam and retains a parent-bound receipt.
+    const activation = {
+      childId: 'child-1',
+      result: new Promise<unknown>(() => {}), // never settles: stays resident
+      dispose: () => Promise.resolve(),
+    }
+    const started = await service!.startTracked(
+      { startActivation: async () => activation },
+      { parent: { id: 'parent-1' } },
+    )
+    expect(started).toBe(activation)
+    const foreign = await service!.tryDispose(SessionId('other-parent'), SessionId('child-1'))
+    expect(foreign).toEqual({ held: false, cause: 'foreign' })
+    const attempt = await service!.tryDispose(SessionId('parent-1'), SessionId('child-1'))
+    expect(attempt.held).toBe(true)
+    await fiber.dispose()
+  })
+
+  it('the unload effect clears the publication AND the receipts (no stale receipts across a remount)', async () => {
+    const { ctx, fiber } = await mounted()
+    const service = ctx.get('ccContinuableDisposals') as CcContinuableDisposalsLike
+    await service.startTracked(
+      {
+        startActivation: async () => ({
+          childId: 'child-1',
+          result: new Promise<unknown>(() => {}),
+          dispose: () => Promise.resolve(),
+        }),
+      },
+      { parent: { id: 'parent-1' } },
+    )
+    expect((await service.tryDispose(SessionId('parent-1'), SessionId('child-1'))).held).toBe(true)
+    await fiber.dispose()
+    expect((ctx as unknown as { root: Context }).root.get('ccContinuableDisposals', false)).toBeUndefined()
+    // Any dispose memo was dropped with the unload; a remount starts empty.
   })
 })

@@ -24,6 +24,7 @@ import { collectFirstEpoch, type EpochEventBus } from './epoch-collector.ts'
 import { planComposition, type ChildComposition } from './composition-plan.ts'
 import { promoteGraceTier, recordGraceEntry } from './grace-window.ts'
 import { SpawnPinCapture } from './resume-capture.ts'
+import type { CcContinuableDisposalsLike } from './continuable-disposals.ts'
 
 /** Fresh-child provider: no parent conversation (CC Task default). */
 export const PROVIDER_SPAWN = 'spawn'
@@ -224,6 +225,34 @@ function isContinuableCapabilityError(error: unknown): boolean {
     || message.includes('reserved child ids require a local backend')
 }
 
+/**
+ * Route a continuable start through the `ccContinuableDisposals` receipt
+ * registry when published (§3.4.4: the release valve releases by retained
+ * receipt, so every tracked lane must register one). An absent service (a
+ * hermetic composition without the task plugin's publication) falls back to
+ * the plain seam — such a child is then honestly `no-receipt` at release.
+ */
+function startTrackedOrPlain(
+  disposals: CcContinuableDisposalsLike | undefined,
+  seam: SubagentsLike,
+  spec: Parameters<SubagentsLike['startActivation']>[0],
+): Promise<ActivationLike> {
+  if (disposals !== undefined && typeof disposals.startTracked === 'function') {
+    return disposals.startTracked(seam, spec)
+  }
+  return seam.startActivation(spec)
+}
+
+/** Resolve the published receipt registry (undefined when unpublished). */
+export function continuableDisposalsOf(ctx: Context): CcContinuableDisposalsLike | undefined {
+  // Hermetic callers hand partial ctx ducks (the epoch-collector tests pass a
+  // bare event bus) — resolve defensively like every other service read here.
+  const getService = (ctx as { get?: unknown }).get
+  if (typeof getService !== 'function') return undefined
+  const service = (getService as (key: string) => unknown).call(ctx, 'ccContinuableDisposals') as CcContinuableDisposalsLike | undefined
+  return service !== undefined && typeof service.startTracked === 'function' ? service : undefined
+}
+
 
 /**
  * Dispatch a FOREGROUND non-fork call by collecting the child's first epoch
@@ -244,6 +273,9 @@ export async function collectForeground(
   if (agent === undefined) {
     throw new Error('subagent_fork requires a calling agent (exec.agent was undefined)')
   }
+  // §3.4.4: the foreground collect starts a continuable (releasable) child —
+  // route its start through the receipt registry when published.
+  const disposals = continuableDisposalsOf(ctx)
   const lease = await acquireLiveCapacity(agent, exec.signal)
   // F-1: held until the creation call settles (the `start` callback below), or
   // until any earlier failure unwinds; idempotent.
@@ -316,7 +348,7 @@ export async function collectForeground(
           try {
             // Continuable child: stays resident after settle for send_message
             // — never disposed here (dispose policy: one-shot lanes only).
-            await seam.startActivation({
+            await startTrackedOrPlain(disposals, seam, {
               provider: PROVIDER_SPAWN,
               label,
               childId: durableChildId,
@@ -380,6 +412,13 @@ export async function startBackground(
   seam: SubagentsLike,
   request: BackgroundRequest,
   capture?: SpawnPinCapture,
+  /**
+   * The published `ccContinuableDisposals` receipt registry, threaded from
+   * the caller's ctx (`startBackground` has no ctx of its own, §3.4.4).
+   * Absent → the plain seam (the child is then honestly `no-receipt` at
+   * release, e.g. in a hermetic composition).
+   */
+  disposals?: CcContinuableDisposalsLike | undefined,
 ): Promise<{ text: string; status: 'async_launched'; agentId: string }> {
   assertContinuableCapable(seam)
   const { label, prompt, parent, signal, childId, captureDefinition, captureSelector, ...rest } = request
@@ -430,8 +469,10 @@ export async function startBackground(
     recordTier(durableChildId)
     try {
       // Continuable child: stays resident after settle for send_message —
-      // never disposed here (dispose policy: one-shot lanes only).
-      started = await seam.startActivation({
+      // never disposed here (dispose policy: one-shot lanes only). §3.4.4:
+      // retain its dispose receipt for the release valve when the registry
+      // is published.
+      started = await startTrackedOrPlain(disposals, seam, {
         provider: PROVIDER_SPAWN,
         label,
         childId: durableChildId,
