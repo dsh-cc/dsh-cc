@@ -22,7 +22,7 @@ const HARNESS_TOOLS = [
   'get_goal', 'glob', 'grep', 'interrupt_agent', 'job_kill', 'job_list',
   'job_output', 'list_agents', 'ralph', 'read', 'read_image', 'send_message',
   'skill', 'subagent', 'subagent_fork', 'todo_write', 'update_goal',
-  'web_fetch', 'web_search', 'workflow', 'write',
+  'wait_agent', 'web_fetch', 'web_search', 'workflow', 'write',
 ] as const
 
 /**

@@ -25,7 +25,6 @@ describe('spawn + continuation share one admission lease', () => {
         }
       },
       getProvider: () => ({ prepareContinuable: () => undefined }),
-      list: () => [],
     } satisfies SubagentsLike
     const spawn = startBackground(seam, {
       label: 'x', prompt: [{ type: 'text', text: 'go' }], parent: { id: 'parent-m' } as never, signal: new AbortController().signal,

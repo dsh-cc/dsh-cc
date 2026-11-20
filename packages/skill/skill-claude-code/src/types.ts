@@ -19,7 +19,7 @@ export interface CcSkillMetadata {
   readonly version?: string
   /** Resolved `model`; `inherit` is omitted (inherit the caller). */
   readonly model?: string
-  /** `context: fork` selects subagent execution via `ctx.subagents.startActivation()`. */
+  /** `context: fork` selects subagent execution via the flat rc.5 `ctx.subagents.startActivation()` spec (no `request:` wrapper). */
   readonly executionContext?: 'fork'
   /** Optional `agent` target persona. */
   readonly agent?: string

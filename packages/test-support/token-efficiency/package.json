@@ -13,7 +13,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "js-yaml": "^4.1.0",
-    "zod": "^4.4.3",
+    "zod": "^4.6.6",
     "@dsh-cc/cache-trajectory": "workspace:^",
     "@dsh-cc/command-cost": "workspace:^",
     "@deepseek-ai/cordis": "link:../../../../deepseek-harness/vendor/cordis",

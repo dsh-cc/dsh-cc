@@ -18,6 +18,7 @@ import { defineTool } from '@dsh-cc/tools'
 import {
   renderReleaseOutcome,
   runRelease,
+  type ReleaseDisposalsLike,
   type ReleaseRegistryLike,
   type ReleaseSubagentsLike,
 } from '@dsh-cc/command-agents/release'
@@ -45,9 +46,10 @@ export function registerReleaseAgentTool(ctx: Context): (() => void) | undefined
   return tools.register(defineTool({
     name: RELEASE_AGENT_TOOL,
     description:
-      'Release a direct continuable subagent: its resident activation is evicted, '
-      + 'and with it the resident activations of any descendants (a running turn is '
-      + 'aborted; no separate interrupt needed). Eviction is cooperative — a turn that '
+      'Release a direct continuable subagent: its resident activation is evicted '
+      + '(its own delegates stay resident — each is released individually by its '
+      + 'creating session; a running turn is aborted; no separate interrupt '
+      + 'needed). Eviction is cooperative — a turn that '
       + 'refuses cancellation keeps its slot until it settles (this tool reports that '
       + 'as still-resident with the release still in flight instead of hanging). '
       + 'Evicting a resident activation frees the capacity slot it held (running or '
@@ -65,7 +67,7 @@ export function registerReleaseAgentTool(ctx: Context): (() => void) | undefined
         required: true,
         description:
           'Id of a direct continuable child of this session (see list_agents). '
-          + 'Grandchildren are refused — release their direct parent instead.',
+          + 'Grandchildren are refused — only their creating session can release them.',
       },
     },
     output: {
@@ -89,11 +91,13 @@ export function registerReleaseAgentTool(ctx: Context): (() => void) | undefined
       }
       const subagents = ctx.get('subagents') as ReleaseSubagentsLike | undefined
       const agents = agent.ctx?.get?.('agents') as ReleaseRegistryLike | undefined
+      const disposals = ctx.get('ccContinuableDisposals') as ReleaseDisposalsLike | undefined
       const outcome = await runRelease({
         parent: agent,
         id: args.agent_id,
         subagents,
         agents,
+        disposals,
         signal: exec.signal,
       })
       return { text: renderReleaseOutcome(outcome) }

@@ -56,9 +56,13 @@ async function mountOne(model: string | undefined, resolveModel?: ResolveModel, 
   return seam
 }
 
-/** The delegating request the provider put on the last recorded activation spec. */
+/** The delegating request the provider put on the last recorded activation spec (rc.5 flat: spec minus envelope). */
 function delegationOf(seam: FakeSeam): Record<string, unknown> {
-  return seam.specs[seam.specs.length - 1]!['request'] as Record<string, unknown>
+  const {
+    provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+    ...request
+  } = seam.specs[seam.specs.length - 1]!
+  return request
 }
 
 describe('AgentProvider model resolution', () => {

@@ -59,10 +59,9 @@ function fakeSeam(): {
   }
 }
 
-/** The prompt the child receives, unwrapped from the fake seam's recorded activation spec. */
+/** The prompt the child receives, read off the fake seam's recorded activation spec (rc.5 flat spec). */
 function promptOf(specs: Array<Record<string, unknown>>, index = 0): string {
-  const request = specs[index]!['request'] as Record<string, unknown>
-  return (request['prompt'] as readonly { text: string }[])[0]!.text
+  return (specs[index]!['prompt'] as readonly { text: string }[])[0]!.text
 }
 
 /** Mount one agent over the seam, with the gate patterns threaded live. */

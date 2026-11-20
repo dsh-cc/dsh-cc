@@ -37,7 +37,7 @@ const LOCAL_HELP_SPECS: Readonly<Record<string, Omit<CommandHelpSpec, 'name' | '
     usage: ['[<id>|stop <id>|release <id>]', '(no argument — list background agents)'],
     notes: [
       '<id> shows one agent\'s detail; stop <id> interrupts a running agent.',
-      'release <id> evicts the resident activation (its resident descendants\' too); frees a capacity slot for running agents; cooperative; one-way in this session.',
+      'release <id> evicts the resident activation (its delegates stay resident); frees a capacity slot for running agents; cooperative; one-way in this session.',
     ],
   },
   usage: {},

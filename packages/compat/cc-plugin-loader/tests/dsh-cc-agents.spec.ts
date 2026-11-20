@@ -171,7 +171,11 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     try {
       const reasoner = providers.find(p => p.definition.agentType === 'critic')!
       await reasoner.start({ prompt: 'x' })
-      const delegation = specs[specs.length - 1]!['request'] as Record<string, unknown>
+      // rc.5 flat spec: the delegating request is the recorded spec minus the envelope.
+      const {
+        provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+        ...delegation
+      } = specs[specs.length - 1]!
       expect(delegation['agentOptions']).toBeUndefined()
       // The gated persona still folds into the activation request's prompt.
       expect(String((delegation['prompt'] as readonly { text: string }[])[0]!.text)).toContain('Staff Engineer')
@@ -193,7 +197,11 @@ describe('mountCcPlugin on the real dsh-cc-agents plugin', () => {
     try {
       const reasoner = providers.find(p => p.definition.agentType === 'critic')!
       await reasoner.start({ prompt: 'x' })
-      const delegation = specs[specs.length - 1]!['request'] as Record<string, unknown>
+      // rc.5 flat spec: the delegating request is the recorded spec minus the envelope.
+      const {
+        provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+        ...delegation
+      } = specs[specs.length - 1]!
       const persona = String((delegation['prompt'] as readonly { text: string }[])[0]!.text)
       // Phrase-presence smoke pin, not a semantic contract check: it fails if
       // the review contract stops reaching non-gated models, and it names the

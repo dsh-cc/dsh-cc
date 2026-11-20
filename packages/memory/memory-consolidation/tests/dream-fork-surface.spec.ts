@@ -32,12 +32,10 @@ interface SubagentsSeam {
   startActivation(spec: {
     provider: string
     label: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      outputSchema?: Record<string, unknown>
-      maxDepth?: number
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    outputSchema?: Record<string, unknown>
+    maxDepth?: number
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{ childId: string; result: Promise<{ stopReason: string; structured?: unknown }>; dispose(): Promise<void> }>
@@ -84,12 +82,10 @@ describe('memory dream fork tool surface (integration tripwire)', () => {
     const activation = await subagents.startActivation({
       provider: 'fork',
       label: 'memory-consolidation',
-      request: {
-        prompt: [{ type: 'text', text: 'consolidate memories' }],
-        parent,
-        outputSchema: MEMORY_WRITES_SCHEMA,
-        maxDepth: 1,
-      },
+      prompt: [{ type: 'text', text: 'consolidate memories' }],
+      parent,
+      outputSchema: MEMORY_WRITES_SCHEMA,
+      maxDepth: 1,
       signal,
       delivery: 'caller',
     })

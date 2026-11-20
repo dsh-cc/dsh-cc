@@ -184,7 +184,8 @@ describe('agent/turn-stopping listener', () => {
     expect(subagents.startActivation).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'fork',
       label: 'extract-memories',
-      request: expect.objectContaining({ parent: expect.anything() }),
+      // rc.5 flat spec: the parent rides the activation spec top level.
+      parent: expect.anything(),
       delivery: 'caller',
     }))
   })
@@ -340,8 +341,9 @@ describe('agent/turn-stopping recursion & single-flight gates', () => {
     await stopTurn(ctx, fakeAgent('/tmp'))
     await vi.waitFor(() => expect(subagents.startActivation).toHaveBeenCalledTimes(1))
 
-    expect(subagents.startActivation.mock.calls[0][0].request).toMatchObject({ maxDepth: 1 })
-    expect(subagents.startActivation.mock.calls[0][0].request.outputSchema).toBe(MEMORY_WRITES_SCHEMA)
+    // rc.5 flat spec: request fields ride the activation spec top level.
+    expect(subagents.startActivation.mock.calls[0][0]).toMatchObject({ maxDepth: 1 })
+    expect(subagents.startActivation.mock.calls[0][0].outputSchema).toBe(MEMORY_WRITES_SCHEMA)
     expect(subagents.startActivation.mock.calls[0][0].provider).toBe('fork')
     expect(subagents.startActivation.mock.calls[0][0].delivery).toBe('caller')
   })
@@ -378,7 +380,7 @@ describe('dream sessions gate (scanned session store)', () => {
 
   function dreamPromptOf(subagents: { startActivation: ReturnType<typeof vi.fn> }): string {
     const call = subagents.startActivation.mock.calls.find((c) => c[0]?.label === 'memory-consolidation')
-    return call ? call[0].request.prompt[0].text : ''
+    return call ? call[0].prompt[0].text : ''
   }
 
   it('spawns the dream once five or more new sessions exist since lastAt; prompt carries hint ids and the sessions root', async () => {
@@ -518,7 +520,7 @@ describe('dream sessions gate (scanned session store)', () => {
 
     const dreamPrompts = subagents.startActivation.mock.calls
       .filter((c) => c[0]?.label === 'memory-consolidation')
-      .map((c) => c[0].request.prompt[0].text as string)
+      .map((c) => c[0].prompt[0].text as string)
     expect(dreamPrompts.length).toBe(2)
     expect(dreamPrompts[0]).toContain('- old')
     for (let i = 1; i <= 5; i++) expect(dreamPrompts[1]).toContain(`s${i}`)
@@ -795,7 +797,7 @@ describe('extract-memories index injection', () => {
 
   function extractionPromptOf(subagents: { startActivation: ReturnType<typeof vi.fn> }): string {
     const call = subagents.startActivation.mock.calls.find((c) => c[0]?.label === 'extract-memories')
-    return call ? call[0].request.prompt[0].text : ''
+    return call ? call[0].prompt[0].text : ''
   }
 
   function agentWithTypes(types: readonly string[]): Agent {

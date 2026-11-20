@@ -101,7 +101,9 @@ describe('send_message admission wiring', () => {
   }
 
   function sendMessage(callId: string, agent: unknown = { id: 'parent-1', session: { header: {} } }) {
-    return { name: 'send_message', arguments: { agent_id: callId }, agent, signal: new AbortController().signal }
+    // No subagents seam in this composition: the rc.5 `agent` argument keeps
+    // the raw token (admission can never refuse — the fallback is safe).
+    return { name: 'send_message', arguments: { agent: callId }, agent, signal: new AbortController().signal }
   }
 
   it('admits a continuation and releases the admission after the body settles', async () => {

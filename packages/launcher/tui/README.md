@@ -101,7 +101,7 @@ This package does **not** ship a `dsh-tui` binary.
 `dsh-cc acp [...]` starts the Agent Client Protocol lane. The bin intercepts
 it before any TUI processing (`bin/dsh-cc.js:37-99`), bootstraps the separate
 `cc-acp` profile from the ACP floor bundles (`bootstrap.mjs:18-32`; the
-installed `@deepseek-ai/dsh-acp-app` is pinned at `0.2.1-rc.5`), then spawns
+installed `@deepseek-ai/dsh-acp-app` is pinned at `0.2.2-rc.5`), then spawns
 `dsh --profile cc-acp` with the remaining arguments. Stdout belongs to the
 ACP NDJSON protocol, so bootstrap and install output goes to stderr, stdin is
 never consumed, and the child inherits stdio. No TUI flag processing runs on

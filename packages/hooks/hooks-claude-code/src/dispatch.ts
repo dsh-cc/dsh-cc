@@ -41,16 +41,14 @@ interface DispatchOptions {
   enableAgentHooks: boolean
 }
 
-/** Minimal structural subset of the `subagents` fork seam used by prompt/agent executors. */
+/** Minimal structural subset of the `subagents` fork seam used by prompt/agent executors (rc.5 flat spec). */
 interface HookSubagentLike {
   startActivation(spec: {
     provider: string
     label: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      agentOptions?: unknown
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    agentOptions?: unknown
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{
@@ -111,11 +109,9 @@ export async function dispatchHook(ctx: Context, hook: HookCommand, opts: Dispat
       activation = await subagents.startActivation({
         provider: 'fork',
         label: hook.type === 'prompt' ? 'hook-prompt' : 'hook-agent',
-        request: {
-          prompt: [{ type: 'text', text: prompt }],
-          parent: opts.agent,
-          ...(agentOptions !== undefined ? { agentOptions } : {}),
-        },
+        prompt: [{ type: 'text', text: prompt }],
+        parent: opts.agent,
+        ...(agentOptions !== undefined ? { agentOptions } : {}),
         signal: opts.signal,
         delivery: 'caller',
       })

@@ -155,7 +155,12 @@ async function mount(opts: { parentCwdInSubdir?: boolean; definitionBody?: strin
     async startActivation(spec: Record<string, unknown>) {
       const childId = (spec['childId'] as string | undefined) ?? 'child-iso-1'
       emit('subagent/start', { runId: 'run-1', provider: spec['provider'], id: childId, local: true })
-      continuableStarts.push(spec['request'] as Record<string, unknown>)
+      // rc.5 flat spec: strip the envelope; the rest is the recorded request.
+      const {
+        provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+        ...request
+      } = spec
+      continuableStarts.push(request)
       emit('subagent/end', {
         runId: 'run-1', provider: 'spawn', id: childId, local: true,
         stopReason: COMPLETED.stopReason, lastAssistantMessage: COMPLETED.output,

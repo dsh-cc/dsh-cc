@@ -14,7 +14,6 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { helpable } from '@dsh-cc/command-usage'
-import type { ChildEntryLike } from './snapshot.ts'
 import {
   buildAgentsSnapshot,
   parseAgentsInput,
@@ -34,23 +33,33 @@ import {
   isReleased,
   isReleasing,
   isTombstoned,
+  type ReleaseDisposalsLike,
   type ReleaseRegistryLike,
 } from './release.ts'
 
 export const name = 'command-agents'
-export const inject = ['commands', 'subagents', 'agents', 'resumePinStore']
+export const inject = ['commands', 'subagents', 'agents', 'resumePinStore', 'ccContinuableDisposals']
 
 // R8 tombstone surface: re-exported so the subagent-task grace-window mount
 // and tests consume the package face, not the module internals.
 export { isTombstoned, clearTombstone, tombstoneReadyRow } from './release.ts'
 
-/** Duck-typed faces of the injected services (host-plane + realm-interior). */
+/**
+ * Duck-typed faces of the injected services (host-plane + realm-interior).
+ * rc.5: the subagents service's `listChildren`/`drainChildren` are gone — the
+ * snapshot is sourced from `listDescendants` (depth-filtered), and releases
+ * ride the `ccContinuableDisposals` receipt registry ({@link ReleaseDisposalsLike}).
+ */
 interface SubagentsLike {
-  listChildren(parentSessionId: SessionId): Promise<readonly ChildEntryLike[]>
-  listDescendants?(rootSessionId: SessionId): Promise<readonly { id: SessionId; hasChildren?: boolean }[]>
+  listDescendants?(rootSessionId: SessionId, signal?: AbortSignal): Promise<readonly {
+    id: SessionId
+    depth: number
+    kind?: string
+    mode?: string
+    label?: string
+    hasChildren?: boolean
+  }[]>
   interrupt(targetSessionId: SessionId, authority: unknown): void
-  /** The release-valve seam (D1); absent → no-drain-seam gate error. */
-  drainChildren?(parent: Agent, ids: SessionId[]): Promise<void>
 }
 interface PinStoreLike {
   read(childId: string): unknown
@@ -70,7 +79,28 @@ function toSnapshotServices(
   pinStore: PinStoreLike,
 ): SnapshotServices {
   return {
-    listChildren: async parentSessionId => await subagents.listChildren(SessionId(parentSessionId)),
+    // rc.5 (§3.4.2): the direct-child listing is the descendant walk filtered
+    // to depth === 1. The call throws `SubagentError` (SUBAGENT_CONTROL_*)
+    // when sessionQuery/projections are absent — degrade to an empty list
+    // (the release.ts degrade idiom extended to cover service throws: /agents
+    // renders "No background agents." instead of throwing out of the command).
+    listChildren: async parentSessionId => {
+      if (typeof subagents.listDescendants !== 'function') return []
+      try {
+        const rows = await subagents.listDescendants(SessionId(parentSessionId))
+        return rows
+          .filter(row => row.depth === 1)
+          .map(row => ({
+            id: String(row.id),
+            ...(typeof row.mode === 'string'
+              ? { mode: row.mode as 'one-shot' | 'continuable' | 'unknown' }
+              : {}),
+            ...(typeof row.label === 'string' ? { label: row.label } : {}),
+          }))
+      } catch {
+        return []
+      }
+    },
     // rc.2: `hasChildren` left the catalog rows; re-derive from the
     // descendant traversal root rows when the seam exposes it.
     ...(typeof subagents.listDescendants === 'function'
@@ -93,6 +123,7 @@ async function executeAgents(
   snapshotServices: SnapshotServices,
   subagents: SubagentsLike,
   agents: AgentsRegistryLike,
+  disposals: ReleaseDisposalsLike | undefined,
   caller: Agent,
   rawInput: string,
   signal: AbortSignal,
@@ -101,7 +132,7 @@ async function executeAgents(
   if (parsed.kind === 'error') return { kind: 'error', text: parsed.text }
   const parentSessionId = String(caller.session.id)
   // The release branch runs BEFORE rows.find / any snapshot fast path: the
-  // authoritative drain seam, not the snapshot, decides.
+  // authoritative receipt registry, not the snapshot, decides.
   if (parsed.kind === 'release') {
     try {
       const outcome = await runRelease({
@@ -109,6 +140,7 @@ async function executeAgents(
         id: parsed.id,
         subagents,
         agents: agents as ReleaseRegistryLike,
+        disposals,
         signal,
       })
       return { kind: 'success', text: renderReleaseOutcome(outcome) }
@@ -158,6 +190,10 @@ export function apply(ctx: Context): void {
   const subagents = ctx.get('subagents') as unknown as SubagentsLike
   const agents = ctx.get('agents') as unknown as AgentsRegistryLike
   const pinStore = ctx.get('resumePinStore') as unknown as PinStoreLike
+  // §3.4.4: the release branch's receipt registry (root-realm; injected, so
+  // present in the cc-shell composition — unit compositions calling apply()
+  // directly get the honest no-disposals refusal instead).
+  const disposals = ctx.get('ccContinuableDisposals') as unknown as ReleaseDisposalsLike | undefined
   const snapshotServices = toSnapshotServices(subagents, agents, pinStore)
 
   const root = ctx.root as unknown as {
@@ -183,13 +219,13 @@ export function apply(ctx: Context): void {
   ctx.commands.register(helpable({
     name: 'agents',
     description: 'list, inspect, stop, or release continuable background agents',
-    handler: (invocation: CommandInvocation) => executeAgents(snapshotServices, subagents, agents, invocation.agent, invocation.rawInput, invocation.signal),
+    handler: (invocation: CommandInvocation) => executeAgents(snapshotServices, subagents, agents, disposals, invocation.agent, invocation.rawInput, invocation.signal),
   }, {
     usage: ['[<id>]'],
     subcommands: [
       { word: 'detail', args: '<id>', summary: 'Show one background agent by id (the bare form lists all)' },
       { word: 'stop', args: '<id>', summary: 'Interrupt a running agent\'s current turn (the activation stays resident; "/agents release <id>" evicts it)' },
-      { word: 'release', args: '<id>', summary: 'Evict an agent\'s resident activation (and resident descendants\'), freeing the capacity slot it held; cooperative; one-way in this session' },
+      { word: 'release', args: '<id>', summary: 'Evict an agent\'s resident activation, freeing the capacity slot it held (its delegates are unaffected); cooperative; one-way in this session' },
     ],
   }))
 }

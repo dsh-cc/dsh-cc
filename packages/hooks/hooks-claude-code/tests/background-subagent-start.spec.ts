@@ -100,7 +100,8 @@ describe('hooks-claude-code — SubagentStart on background starts (§4.14)', ()
     const started = await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'background probe',
-      request: { prompt: [{ type: 'text', text: 'slow work' }], parent },
+      prompt: [{ type: 'text', text: 'slow work' }],
+      parent,
       signal: new AbortController().signal,
       delivery: 'parent',
     })

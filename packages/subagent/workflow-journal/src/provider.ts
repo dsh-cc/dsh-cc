@@ -53,16 +53,15 @@ export interface WorkflowJournalRegistry {
   markCached(runId: WorkflowRunId, arrivalIndex: number): void
 }
 
-/** The subagents-service surface the provider consumes (rc.5). */
+/** The subagents-service surface the provider consumes (rc.5 flat spec). */
 export interface SubagentServiceLike {
   getProvider(name: string): SubagentProvider | undefined
   startActivation(spec: {
     provider: string
     label: string
-    request: Omit<ResolvedSubagentStartRequest, 'label' | 'signal'>
     signal: AbortSignal
     delivery: 'parent' | 'caller'
-  }): Promise<SubagentActivation>
+  } & Omit<ResolvedSubagentStartRequest, 'label' | 'signal'>): Promise<SubagentActivation>
 }
 
 /** Per-run journal state for the single in-flight run (registry constraint). */
@@ -263,7 +262,7 @@ export class CcWorkflowJournalProvider implements SubagentProvider {
     const activation = await this.subagents.startActivation({
       provider: 'spawn',
       label: label ?? `workflow child ${idx}`,
-      request: rest,
+      ...rest,
       signal,
       delivery: 'caller',
     })

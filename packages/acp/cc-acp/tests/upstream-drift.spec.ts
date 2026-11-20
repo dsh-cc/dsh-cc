@@ -293,7 +293,7 @@ const DRIFT_ALLOWANCE: Record<
       "await Promise.race([this.agent.whenIdle(), cancelled])",
       "await this.outputTail",
       "const cancelled = inflight.cancellationDone.promise",
-      "const children = await Promise.race([subagents?.waitForChildren(this.agent), cancelled])",
+      "const children = await Promise.race([subagents?.waitForTreeWork(this.agent), cancelled])",
       "const done = inflight.cancellationDone",
       "const firstCancellation = !inflight.admissionController.signal.aborted",
       "const idleAt = (seq: Session['seq']): boolean => this.agent.status === 'idle' && this.agent.session.seq === seq",

@@ -69,14 +69,16 @@ function seedHomes(prefix: string): string {
 }
 
 interface SubagentsSeam {
-  start(name: string, request: {
-    label?: string
+  startActivation(spec: {
+    provider: string
+    label: string
     prompt: readonly { type: 'text'; text: string }[]
     parent: unknown
-    signal: AbortSignal
     agentOptions?: Record<string, string>
     maxDepth?: number
-  }): Promise<{ id: unknown; result: Promise<{ stopReason: string }> }>
+    signal: AbortSignal
+    delivery: 'parent' | 'caller'
+  }): Promise<{ childId: string; result: Promise<{ stopReason: string }>; dispose(): Promise<void> }>
 }
 
 const reasoning: LlmModelReasoningInfo = {
@@ -191,12 +193,10 @@ describe('config-snapshot integration (§5 item 4)', () => {
     const run = await subagents.startActivation({
       provider: 'spawn',
       label: 'snapshot-child',
-      request: {
-        prompt: [{ type: 'text', text: 'work' }],
-        parent,
-        agentOptions: { provider: 'mock', model: 'mock' },
-        maxDepth: 2,
-      },
+      prompt: [{ type: 'text', text: 'work' }],
+      parent,
+      agentOptions: { provider: 'mock', model: 'mock' },
+      maxDepth: 2,
       signal,
       delivery: 'caller',
     })

@@ -88,7 +88,7 @@ profile 会被还原为 store bundle，已存在的 store profile 会被治愈�
 `dsh-cc acp [...]` 启动 Agent Client Protocol 通道。bin 在任何 TUI 处理之前
 就拦截它（`bin/dsh-cc.js:37-99`），先用 ACP 基础 bundle 引导独立的
 `cc-acp` profile（`bootstrap.mjs:18-32`；安装的 `@deepseek-ai/dsh-acp-app`
-固定为 `0.2.1-rc.5`），再以剩余参数 spawn `dsh --profile cc-acp`。stdout
+固定为 `0.2.2-rc.5`），再以剩余参数 spawn `dsh --profile cc-acp`。stdout
 属于 ACP 的 NDJSON 协议，因此 bootstrap 与安装输出只写 stderr，绝不消费
 stdin，子进程继承 stdio。该路径不执行任何 TUI flag 处理，因此 `--worktree`
 与各 resume flag 都原样透传。

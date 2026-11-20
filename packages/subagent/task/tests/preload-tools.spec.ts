@@ -102,13 +102,18 @@ async function mount(opts: { toolSearch?: unknown; order?: string[] } = {}): Pro
   const seam: Record<string, unknown> = {
     async startActivation(spec: Record<string, unknown>) {
       order.push('start')
-      continuableStarts.push({ provider: spec['provider'] as string, request: spec['request'] as Record<string, unknown> })
+      // rc.5 flat spec: strip the envelope; the rest is the provider request.
+      const {
+        provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+        ...request
+      } = spec
+      continuableStarts.push({ provider: spec['provider'] as string, request })
       const childId = (spec['childId'] as string | undefined) ?? `child-${continuableStarts.length}`
       const runId = `run-${continuableStarts.length}`
       // Mirror the harness: subagent/start fires for the first epoch before
       // the creation call resolves (the collector reserves before start).
       emit('subagent/start', { runId, provider: 'spawn', id: childId, local: true })
-      const settled = await (await provider.start(spec['request'] ?? {})).result
+      const settled = await (await provider.start(request)).result
       emit('subagent/end', {
         runId,
         provider: 'spawn',

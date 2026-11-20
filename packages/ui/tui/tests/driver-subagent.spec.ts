@@ -438,28 +438,29 @@ describe('createDriver /agents release', () => {
 
   interface ReleaseHarness {
     ctx: ReturnType<typeof makeCtx>['ctx']
-    drain: ReturnType<typeof vi.fn>
+    tryDispose: ReturnType<typeof vi.fn>
     interrupt: ReturnType<typeof vi.fn>
     ccAgentsList: ReturnType<typeof vi.fn>
   }
 
-  /** ctx with ccAgents published and a stubbed subagents drain seam. */
+  /** ctx with ccAgents published and a stubbed ccContinuableDisposals receipt seam. */
   function makeReleaseCtx(agent: FakeAgent, rows: unknown[] = []): ReleaseHarness {
     const built = makeCtx(agent)
-    const drain = vi.fn(async () => {})
+    const tryDispose = vi.fn(async () => ({ held: true as const, disposed: Promise.resolve() }))
     const interrupt = vi.fn()
     const ccAgentsList = vi.fn(async () => rows)
     const ctxAny = built.ctx as unknown as { get: (key: string) => unknown }
     const baseGet = ctxAny.get.bind(built.ctx)
     ctxAny.get = (key: string) => {
       if (key === 'ccAgents') return { list: ccAgentsList }
-      if (key === 'subagents') return { interrupt, listChildren: async () => [], drainChildren: drain }
+      if (key === 'subagents') return { interrupt, listDescendants: async () => [] }
+      if (key === 'ccContinuableDisposals') return { tryDispose }
       return baseGet(key)
     }
-    return { ctx: built.ctx, drain, interrupt, ccAgentsList }
+    return { ctx: built.ctx, tryDispose, interrupt, ccAgentsList }
   }
 
-  it('releases via the drain seam without consulting snapshot rows (T23 catalog-miss + registry-hit)', async () => {
+  it('releases via the receipt registry without consulting snapshot rows (T23 catalog-miss + registry-hit)', async () => {
     const agent = makeFakeAgent()
     // Registry hit (resident idle) while the child catalog misses the id —
     // the registry-only release path.
@@ -468,14 +469,18 @@ describe('createDriver /agents release', () => {
       get: (id: string) => (resident && id === 'child-1' ? { status: 'idle' } : undefined),
     }
     const harness = makeReleaseCtx(agent)
-    // The drain evicts: the registry entry disappears after the drain call.
-    const releaseDrain = vi.fn(async () => { resident = false })
+    // The disposal evicts: the registry entry disappears once it settles.
+    const releaseDispose = vi.fn(async () => {
+      resident = false
+      return { held: true as const, disposed: Promise.resolve() }
+    })
     const ctxAny = harness.ctx as unknown as { get: (key: string) => unknown }
     const baseGet = ctxAny.get.bind(harness.ctx)
     ctxAny.get = (key: string) => {
       if (key === 'subagents') {
-        return { interrupt: harness.interrupt, listChildren: async () => [], drainChildren: releaseDrain }
+        return { interrupt: harness.interrupt, listDescendants: async () => [] }
       }
+      if (key === 'ccContinuableDisposals') return { tryDispose: releaseDispose }
       return baseGet(key)
     }
     // The registry rides the ctx.agents PROPERTY per F8, not ctx.get('agents').
@@ -492,28 +497,28 @@ describe('createDriver /agents release', () => {
       expect(row.text).toBe(
         '(Note: child-1 was absent from the readable child catalog — released via the live registry only.) '
         + 'Released agent child-1: its resident (idle) activation was evicted — the capacity slot it held is free. '
-        + 'Its resident descendants (if any) were evicted with it. The persisted session survives on disk; within this session it cannot be continued '
+        + 'Its resident delegates (if any) are unaffected and must be released individually. The persisted session survives on disk; within this session it cannot be continued '
         + '(upstream cold-resume-after-drain gap); /agents marks it [released] for the rest of this process.',
       )
     }
-    // The drain spy saw the driver's current agent and exactly [id].
-    expect(releaseDrain).toHaveBeenCalledTimes(1)
-    const [drainParent, drainIds] = releaseDrain.mock.calls[0] as [unknown, unknown[]]
-    expect(drainParent).toBe(agent)
-    expect(drainIds.map(String)).toEqual(['child-1'])
+    // The receipt-disposal spy saw (parentSessionId, childId) SessionIds.
+    expect(releaseDispose).toHaveBeenCalledTimes(1)
+    const [disposeParent, disposeChild] = releaseDispose.mock.calls[0] as [unknown, unknown]
+    expect(String(disposeParent)).toBe(String(agent.id))
+    expect(String(disposeChild)).toBe('child-1')
     // The branch never consulted the snapshot rows.
     expect(harness.ccAgentsList).not.toHaveBeenCalled()
   })
 
-  it('release of a ready row with no registry residency reports not-resident and never drains (T24)', async () => {
+  it('release of a ready row with no registry residency reports not-resident and never disposes (T24)', async () => {
     const agent = makeFakeAgent()
     const harness = makeReleaseCtx(agent)
-    // Catalog hit (continuable) with no registry residency → not-resident.
+    // Catalog hit (continuable, depth 1) with no registry residency → not-resident.
     const ctxAny = harness.ctx as unknown as { get: (key: string) => unknown }
     const baseGet = ctxAny.get.bind(harness.ctx)
     ctxAny.get = (key: string) => {
       if (key === 'subagents') {
-        return { interrupt: harness.interrupt, listChildren: async () => [{ id: 'child-1', mode: 'continuable' }], drainChildren: harness.drain }
+        return { interrupt: harness.interrupt, listDescendants: async () => [{ id: 'child-1', mode: 'continuable', depth: 1, kind: 'child' }] }
       }
       return baseGet(key)
     }
@@ -525,7 +530,7 @@ describe('createDriver /agents release', () => {
     if (row?.kind === 'status') {
       expect(row.text).toBe('Agent child-1 has no resident activation (settled or released); nothing was evicted and no capacity slot is held by it.')
     }
-    expect(harness.drain).not.toHaveBeenCalled()
+    expect(harness.tryDispose).not.toHaveBeenCalled()
   })
 
   it('fold-only composition refuses release but keeps fold listing unchanged (T25-tui)', async () => {

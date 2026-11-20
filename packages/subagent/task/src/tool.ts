@@ -55,6 +55,7 @@ import { ephemeralToolFilter } from './composition-plan.ts'
 import {
   backgroundTasksDisabled,
   collectForeground,
+  continuableDisposalsOf,
   preparedBackground,
   startBackground,
   wantsBackground,
@@ -254,6 +255,10 @@ export function registerTaskTool(
       }
       const seam = ctx.get('subagents') as SubagentsLike | undefined
       if (seam === undefined) throw new Error('subagent_fork unavailable: no subagents seam')
+      // §3.4.4: continuable background starts retain their dispose receipts
+      // through the published registry (threaded here — startBackground has
+      // no ctx of its own; collectForeground resolves it from its own ctx).
+      const disposals = continuableDisposalsOf(ctx)
 
       const type = args.subagent_type?.trim()
       const base = {
@@ -267,7 +272,7 @@ export function registerTaskTool(
       const disabled = backgroundTasksDisabled()
       if (type === undefined || type.length === 0 || type === GENERAL_PURPOSE) {
         if (wantsBackground(args, undefined, disabled)) {
-          return startBackground(seam, preparedBackground(base, capture), capture)
+          return startBackground(seam, preparedBackground(base, capture), capture, disposals)
         }
         return collectForeground(ctx, seam, preparedBackground(base, capture), capture, exec)
       }
@@ -283,11 +288,14 @@ export function registerTaskTool(
             + 'run_in_background: true.',
           )
         }
+        // rc.5 flat spec: label/signal never ride inside a spread — destructure
+        // them out of `base`, spread the request rest (prompt/parent/maxDepth).
+        const { label, signal, ...forkRequest } = base
         const activation = await seam.startActivation({
           provider: FORK_SENTINEL,
-          label: base.label,
-          request: base,
-          signal: exec.signal,
+          label,
+          ...forkRequest,
+          signal,
           delivery: 'caller',
         })
         // One-shot dispose policy: post-publication abort goes through
@@ -412,7 +420,7 @@ export function registerTaskTool(
               ? { ...withComposition, autoReleaseMs: definition.autoReleaseMs }
               : withComposition
             return wantsBackground(args, definition, disabled)
-              ? await startBackground(seam, withOverride, capture)
+              ? await startBackground(seam, withOverride, capture, disposals)
               : await collectForeground(ctx, seam, withOverride, capture, exec)
           })
           return preloadText === '' ? isolated : { ...isolated, text: `${isolated.text}\n${preloadText}` }
@@ -465,7 +473,7 @@ export function registerTaskTool(
           return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
         }
         if (wantsBackground(args, definition, disabled)) {
-          const result = await startBackground(seam, preparedBackground(folded, capture, definition, routes), capture)
+          const result = await startBackground(seam, preparedBackground(folded, capture, definition, routes), capture, disposals)
           return preloadText === '' ? result : { ...result, text: `${result.text}\n${preloadText}` }
         }
         const result = await collectForeground(ctx, seam, preparedBackground(folded, capture, definition, routes), capture, exec)

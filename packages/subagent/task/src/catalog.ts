@@ -189,9 +189,10 @@ export class AgentCatalogSection {
     const providerRemoved = 'subagent/provider-removed' as Parameters<typeof this.ctx.on>[0]
     // Seed with providers that mounted BEFORE this listener started
     // (production mounts cc-shell-glue before subagent-task): their add
-    // events already fired, but they are live in the index, so their
-    // removals must still invalidate the prompt — a removal is recognized
-    // only by membership in `brandedIds`.
+    // events already fired, but they are live in the `ccPluginAgents`
+    // snapshot (which `pluginIndex.knownIds()` now reads), so their removals
+    // must still invalidate the prompt — a removal is recognized only by
+    // membership in `brandedIds`.
     for (const id of this.pluginIndex.knownIds()) this.brandedIds.add(id)
     const disposeAdded = this.ctx.on(providerAdded, (provider: unknown) => {
       if (!isPluginAgentProvider(provider)) return

@@ -118,11 +118,12 @@ function setup(maxJournalBytes = 1 << 20): Fixture {
       // done by delegate.start happens here.
       startActivation: async (spec) => {
         const index = delegate.spawns.length
-        const request = spec.request as ResolvedSubagentStartRequest
+        // rc.5 flat spec: the request fields ride the activation spec top
+        // level (no `request:` wrapper) — read them straight off the spec.
         delegate.spawns.push({
-          promptText: promptText(request),
-          ...(request.agentOptions !== undefined ? { agentOptions: request.agentOptions } : {}),
-          ...(request.outputSchema !== undefined ? { outputSchema: request.outputSchema } : {}),
+          promptText: promptText(spec),
+          ...(spec.agentOptions !== undefined ? { agentOptions: spec.agentOptions } : {}),
+          ...(spec.outputSchema !== undefined ? { outputSchema: spec.outputSchema } : {}),
         })
         await new Promise(resolve => setTimeout(resolve, 1))
         return {
@@ -130,7 +131,7 @@ function setup(maxJournalBytes = 1 << 20): Fixture {
           messageId: `m-${index}` as never,
           result: Promise.resolve({
             output: [{ type: 'text' as const, text: `out-${index}` }],
-            ...(request.outputSchema !== undefined ? { structured: { structuredFor: index } } : {}),
+            ...(spec.outputSchema !== undefined ? { structured: { structuredFor: index } } : {}),
             stopReason: 'completed' as const,
           }),
           dispose: () => Promise.resolve(),

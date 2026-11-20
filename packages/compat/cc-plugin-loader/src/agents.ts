@@ -15,6 +15,7 @@
 
 import { readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { Context } from '@deepseek-ai/cordis'
 import { loadAgentsDir, applyActorContract } from '@dsh-cc/claude-code-agents'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
 import { resolveSpawnEffort, toAgentOptions } from '@dsh-cc/model-aliases'
@@ -47,14 +48,13 @@ export interface SubagentsSeam {
   registerProvider(provider: unknown): () => void
   /** Look up a provider by name, for backend resolution at `start`. */
   getProvider(name: string): unknown | undefined
-  /** Establish a managed child (rc.5); the plugin provider's execution path. */
+  /** Establish a managed child (rc.5 flat spec); the plugin provider's execution path. */
   startActivation(spec: {
     provider: string
     label: string
-    request: Record<string, unknown>
     signal: AbortSignal
     delivery: 'parent' | 'caller'
-  }): Promise<{
+  } & Record<string, unknown>): Promise<{
     childId: string
     result: Promise<unknown>
     dispose(): Promise<void>
@@ -147,18 +147,17 @@ export class AgentProvider implements SubagentBackend {
       this.gatePatterns?.() ?? DEFAULT_ACTOR_CONTRACT_MODELS,
     )
     // label/signal live at the activation-spec level; toolFilter/persona are
-    // gone from the request (the composition seam applies them).
+    // gone from the request (the composition seam applies them). `rest` can
+    // never carry label/signal (destructured out above) — rc.5 flat spec.
     const { label, signal, ...rest } = delegation
     const activation = await this.subagents.startActivation({
       provider: this.backendName,
       label: typeof label === 'string' ? label : this.name,
-      request: {
-        ...rest,
-        prompt: [{ type: 'text', text: gatedPrompt }],
-        ...(modelOverride !== undefined
-          ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
-          : {}),
-      },
+      ...rest,
+      prompt: [{ type: 'text', text: gatedPrompt }],
+      ...(modelOverride !== undefined
+        ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
+        : {}),
       signal: signal as AbortSignal,
       delivery: 'caller',
     })
@@ -213,6 +212,84 @@ export function scopedType(prefix: string, agentType: string): string {
   return `${clean}:${agentType}`
 }
 
+/**
+ * The root-realm `ccPluginAgents` service face (design §3.4.1, harness rc.5
+ * removed the subagents service's provider enumeration): the authoritative
+ * snapshot of the scoped (`plugin:agent`) ids this loader has registered,
+ * written inside `mountAgents` at registration time. The task package's
+ * `PluginAgentIndex` reads it lazily on every call; the harness's one-shot,
+ * no-replay `subagent/provider-added` events then only invalidate the catalog.
+ */
+export interface CcPluginAgentsService {
+  /** The currently registered scoped plugin-agent ids. */
+  knownIds(): readonly string[]
+  /** The agent definition registered under one scoped id. */
+  get(id: string): AgentDefinition | undefined
+}
+
+/**
+ * The mutable registry behind the root publication. One instance per root
+ * context, adopted by every later `mountAgents` call (entries from concurrent
+ * plugin mounts coexist; each mount removes its own entries on unload).
+ */
+class CcPluginAgentsRegistry implements CcPluginAgentsService {
+  private readonly entries = new Map<string, AgentDefinition>()
+
+  knownIds(): readonly string[] {
+    return [...this.entries.keys()]
+  }
+
+  get(id: string): AgentDefinition | undefined {
+    return this.entries.get(id)
+  }
+
+  /** Record one registered scoped id (registration time, mountAgents only). */
+  record(id: string, definition: AgentDefinition): void {
+    this.entries.set(id, definition)
+  }
+
+  /** Drop one entry (the provider's own disposer rides along). */
+  remove(id: string): void {
+    this.entries.delete(id)
+  }
+
+  /** Live entry count (slot-clear-on-empty check). */
+  get size(): number {
+    return this.entries.size
+  }
+}
+
+/**
+ * Provide-or-adopt the root-realm `ccPluginAgents` registry, following the
+ * CcPluginsService publication idiom (`bundle/cc-shell/src/ccPlugins.ts`):
+ * first publication `root.provide`s; a reclaim after an unload cleared the
+ * slot (or a stale sibling slot) takes the publication back via `root.set`
+ * with the SAME registry, so every mount writes into one shared snapshot.
+ * @param ctx - any context on the tree; publication always targets its root.
+ * @returns the shared live registry.
+ */
+function publishCcPluginAgents(ctx: Context): CcPluginAgentsRegistry {
+  const root = ctx.root
+  // The CcPluginsService idiom verbatim (bundle/cc-shell/src/ccPlugins.ts):
+  // inspect the isolate slot, provide on first publication, take the slot
+  // back via set after an unload cleared it (or a stale sibling held it).
+  const rootKey = root[Context.isolate]['ccPluginAgents']
+  const existing = rootKey === undefined ? undefined : root.reflect.store[rootKey]
+  const adopted = existing === undefined ? undefined : existing.value
+  if (adopted !== undefined && adopted !== null
+    && typeof (adopted as CcPluginAgentsService).knownIds === 'function'
+    && typeof (adopted as Record<string, unknown>)['record'] === 'function') {
+    return adopted as CcPluginAgentsRegistry
+  }
+  const registry = new CcPluginAgentsRegistry()
+  if (existing === undefined) {
+    root.provide('ccPluginAgents', registry)
+  } else {
+    root.set('ccPluginAgents', registry)
+  }
+  return registry
+}
+
 /** Options for mounting one plugin's agents. */
 export interface MountAgentsOptions {
   /** The plugin root directory; standard `agents/` resolves against it. */
@@ -221,6 +298,12 @@ export interface MountAgentsOptions {
   readonly manifest: CcPluginManifest
   /** The subagent seam (probed; `undefined` to skip agents). */
   readonly subagents: SubagentsSeam | undefined
+  /**
+   * Any context on the host tree. When present, the mount publishes the
+   * scoped ids it registers into the root-realm `ccPluginAgents` registry
+   * (the rc.5 PluginAgentIndex snapshot); its disposers remove them again.
+   */
+  readonly ctx?: Context
   /** Optional plugin manifest-name prefix applied to each agent type. */
   readonly namespacePrefix?: string
   /** Optional spawn-time model resolver threaded into every provider. */
@@ -249,6 +332,21 @@ export async function mountAgents(options: MountAgentsOptions): Promise<{ dispos
   }
   const subagents = options.subagents
   const prefix = options.namespacePrefix
+  // rc.5 (design §3.4.1): the authoritative plugin-agent snapshot. Published
+  // on the ROOT realm from whatever fiber mounts plugin agents (the glue's
+  // mountCcPlugin, exactly like CcPluginsService / mcpConnections) so a
+  // realm-interior PluginAgentIndex resolves it. The registry records ONLY
+  // scoped (`prefix:agent`) registrations — a prefix-less mount stays
+  // undiscoverable by Task, matching the historical colon guard.
+  const registry = options.ctx !== undefined && prefix !== undefined
+    ? {
+      root: options.ctx.root as unknown as {
+        get(key: string, optional?: boolean): unknown
+        set(key: string, value: unknown): void
+      },
+      service: publishCcPluginAgents(options.ctx),
+    }
+    : undefined
   try {
     for (const definition of definitions) {
       // Colon guard (mirrors the file-registry guard in discovery): a colon
@@ -273,7 +371,25 @@ export async function mountAgents(options: MountAgentsOptions): Promise<{ dispos
         ...prefix !== undefined ? [scopedName] : [],
         options.gatePatterns,
       )
-      disposers.push(subagents.registerProvider(provider))
+      const unregister = subagents.registerProvider(provider)
+      // Snapshot bookkeeping rides the provider's own disposer, so unmounting
+      // the plugin (or the transactional rollback below) drops the entry too;
+      // when the registry runs empty the root slot is cleared so consumers
+      // degrade to undefined instead of holding a dead registry (CcPlugins
+      // clear-on-unload idiom).
+      if (registry !== undefined) {
+        registry.service.record(scopedName, definition)
+        const { root, service } = registry
+        disposers.push(() => {
+          unregister()
+          service.remove(scopedName)
+          if (service.size === 0 && root.get('ccPluginAgents', false) === service) {
+            root.set('ccPluginAgents', undefined)
+          }
+        })
+      } else {
+        disposers.push(unregister)
+      }
       tally.addLoaded()
     }
   } catch (error) {

@@ -47,12 +47,10 @@ interface SubagentsSeam {
   startActivation(spec: {
     provider: string
     label: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      agentOptions?: Record<string, string>
-      maxDepth?: number
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    agentOptions?: Record<string, string>
+    maxDepth?: number
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{ childId: string; result: Promise<{ stopReason: string }>; dispose(): Promise<void> }>
@@ -102,12 +100,10 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     const run = await subagents.startActivation({
       provider: 'spawn',
       label: 'stamped-child',
-      request: {
-        prompt: [{ type: 'text', text: 'work' }],
-        parent,
-        agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
-        maxDepth: 3,
-      },
+      prompt: [{ type: 'text', text: 'work' }],
+      parent,
+      agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
+      maxDepth: 3,
       signal,
       delivery: 'caller',
     })
@@ -126,11 +122,9 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     const run = await subagents.startActivation({
       provider: 'spawn',
       label: 'plain-child',
-      request: {
-        prompt: [{ type: 'text', text: 'work' }],
-        parent,
-        agentOptions: { provider: 'mock', model: 'glm-5.3' },
-      },
+      prompt: [{ type: 'text', text: 'work' }],
+      parent,
+      agentOptions: { provider: 'mock', model: 'glm-5.3' },
       signal,
       delivery: 'caller',
     })
@@ -159,12 +153,10 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     const run = await subagents.startActivation({
       provider: 'fork',
       label: 'fork-child',
-      request: {
-        prompt: [{ type: 'text', text: 'inherited work' }],
-        parent,
-        agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
-        maxDepth: 3,
-      },
+      prompt: [{ type: 'text', text: 'inherited work' }],
+      parent,
+      agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
+      maxDepth: 3,
       signal,
       delivery: 'caller',
     })
@@ -189,12 +181,10 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     const child = await subagents.startActivation({
       provider: 'spawn',
       label: 'stamped-parent-of-grandchild',
-      request: {
-        prompt: [{ type: 'text', text: 'work' }],
-        parent,
-        agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
-        maxDepth: 3,
-      },
+      prompt: [{ type: 'text', text: 'work' }],
+      parent,
+      agentOptions: { provider: 'mock', model: 'glm-5.3', reasoningEffort: 'max' },
+      maxDepth: 3,
       signal,
       delivery: 'caller',
     })
@@ -207,11 +197,9 @@ describe('alias-stamped reasoningEffort reaches the model request (integration)'
     const grandchild = await subagents.startActivation({
       provider: 'spawn',
       label: 'grandchild',
-      request: {
-        prompt: [{ type: 'text', text: 'nested work' }],
-        parent: childAgent!,
-        maxDepth: 3,
-      },
+      prompt: [{ type: 'text', text: 'nested work' }],
+      parent: childAgent!,
+      maxDepth: 3,
       signal,
       delivery: 'caller',
     })

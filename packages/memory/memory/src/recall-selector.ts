@@ -74,18 +74,16 @@ export interface MemorySelector {
   ): Promise<string[]>
 }
 
-/** Structural subset of the subagent seam used by the selector. */
+/** Structural subset of the subagent seam used by the selector (rc.5 flat spec). */
 interface SubagentLike {
   startActivation(spec: {
     provider: string
     label: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      maxDepth?: number
-      outputSchema?: Record<string, unknown>
-      agentOptions?: unknown
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    maxDepth?: number
+    outputSchema?: Record<string, unknown>
+    agentOptions?: unknown
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{
@@ -142,15 +140,13 @@ export class SubagentMemorySelector implements MemorySelector {
       activation = await subagents.startActivation({
         provider: this.providerName,
         label: 'memory-recall',
-        request: {
-          prompt: [{ type: 'text', text: `${system}\n\n<user_query>\n${query}\n</user_query>\n\nAvailable memories:\n${manifest}${toolsSection}` }],
-          parent: this.parent,
-          outputSchema: RECALL_FILES_SCHEMA,
-          // Defense-in-depth recursion cap: the pre-step listener already gates
-          // recall to depth-zero agents, so this child never needs to delegate.
-          maxDepth: 1,
-          ...(this.agentOptions !== undefined ? { agentOptions: this.agentOptions } : {}),
-        },
+        prompt: [{ type: 'text', text: `${system}\n\n<user_query>\n${query}\n</user_query>\n\nAvailable memories:\n${manifest}${toolsSection}` }],
+        parent: this.parent,
+        outputSchema: RECALL_FILES_SCHEMA,
+        // Defense-in-depth recursion cap: the pre-step listener already gates
+        // recall to depth-zero agents, so this child never needs to delegate.
+        maxDepth: 1,
+        ...(this.agentOptions !== undefined ? { agentOptions: this.agentOptions } : {}),
         signal,
         delivery: 'caller',
       })

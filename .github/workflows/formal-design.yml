@@ -15,7 +15,7 @@ env:
   # here silently tests against a different harness line and forks the pnpm
   # store cache key. publish.yml derives its pin from presubmit.yml; this
   # workflow is the one place the value is duplicated by hand.
-  DSH_HARNESS_REF: 2f97f60455605e915b8176d9170cae337bfedcc6 # 0.2.2-rc.1 release commit (keep equal to presubmit.yml)
+  DSH_HARNESS_REF: 9c2670d3bce5275e0d1610272958121af87787bb # 0.2.2-rc.5 release commit (keep equal to presubmit.yml)
 
 defaults:
   run:

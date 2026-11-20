@@ -164,8 +164,9 @@ plus its own private harness checkout as its sibling. The scaffold is
 registrations land in their respective repos' metadata):
 
 ```bash
-# create: <ref> is a sha/rev in the harness repo, or a bare version like
-# 0.2.2-rc.1 (resolved to its `release(dsh):` commit, version re-checked)
+# create: <ref> is a sha/rev in the harness repo (e.g.
+# 9c2670d3bce5275e0d1610272958121af87787bb), or a bare version like 0.2.2-rc.5
+# (resolved to its `release(dsh):` commit, version re-checked)
 scripts/mk-harness-pair.sh create pair-next --ref <next-line-sha-or-version>
 scripts/mk-harness-pair.sh list
 scripts/mk-harness-pair.sh remove pair-next   # teardown, branch kept by default

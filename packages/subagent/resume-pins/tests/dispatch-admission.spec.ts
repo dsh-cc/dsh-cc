@@ -10,15 +10,24 @@ afterEach(() => { vi.useRealTimers(); for (const root of roots.splice(0)) rmSync
 let serial = 0
 function world(n: number) {
   const running = new Set(Array.from({ length: n }, (_, i) => `c-${i}`))
-  const listed = [...running, 'A', 'B']
   const registry = { get: (id: unknown) => running.has(String(id)) ? { status: 'running' } : undefined }
   const root = mkdtempSync(join(tmpdir(), 'dispatch-admission-')); roots.push(root)
   const handlers = new Map<string, (...args: any[]) => Promise<any>>()
   const parent = { id: `dispatch-parent-${serial++}` }
-  const services = { get: (name: string) => name === 'agents' ? registry : name === 'subagents' ? { listChildren: async () => listed.map(id => ({ id })) } : undefined }
-  const ctx = { ...services, agents: registry, provide() {}, effect() {}, logger: { warn() {} }, on(name: string, fn: any) { handlers.set(name, fn) } }
+  // rc.5: the tools/execute admission reads `arguments.agent` — a NAME — and
+  // resolves through the subagents seam, faked here down to the documented
+  // bare-token fallback: an unmatched single token resolves to Session-id
+  // semantics (uppercase 'A'/'B'/'parent-target' are never catalog names).
+  const subagents = {
+    resolveName: async (_caller: unknown, agent: string) => {
+      if (agent.includes('/')) throw new Error('AGENT_NAME_NOT_FOUND')
+      return agent
+    },
+  }
+  const services = { get: (name: string) => name === 'agents' ? registry : undefined }
+  const ctx = { ...services, agents: registry, subagents, provide() {}, effect() {}, logger: { warn() {} }, on(name: string, fn: any) { handlers.set(name, fn) } }
   apply(ctx as never, { pinsRoot: root })
-  const call = (target: string, signal = new AbortController().signal) => ({ name: 'send_message', token: Symbol('dsh.tool.execution'), arguments: { agent_id: target }, agent: parent, signal })
+  const call = (target: string, signal = new AbortController().signal) => ({ name: 'send_message', token: Symbol('dsh.tool.execution'), arguments: { agent: target }, agent: parent, signal })
   return { running, parent, services, ctx, call, pre: handlers.get('tools/pre-execute')!, execute: handlers.get('tools/execute')! }
 }
 const allow = async () => ({ kind: 'allow' })

@@ -98,12 +98,10 @@ export async function dispatchEphemeral(
       provider: PROVIDER_SPAWN,
       label: folded.label ?? 'ephemeral',
       ...(childId !== undefined ? { childId } : {}),
-      request: {
-        prompt: folded.prompt,
-        parent: folded.parent,
-        ...(folded.agentOptions !== undefined ? { agentOptions: folded.agentOptions } : {}),
-        ...(folded.maxDepth !== undefined ? { maxDepth: folded.maxDepth } : {}),
-      },
+      prompt: folded.prompt,
+      parent: folded.parent,
+      ...(folded.agentOptions !== undefined ? { agentOptions: folded.agentOptions } : {}),
+      ...(folded.maxDepth !== undefined ? { maxDepth: folded.maxDepth } : {}),
       signal,
       delivery: 'caller',
     })

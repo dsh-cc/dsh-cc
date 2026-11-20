@@ -1076,6 +1076,13 @@ const DRIFT_ALLOWANCE: Record<string, string> = {
   // meaning — mounting it would change the rendered system prompt.
   'tool-plugin-market': 'upstream-only (disabled) surface',
   'time-context': 'upstream-only surface without CC parity',
+  // rc.5: upstream's standard preset mounts @deepseek-ai/dsh-tool-office; CC
+  // deliberately does not — there is no office tool surface in the CC factorization.
+  'tool-office': 'CC has no office tool surface',
+  // rc.5: upstream's skill-filesystem row gained a customSkillDirs !!js config
+  // resolving the agent-preset skills dir; CC owns its skill mounts, so the
+  // upstream row config deliberately diverges here.
+  'skill-filesystem': 'CC mounts its own skill filesystem rows',
   // cc keeps its own plan-mode wording (the section text is a prompt contract
   // pinned by composition tests), so an upstream wording change is expected.
   planning: 'cc-authored plan-mode section wording',

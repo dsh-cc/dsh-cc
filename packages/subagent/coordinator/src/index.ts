@@ -185,13 +185,26 @@ export function installCoordinatorMode(
       }],
     },
     async execute(args, exec) {
-      const started = await provider.startActivation({
+      // §3.4.4: worker starts are continuable parent-delivery spawns, so
+      // their dispose receipts must be retained for the release valve. The
+      // start helper lives ON the root-realm `ccContinuableDisposals`
+      // service (published by @dsh-cc/subagent-task in the cc-shell
+      // composition) — this package needs no dependency on that package; an
+      // absent service is a readable refusal, never a TypeError.
+      const disposals = ctx.get('ccContinuableDisposals') as {
+        startTracked?<S extends { parent: { id: unknown } }, A extends { childId: SessionId }>(
+          seam: { startActivation(spec: S): Promise<A> },
+          spec: S,
+        ): Promise<A>
+      } | undefined
+      if (disposals === undefined || typeof disposals.startTracked !== 'function') {
+        throw new Error('spawn_worker requires the cc-shell composition (ccContinuableDisposals service unavailable)')
+      }
+      const started = await disposals.startTracked(provider, {
         provider: registry.provider,
         label: args.name,
-        request: {
-          prompt: [{ type: 'text' as const, text: args.prompt }],
-          parent: agent,
-        },
+        prompt: [{ type: 'text' as const, text: args.prompt }],
+        parent: agent,
         signal: exec.signal,
         delivery: 'parent',
       })

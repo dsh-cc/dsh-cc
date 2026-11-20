@@ -1,25 +1,24 @@
 /**
  * Tests for the PluginAgentIndex: live enumeration of plugin agent providers
- * from the `subagents` seam, the brand + structural guard (loader brand, plus
- * function `start`, colon scoped id, definition shape), exact-match resolve,
- * and the lazy seam read (plugin mounts are effect-scoped and may appear
- * after `apply()`).
- *
- * Provider fixtures combine hand-built fakes (the tool.spec.ts fake-seam
- * pattern) with REAL `AgentProvider` instances from `@dsh-cc/plugin-loader`,
- * built the way `mountAgents` builds them for a tmp plugin root (scoped
- * `registeredName`, bare `definition.agentType`).
+ * through the root-realm `ccPluginAgents` registry (§3.4.1 — the harness
+ * subagents service no longer enumerates providers; the loader-written
+ * snapshot is the authoritative source, and the provider EVENTS only
+ * invalidate the catalog listener — they can no longer satisfy these tests).
+ * The index reads the service lazily on every call, resolves by exact scoped
+ * id, and renders its `isPluginAgentProvider` brand guard for the catalog's
+ * event payloads.
  */
 import { describe, expect, it, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { AgentProvider, mountCcPlugin } from '@dsh-cc/plugin-loader'
+import { mountCcPlugin, AgentProvider } from '@dsh-cc/plugin-loader'
+import type { CcPluginAgentsService } from '@dsh-cc/plugin-loader'
 import { loadAgentsDir } from '@dsh-cc/claude-code-agents'
 import type { AgentDefinition } from '@dsh-cc/claude-code-agents'
-import { PluginAgentIndex } from '../src/plugin-agents.ts'
-import { registerTaskTool, TASK_TOOL } from '../src/tool.ts'
+import { PluginAgentIndex, isPluginAgentProvider } from '../src/plugin-agents.ts'
+import { registerTaskTool } from '../src/tool.ts'
 import { AgentRegistry } from '../src/registry.ts'
 import { renderCatalog } from '../src/catalog.ts'
 
@@ -35,25 +34,29 @@ function tempPluginRoot(): string {
   return root
 }
 
-/** A mutable fake subagents seam (the tool.spec.ts makeSeam pattern, minus start). */
-function fakeSeam(): {
-  seam: { list(): string[]; getProvider(name: string): unknown }
-  register(provider: unknown): void
-  unregister(provider: unknown): void
+/**
+ * A mutable fake `ccPluginAgents` service (the registry mountAgents publishes
+ * in production) with direct record/remove levers.
+ */
+function fakeRegistry(): {
+  service: CcPluginAgentsService
+  record: (id: string, definition: AgentDefinition) => void
+  remove: (id: string) => void
 } {
-  const byName = new Map<string, unknown>()
+  const byId = new Map<string, AgentDefinition>()
   return {
-    seam: {
-      list: () => [...byName.keys()],
-      getProvider: (name: string) => byName.get(name),
+    service: {
+      knownIds: () => [...byId.keys()],
+      get: id => byId.get(id),
     },
-    register(provider) {
-      byName.set((provider as { name: string }).name, provider)
-    },
-    unregister(provider) {
-      byName.delete((provider as { name: string }).name)
-    },
+    record: (id, definition) => { byId.set(id, definition) },
+    remove: id => { byId.delete(id) },
   }
+}
+
+/** A ctx duck whose only service is the fake registry. */
+function ctxOver(service: CcPluginAgentsService | undefined): Context {
+  return { get: (key: string) => key === 'ccPluginAgents' ? service : undefined } as unknown as Context
 }
 
 function pluginDef(agentType: string, systemPrompt = `You are the ${agentType}.`): AgentDefinition {
@@ -67,16 +70,8 @@ function pluginDef(agentType: string, systemPrompt = `You are the ${agentType}.`
   } as AgentDefinition
 }
 
-/** A builtin-style provider: no definition (spawn/fork shape). */
-function builtinProvider(name: string): unknown {
-  return {
-    name,
-    start: async () => ({ result: Promise.resolve({ stopReason: 'completed' }) }),
-  }
-}
-
-describe('PluginAgentIndex', () => {
-  it('lists real AgentProvider instances with scoped ids and their definitions', async () => {
+describe('PluginAgentIndex over the ccPluginAgents service', () => {
+  it('lists real definitions with their scoped ids', async () => {
     const root = tempPluginRoot()
     mkdirSync(join(root, 'agents'), { recursive: true })
     writeFileSync(
@@ -86,12 +81,10 @@ describe('PluginAgentIndex', () => {
     )
     const defs = await loadAgentsDir(join(root, 'agents'), 'project')
     expect(defs).toHaveLength(1)
-    const { seam, register } = fakeSeam()
-    // Exactly how mountAgents registers under a namespacePrefix.
-    for (const def of defs) {
-      register(new AgentProvider(def, () => undefined, undefined, `p:${def.agentType}`))
-    }
-    const index = new PluginAgentIndex({ get: () => seam })
+    const registry = fakeRegistry()
+    // Exactly what mountAgents records under a namespacePrefix.
+    registry.record(`p:${defs[0]!.agentType}`, defs[0]!)
+    const index = new PluginAgentIndex(ctxOver(registry.service))
     expect(index.list()).toEqual([
       { id: 'p:researcher', definition: defs[0] },
     ])
@@ -101,54 +94,66 @@ describe('PluginAgentIndex', () => {
     expect(index.knownIds()).toEqual(['p:researcher'])
   })
 
-  it('excludes builtin providers without a colon-scoped name or definition', () => {
-    const { seam, register } = fakeSeam()
-    register(builtinProvider('spawn'))
-    register(builtinProvider('fork'))
-    const index = new PluginAgentIndex({ get: () => seam })
-    expect(index.list()).toEqual([])
-    expect(index.knownIds()).toEqual([])
+  it('sorts the listing deterministically by scoped id', () => {
+    const registry = fakeRegistry()
+    registry.record('z:omega', pluginDef('omega'))
+    registry.record('a:alpha', pluginDef('alpha'))
+    registry.record('m:middle', pluginDef('middle'))
+    const index = new PluginAgentIndex(ctxOver(registry.service))
+    expect(index.knownIds()).toEqual(['a:alpha', 'm:middle', 'z:omega'])
   })
 
-  it('excludes a brandless provider even when it is definition-shaped (§9.4 brand guard)', () => {
-    const { seam, register } = fakeSeam()
-    // Shape-faked provider: start fn + colon name + definition-shaped property,
-    // but never created by the loader (no PLUGIN_AGENT_PROVIDER_BRAND).
-    register({
+  it('reads the service lazily: ids recorded AFTER index construction are seen (the pre-registration scenario)', () => {
+    // The service is published and the index constructed BEFORE any plugin
+    // registers (production mounts cc-shell-glue before subagent-task).
+    const registry = fakeRegistry()
+    const index = new PluginAgentIndex(ctxOver(registry.service))
+    expect(index.list()).toEqual([])
+    registry.record('p:researcher', pluginDef('researcher'))
+    expect(index.list()).toHaveLength(1)
+    expect(index.resolve('p:researcher')).toBeDefined()
+    // …and a removal is seen too (live every call, no caching).
+    registry.remove('p:researcher')
+    expect(index.list()).toEqual([])
+  })
+
+  it('an absent service (no plugin loader mounted) reads as no plugin agents', () => {
+    const index = new PluginAgentIndex(ctxOver(undefined))
+    expect(index.list()).toEqual([])
+    expect(index.knownIds()).toEqual([])
+    expect(index.resolve('p:anything')).toBeUndefined()
+  })
+
+  it('the seamOverride substitutes the service for hermetic tests', () => {
+    let service: CcPluginAgentsService | undefined
+    const index = new PluginAgentIndex(ctxOver(undefined), { seam: () => service })
+    expect(index.list()).toEqual([])
+    const registry = fakeRegistry()
+    registry.record('p:late', pluginDef('late'))
+    service = registry.service
+    expect(index.knownIds()).toEqual(['p:late'])
+  })
+})
+
+describe('isPluginAgentProvider (the catalog event guard)', () => {
+  it('accepts a loader-built AgentProvider with a scoped name and definition', () => {
+    const provider = new AgentProvider(pluginDef('researcher'), (() => undefined) as never, undefined, 'p:researcher')
+    expect(isPluginAgentProvider(provider)).toBe(true)
+  })
+
+  it('rejects builtin providers, brandless shape-fakes, and unscoped providers', () => {
+    expect(isPluginAgentProvider({
+      name: 'spawn',
+      start: async () => ({}),
+    })).toBe(false)
+    // Shape-fake without the loader brand.
+    expect(isPluginAgentProvider({
       name: 'p:fake',
       start: async () => ({}),
       definition: { agentType: 'fake', systemPrompt: 'You are fake.', whenToUse: 'fake' },
-    })
-    const index = new PluginAgentIndex({ get: () => seam })
-    expect(index.list()).toEqual([])
-    expect(index.resolve('p:fake')).toBeUndefined()
-  })
-
-  it('applies the structural guard: start + colon name + definition shape', () => {
-    const { seam, register } = fakeSeam()
-    // Colon name but no definition → excluded.
-    register({ name: 'p:bare', start: async () => ({}) })
-    // Definition-shaped but no start function → excluded.
-    register({ name: 'p:nostart', definition: { agentType: 'x', systemPrompt: 's' } })
-    // Definition without a string agentType/systemPrompt → excluded.
-    register({ name: 'p:bad', start: async () => ({}), definition: { agentType: 1 } })
-    // Bare name (no namespacePrefix at mount) → excluded.
-    register(new AgentProvider(pluginDef('bare'), () => undefined))
-    const index = new PluginAgentIndex({ get: () => seam })
-    expect(index.list()).toEqual([])
-  })
-
-  it('reads the seam lazily: providers registered after index construction are seen', () => {
-    // The index is created BEFORE any provider registers (seam empty at
-    // construction; get() re-invoked on every call).
-    let seam: { list(): string[]; getProvider(name: string): unknown } = { list: () => [], getProvider: () => undefined }
-    const index = new PluginAgentIndex({ get: () => seam })
-    expect(index.list()).toEqual([])
-    const { seam: real, register } = fakeSeam()
-    register(new AgentProvider(pluginDef('researcher'), () => undefined, undefined, 'p:researcher'))
-    seam = real
-    expect(index.list()).toHaveLength(1)
-    expect(index.resolve('p:researcher')).toBeDefined()
+    })).toBe(false)
+    // Unscoped loader provider (no namespacePrefix at mount).
+    expect(isPluginAgentProvider(new AgentProvider(pluginDef('bare'), (() => undefined) as never))).toBe(false)
   })
 })
 
@@ -169,9 +174,11 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
 
   /**
    * A dispatch-capable subagents seam: a continuable-capable `spawn` provider
-   * plus the registerProvider/getProvider/list surface `mountAgents` and
-   * `PluginAgentIndex` read. `startContinuable` mirrors the harness: it emits
-   * `subagent/start`, records the folded request, and settles the epoch.
+   * plus the registerProvider/getProvider surface `mountAgents` consumes —
+   * deliberately WITHOUT any enumeration (rc.5: the service has no `list`;
+   * discovery rides the loader-written `ccPluginAgents` snapshot).
+   * `startActivation` mirrors the harness: it emits `subagent/start`,
+   * records the folded request, and settles the epoch.
    */
   function dispatchSeam(emit: (event: string, info: Record<string, unknown>) => void) {
     const providers = new Map<string, unknown>()
@@ -188,7 +195,12 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
         const childId = (spec['childId'] as string | undefined) ?? `child-${continuable.length + 1}`
         const runId = `run-${continuable.length + 1}`
         emit('subagent/start', { runId, provider: providerName, id: childId, local: true })
-        continuable.push(spec['request'] as Record<string, unknown>)
+        // rc.5 flat spec: strip the envelope; the rest is the folded request.
+        const {
+          provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+          ...request
+        } = spec
+        continuable.push(request)
         void (async () => {
           emit('subagent/end', {
             runId, provider: providerName, id: childId, local: true,
@@ -204,7 +216,6 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
         }
       },
       getProvider: (name: string) => providers.get(name),
-      list: () => [...providers.keys()],
       registerProvider: (provider: unknown) => {
         providers.set((provider as { name: string }).name, provider)
         return () => { providers.delete((provider as { name: string }).name) }
@@ -245,6 +256,60 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
     expect(taskDef, 'Task tool registered').toBeDefined()
     return { ctx, continuable, workspace, taskDef: taskDef! }
   }
+
+  it('mountAgents publishes the ccPluginAgents snapshot (and its disposers maintain it)', async () => {
+    const ctx = new Context()
+    const { seam } = dispatchSeam(() => {})
+    ctx.provide('subagents', seam)
+    const serviceBefore = ctx.get('ccPluginAgents') as CcPluginAgentsService | undefined
+    expect(serviceBefore).toBeUndefined()
+    const first = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR })
+    const service = ctx.get('ccPluginAgents') as CcPluginAgentsService | undefined
+    expect(service).toBeDefined()
+    expect([...service!.knownIds()].sort()).toEqual([
+      'dsh-cc-agents:critic',
+      'dsh-cc-agents:executor',
+      'dsh-cc-agents:marathon',
+    ])
+    // Unmount: the providers' own disposers drop the entries, and with the
+    // registry empty the root slot itself is cleared (no dead registry).
+    first.dispose()
+    expect((ctx as unknown as { root: Context }).root.get('ccPluginAgents', false)).toBeUndefined()
+    // A remount re-provides from the cleared (stale) slot, entries and all.
+    const second = await mountCcPlugin(ctx, { root: REAL_PLUGIN_DIR })
+    const republished = ctx.get('ccPluginAgents') as CcPluginAgentsService | undefined
+    expect(republished).toBeDefined()
+    expect([...republished!.knownIds()].sort()).toEqual([
+      'dsh-cc-agents:critic',
+      'dsh-cc-agents:executor',
+      'dsh-cc-agents:marathon',
+    ])
+    second.dispose()
+    expect((ctx as unknown as { root: Context }).root.get('ccPluginAgents', false)).toBeUndefined()
+  })
+
+  it('two coexisting plugin mounts share one registry; each unmount removes only its own entries', async () => {
+    const mkPlugin = (name: string, agentType: string): string => {
+      const root = tempPluginRoot()
+      mkdirSync(join(root, '.claude-plugin'), { recursive: true })
+      writeFileSync(join(root, '.claude-plugin', 'plugin.json'), JSON.stringify({ name }), 'utf8')
+      mkdirSync(join(root, 'agents'), { recursive: true })
+      writeFileSync(join(root, 'agents', `${agentType}.md`), `---\ndescription: ${agentType}\n---\nBody.\n`, 'utf8')
+      return root
+    }
+    const ctx = new Context()
+    const { seam } = dispatchSeam(() => {})
+    ctx.provide('subagents', seam)
+    const a = await mountCcPlugin(ctx, { root: mkPlugin('plug-a', 'alpha') })
+    const b = await mountCcPlugin(ctx, { root: mkPlugin('plug-b', 'beta') })
+    const service = ctx.get('ccPluginAgents') as CcPluginAgentsService
+    expect([...service.knownIds()].sort()).toEqual(['plug-a:alpha', 'plug-b:beta'])
+    a.dispose()
+    expect([...service.knownIds()]).toEqual(['plug-b:beta'])
+    expect(ctx.get('ccPluginAgents')).toBeDefined()
+    b.dispose()
+    expect((ctx as unknown as { root: Context }).root.get('ccPluginAgents', false)).toBeUndefined()
+  })
 
   it('dispatches dsh-cc-agents:critic foreground: collected text returns (persona travels via composition)', async () => {
     const { continuable, workspace, taskDef } = await setup()

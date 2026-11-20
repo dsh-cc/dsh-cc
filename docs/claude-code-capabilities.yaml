@@ -1397,8 +1397,14 @@ capabilities:
         array that plugin hooked). The configured static prefix — the
         always-registered CC catalog, frozen in
         packages/preset/cc/tests/fixtures/cc-tool-order.json and byte-stable
-        across activations — is unchanged.
+        across activations — is otherwise unchanged; under harness 0.2.2-rc.5
+        it gains exactly one entry, `wait_agent`, at its lexicographic slot
+        between `update_goal` and `web_fetch` — a self-inbox wait for the
+        CALLING agent's own pending input, taking only `timeout_ms` (it is NOT
+        a delegation-control tool: it ships as upstream surface of the retained
+        tool-subagent-control mount, which registers it unconditionally).
         〔src:ws:docs/plans/2026-11-07-harness-0.2.2-rc.1-migration.md#L107-L115〕
+        〔src:ws:docs/plans/2026-11-20-harness-0.2.2-rc.5-true-up.md#L170-L181〕
 
   engine.tool-search:
     title: ToolSearch (deferred tools)
@@ -3706,10 +3712,12 @@ capabilities:
       summary: >-
         Not an upstream CC surface: a dsh-cc extension. The model-facing
         release_agent tool (and the symmetric /agents release <id> command)
-        evicts a direct continuable child's resident activation through the
-        harness drainChildren seam — cooperatively, together with
-        the resident activations of any descendants — freeing the child's
-        capacity slot; the durable session survives on
+        evicts a direct continuable child's resident activation via the
+        retained activation receipts for that child — cooperatively, evicting
+        the NAMED child only (delegates survive: the resident activations of
+        any descendants are untouched, since upstream dispose() does not
+        cascade) — freeing the child's capacity slot; the durable session
+        survives on
         disk, and the process-local [released] marker keeps /agents honest
         for the rest of the process.
       refs: []

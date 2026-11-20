@@ -15,8 +15,9 @@ Human-facing `/agents` command for continuable background agents (plan
   stays continuable/resumable); short no-op explanation otherwise. A released
   (or mid-release) child refuses with an explicit "cannot be continued here"
   copy instead of the resumable wording.
-- `/agents release <id>` — evict the child's resident activation (and its
-  resident descendants') through the harness drain seam; frees the capacity
+- `/agents release <id>` — evict the named child's resident activation through
+  the `ccContinuableDisposals` receipt registry (its delegates stay resident
+  and are released individually by their creating session); frees the capacity
   slot it held; cooperative (a cancel-resistant turn keeps its
   slot and the command reports the release as in flight); one-way in this
   session (same-session continuation is unavailable — the upstream
