@@ -43,6 +43,21 @@ is a `meaning-change` finding even when every number, quotation, and term
 survives. `protectedTerms` does not cover this: judge the hedge's effect on the
 claim and quote the changed span.
 
+Under the `engineering-strategy` profile, judge the skeleton as well as the
+prose. The opening should read as SCQA: a situation, a complication that creates
+the tension, the question it forces, and the answer the document adopts. An
+opening that only announces the topic is a structural finding, not a style note.
+A guiding policy names one approach and states what it gives up; a policy with
+no tradeoff rests on an unstated premise, which is a `missing-premise` finding.
+Lint the four Rumelt anti-patterns item by item: fluff (empty high-level
+verbiage), failure to face the challenge (no defined challenge, so the strategy
+cannot be evaluated or improved), goals mistaken for strategy (a wish list
+rather than a plan for overcoming obstacles), and bad objectives (goals that
+address no critical issue or cannot be executed). A document over its 1-2 page
+vision budget, or a diagnosis with no retained data and reasoning, is a
+structural finding too. These are model judgments; the outline check confirms
+only that the required headings exist in the declared order.
+
 ## 2. Severity
 
 `major` covers:

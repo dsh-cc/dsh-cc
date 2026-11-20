@@ -28,6 +28,7 @@ const PROFILE_IDS = [
   'technical-essay',
   'academic',
   'natural-prose',
+  'engineering-strategy',
 ]
 
 const scratch: string[] = []

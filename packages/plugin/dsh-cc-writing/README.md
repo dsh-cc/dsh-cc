@@ -16,7 +16,7 @@ editing. It provides three public skills and one supporting skill.
 
 The three public skills accept Chinese and English articles. They cover
 technical explanations, literature reviews, opinion essays, technical essays,
-academic papers, and everyday natural prose.
+academic papers, everyday natural prose, and engineering strategy documents.
 
 `writing-workflow` is a supporting skill. The public skills read it from the
 installed directory. It never appears as a separate task.
@@ -127,7 +127,7 @@ The package includes the three public skills, the
 [stage workflow](skills/writing-workflow/references/workflow.md), the
 [artifact contracts](skills/writing-workflow/references/contracts.md), the
 [review rubric](skills/writing-workflow/references/review-rubric.md), the
-[VWA adapter](skills/writing-workflow/references/vwa-adapter.md), seven profiles,
+[VWA adapter](skills/writing-workflow/references/vwa-adapter.md), eight profiles,
 and the [Chinese](skills/writing-workflow/examples/zh.md) and
 [English](skills/writing-workflow/examples/en.md) edit examples.
 

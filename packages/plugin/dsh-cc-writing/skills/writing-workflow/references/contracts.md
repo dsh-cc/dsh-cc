@@ -30,7 +30,7 @@ Common rules:
 
 `schemaVersion`, `kind:"brief"`, `runId`, `operation` (`write|review|edit`),
 `question`, `audience`, `language` (`zh|en`), `bodyPath`, `companionPath`,
-`profile` (`technical|research|opinion|technical-ste|technical-essay|academic|natural-prose`), `targetLength`
+`profile` (`technical|research|opinion|technical-ste|technical-essay|academic|natural-prose|engineering-strategy`), `targetLength`
 (`null` or `{min,max}` with `0 < min <= max`), `requiredQuestions`
 (`[{id,text}]`, at least `q1`), `sourceScope`
 (`{localPaths,webAllowed,description}`), `evidenceMode` (`ordinary|vwa`),
@@ -133,6 +133,57 @@ is never recorded into a run. Fields: `schemaVersion`, `id`, `description`,
 `compare` loads the profile named by the brief from the installed profiles
 directory. It unions the profile terms with the brief terms before it counts
 term occurrences. An explicit user rule overrides a profile preference.
+
+A profile may also declare an optional document skeleton: `structure`
+(`{openingPattern?: "scqa"|"none", sections: [{id, headingHint, required,
+order}], audienceVariantNote?: string}`). Section ids are unique and `order`
+starts at 1 and strictly increases. A profile without `structure` behaves
+exactly as it does today.
+
+The mechanical verdict on that skeleton is the `outline`, and it is not a
+`changes` entry. The check artifact gains an optional top-level field:
+`outline` (`{status: "compliant"|"non-compliant", missingRequiredSections:
+string[], orderViolations: [{section, declaredOrder, actualOrder}]}`). The field
+is present iff the run's profile declares `structure`. The script computes and
+injects it when it records the check, from the after body under that profile;
+the same body yields a different outline under a different profile. A `record
+check` payload that carries `outline` is rejected with `INVALID_INPUT`. The
+`compare` producer takes no model payload and computes the field itself, so it
+verifies by construction; its replay contract is asserted by re-invoking
+`compare` and comparing the outline output. A stored `outline` whose profile
+declares no `structure`, or a missing `outline` whose profile declares one, is
+`INVALID_INPUT` at the injection sites.
+
+Replay happens at the check-consuming sites only: `evaluateCompletion` and
+`finalize` recompute the outline from the check's `afterHash` snapshot and
+compare it field by field, so a stored divergence is `INVALID_INPUT`. When that
+snapshot file is missing, the recompute is skipped, and the skip short-circuits
+before the presence-symmetry test: the check is unavailable, `final-check`
+enters `missing`, and finalize persists `blocked` and fails
+`REVIEW_INCOMPLETE`. `status` reads the stored `outline.status` as it stands and
+is therefore advisory; after snapshot loss or artifact tampering it may
+disagree with `finalize`, the recompute authority. That observable split is
+intended.
+
+Matching reads H2 ATX headings only. Extract the line, trim it, strip the
+leading hashes and any trailing closing hashes, trim again, and lowercase.
+`headingHint` alternatives split on `/`; each is trimmed and lowercased and
+compared for equality. There is no substring, positional, or fuzzy fallback, and
+no width or language folding. Setext headings and other heading levels do not
+participate, so a body with no H2 reports every required section missing. A
+reworded required heading is missing; an absent optional section and the
+author's own headings are harmless. Over the matched headings in document
+order, `declaredOrder` must strictly increase, and an inversion is an
+`orderViolations` entry.
+
+Outline non-compliance mints no finding: findings live in reviews. It enters the
+completion `missing` list as `outline` when the selected check's outline is
+non-compliant and its snapshot is readable. The editorial outcome is `blocked`
+only when `missing` is exactly `["outline"]`; any other missing token keeps
+`incomplete`. `nextRequiredStage` then returns the write-branch stage `re-check`
+("add the required sections and re-check"), and the repair path is a new body,
+snapshot, review, and check. No outline result mints a finding, so no proposal
+targets one.
 
 ## 7. Exit codes
 

@@ -1,6 +1,6 @@
 ---
 name: article-writing
-description: Write or substantially revise a Markdown article in Chinese or English with an explicit argument plan, structural diagnosis, and meaning-preserving revision. Use for a new article, a structural rewrite, or an argument outline; Chinese triggers include 写文章、文章结构、论证提纲. Use article-review to inspect an article without changes, and language-editing for copy editing. Do not use for translation or DOCX/PDF work.
+description: Write or substantially revise a Markdown article in Chinese or English with an explicit argument plan, structural diagnosis, and meaning-preserving revision. Use for a new article, a structural rewrite, an argument outline, an engineering strategy document, or roadmap reporting; Chinese triggers include 写文章、文章结构、论证提纲. Use article-review to inspect an article without changes, and language-editing for copy editing. Do not use for translation or DOCX/PDF work.
 ---
 
 # Article writing
@@ -37,7 +37,7 @@ Then apply these defaults and record each adopted default in
 | --- | --- |
 | operation | `write` |
 | evidenceMode | `ordinary`; never downgrade an explicit VWA request | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L135-L135〕
-| profile | `technical` for a technical explanation, `research` for a literature review, `opinion` for an argumentative essay, `technical-essay` for a long-form technical essay, `academic` for an academic paper, `natural-prose` for everyday conversational prose; ask if ambiguous |
+| profile | `technical` for a technical explanation, `research` for a literature review, `opinion` for an argumentative essay, `technical-essay` for a long-form technical essay, `academic` for an academic paper, `natural-prose` for everyday conversational prose, `engineering-strategy` for an engineering strategy or roadmap report to management; ask if ambiguous |
 | targetLength | null | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L138-L138〕
 | allowBodyChanges | true; a new output for a new body, gated by `replaceExisting` for an existing file | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L139-L139〕
 | repairRounds | 1; the range is 0 to 3 | 〔src:ws:docs/plans/2026-10-25-writing-harness-plugin.md#L140-L140〕
@@ -75,8 +75,12 @@ lands on a concrete example after two paragraphs of abstraction. The `academic`
 profile keeps the paper skeleton complete, pairs every claim with its evidence,
 protects hedges, and gives every citation a carrying sentence. The
 `natural-prose` profile bans templated openings and endings, varies the
-paragraph rhythm, and keeps one human voice. `technical-ste` applies to English
-only, on request, and is not ASD-STE100 certification.
+paragraph rhythm, and keeps one human voice. The `engineering-strategy` profile
+opens with SCQA, states a guiding policy that implies a real tradeoff, keeps
+coherent actions, and orders the declared skeleton sections policy-first;
+the outline check verifies the required headings and their relative order, and
+an uninvolved reader flags unclear areas at the review stage. `technical-ste`
+applies to English only, on request, and is not ASD-STE100 certification.
 
 ## 3. Draft
 
