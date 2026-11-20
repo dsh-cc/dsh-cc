@@ -1,7 +1,7 @@
 # dsh-cc-writing Genre Expansion: Document Types and Engineering Strategy
 
 - Date: 2026-11-19
-- Status: Proposed (design; not implemented)
+- Status: Implemented — PR #440 (open, pending merge); design approved by three-seat blind review (all seats GO at 35ca342b)
 - Target: `packages/plugin/dsh-cc-writing` (optional marketplace plugin)
 - Baseline: worktree `writing-skill-enhancement`, based on origin/main
 - Scope: add document types to the existing profile system (technical-essay / academic / natural-prose / engineering-strategy) and introduce a lightweight structure-skeleton capability
