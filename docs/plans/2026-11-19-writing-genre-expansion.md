@@ -1,144 +1,144 @@
-# dsh-cc-writing 文档类型扩展：genre 体系与工程战略文档
+# dsh-cc-writing Genre Expansion: Document Types and Engineering Strategy
 
 - Date: 2026-11-19
-- Status: Proposed（设计稿，未实现）
-- Target: `packages/plugin/dsh-cc-writing`（可选 marketplace 插件）
-- Baseline: worktree `writing-skill-enhancement`，基于 origin/main
-- Scope: 在现有 profile 体系上新增文档类型（technical-essay / academic / natural-prose / engineering-strategy），并引入轻量结构骨架（structure）能力
+- Status: Proposed (design; not implemented)
+- Target: `packages/plugin/dsh-cc-writing` (optional marketplace plugin)
+- Baseline: worktree `writing-skill-enhancement`, based on origin/main
+- Scope: add document types to the existing profile system (technical-essay / academic / natural-prose / engineering-strategy) and introduce a lightweight structure-skeleton capability
 
-## 1. 问题与目标
+## 1. Problem and goals
 
-dsh-cc-writing 目前只有四个 profile：`technical`、`research`、`opinion`、`technical-ste`。用户的实际写作需求远超这四类：
+dsh-cc-writing currently ships four profiles: `technical`, `research`, `opinion`, and `technical-ste`. Real writing needs go well beyond these four:
 
-1. **技术散文/技术文档**（technical-essay）：讲清一个技术问题的长文，比 `technical` 更偏叙事，比 `research` 更少文献负担。
-2. **学术论文**（academic）：严格的论证结构、术语纪律、引用与限定语保护。
-3. **日常自然文章**（natural-prose）：去模板化、口语可读的非正式文章——现有 profile 全是正式文体，这一类没有承接者。
-4. **工程战略文档**（engineering-strategy）：高级工程师/架构师向管理层汇报技术战略与路线选择。这是一类结构化程度最高的新文体：Rumelt 核（诊断/指导方针/连贯行动）、SCQA 开头、倒置阅读顺序、防 fluff 校验。
+1. **Technical essay** (`technical-essay`): a long-form piece that explains a technical subject — more narrative than `technical`, with less literature overhead than `research`.
+2. **Academic paper** (`academic`): rigorous argumentative structure, terminology discipline, and protection of citations and hedges.
+3. **Everyday natural prose** (`natural-prose`): de-templated, conversational, readable informal writing — every existing profile is a formal register, so this class has no carrier today.
+4. **Engineering strategy document** (`engineering-strategy`): a senior engineer or architect reporting technical strategy and roadmap choices to management. This is the most highly structured of the new genres: the Rumelt kernel (diagnosis / guiding policy / coherent actions), a SCQA opening, an inverted reading order, and fluff-resistant checks.
 
-目标：
+Goals:
 
-1. 新增文档类型不需改动写作工作流的状态机（9 phase、3 operation 不动）。
-2. 前三类用纯 profile 落地（只扩 enum + 加 JSON）；第四类引入一个可选的 `structure` 字段承载结构骨架。
-3. 保持既有承诺：「profile 是 prompt 不是 gate」——机械检查只验证结构与保义，不判定判断正确与否。
-4. 所有同步面（双语 README、i18n 哈希、测试 pin、marketplace 描述）一次改齐。
+1. Adding document types must not change the writing workflow's state machine (9 phases and 3 operations stay untouched).
+2. The first three genres ship as pure profiles (enum extension plus new JSON files only); the fourth introduces a single optional `structure` field that carries the section skeleton.
+3. Preserve the standing promise: "profiles are prompts, not gates" — mechanical checks verify structure and meaning preservation only, never the correctness of a judgment.
+4. Move every synchronization surface (bilingual README, i18n hash pins, test pins, marketplace description) in the same change.
 
-非目标：
+Non-goals:
 
-- 不新增 skill 入口（不破坏 `cc-plugin-loader` 的 4-skill pin），不新增 operation 类型。
-- 不做 DOCX/PDF 排版输出；仍只管 Markdown 正文。
-- 不做机器风格打分（不用 LLM judge 给文章打分并 gate 交付）。
+- No new skill entry points (the `cc-plugin-loader` 4-skill pin stays intact) and no new operation type.
+- No DOCX/PDF layout output; the workflow still manages Markdown bodies only.
+- No machine style scoring (no LLM judge scores the article and gates delivery).
 
-## 2. 文献结论与设计映射
+## 2. Source findings and design mapping
 
-### 2.1 两篇论文
+### 2.1 The two papers
 
-**WritingBench（arXiv:2503.05244）**：LLM 生成式写作基准，6 域 × 100 子域。它的核心构造不是固定维度表，而是**按查询动态生成的实例化评审标准**——每条标准有名称、扩展描述、10 分制 rubric、由 critic 模型独立评分并给出理由；固定轴只有 style / format / length 三个粗粒度维度。
+**WritingBench (arXiv:2503.05244)**: a benchmark for LLM generative writing, 6 domains × 100 subdomains. Its core construct is not a fixed dimension table but **query-dependent, instance-specific review criteria** — each criterion has a name, an extended description, and a 10-point rubric, scored independently by a critic model with written justification; the only fixed axes are the three coarse dimensions style / format / length.
 
-映射：dsh-cc-writing 的 profile 规则（`{id, instruction, rationale, severity}`）与 WritingBench 的 criterion（name/description/rubric）同构。**新 profile 的规则应写成可独立判定的标准**：每条 rule 陈述一个可观察的文本性质（如「每个 H2 小节开头一句话概括本节结论」），而不是笼统风格口号。学术与技术散文两类的规则密度照此校准。
+Mapping: the profile rule shape (`{id, instruction, rationale, severity}`) is isomorphic to WritingBench's criterion (name/description/rubric). **New profile rules must be written as independently decidable criteria**: each rule states one observable property of the text (e.g. "each H2 section opens with one sentence stating that section's conclusion"), not a vague style slogan. Calibrate rule density for academic and technical-essay against this standard.
 
-**Self-Refine（arXiv:2303.17651）**：单模型生成→自反馈→迭代精化循环，反馈维度是任务特定的。它没有提供风格分类学，唯一可迁移的是循环本身。
+**Self-Refine (arXiv:2303.17651)**: a single-model generate → self-feedback → iterative refinement loop whose feedback dimensions are task-specific. It offers no style taxonomy; the only transferable construct is the loop itself.
 
-映射：writing-workflow 已经就是这个循环（draft→review→proposal→apply→check，finding 不可变 + addressed 派生标签）。**genre 的角色就是给这个循环喂任务特定的反馈维度**——profile 替代 Self-Refine 里的 few-shot 反馈提示词。无需新机制。
+Mapping: writing-workflow already *is* that loop (draft → review → proposal → apply → check, with immutable findings and the derived `addressed` label). **The genre's role is to feed task-specific feedback dimensions into this loop** — the profile replaces Self-Refine's few-shot feedback prompt. No new mechanism is needed.
 
-### 2.2 四本书（工程战略文档的体裁规格）
+### 2.2 The four books (genre spec for engineering strategy)
 
-四本书在「战略文档长什么样」上高度收敛，可提炼出 engineering-strategy 的体裁规则：
+The four books converge strongly on what a strategy document looks like; they yield the genre rules for engineering-strategy:
 
-**骨架（Rumelt《Good Strategy Bad Strategy》Ch5 + 两本 Larson 直接采用）**：
-- Diagnosis（诊断）：定义并解释挑战的本质，从复杂现实中挑出关键方面。
-- Guiding Policy（指导方针）：应对诊断所指障碍的总体方法，**必须隐含真实的取舍**。
-- Coherent Actions（连贯行动）：互相配合、共同落实方针的协调步骤。
+**Skeleton (Rumelt, *Good Strategy Bad Strategy*, Ch. 5; both Larson books adopt it verbatim)**:
+- Diagnosis: defines and explains the nature of the challenge, singling out the critical aspects of an overwhelming reality.
+- Guiding policy: the overall approach for coping with the obstacles the diagnosis identifies. **It must imply a real tradeoff.**
+- Coherent actions: coordinated steps that work together to carry out the policy.
 
-**反模式 lint（Rumelt Ch3-4）**：
-- Fluff：空洞的高级词汇堆砌（「以客户为中心的中介服务」）。
-- 不直面挑战：没有可评估的挑战定义。
-- 把目标当战略：愿望清单不是克服障碍的计划。
-- 坏目标：不针对关键问题、不可执行。
+**Anti-pattern lint (Rumelt, Ch. 3-4)**:
+- Fluff: empty high-level verbiage ("customer-centric intermediation").
+- Failure to face the challenge: no defined challenge, so the strategy cannot be evaluated or improved.
+- Mistaking goals for strategy: a wish list is not a plan for overcoming obstacles.
+- Bad objectives: goals that address no critical issue or cannot be executed.
 
-**方针质量门（Exec Primer Ch3）**：每条 policy 须 Applicable（能用于真实取舍）、Enforced（会真正执行问责）、Creates Leverage（复利/放大效应）。
+**Policy quality gate (Engineering Executives' Primer, Ch. 3)**: every policy must be Applicable (usable to navigate real tradeoffs), Enforced (you will actually hold teams accountable), and Creates Leverage (compounding, multiplicative impact).
 
-**阅读顺序倒置（Crafting Engineering Strategy Ch11）**：写作顺序（explore→diagnose→refine→policy→operate）不等于阅读顺序。给管理层的审批文档 Policy 在前（防止审批会跑偏成研究讨论），给组织的落地文档 Policy+Operation 在前，思考过程（refine/diagnose/explore）殿后但**不能删**（新成员要能追溯推理，否则会认为前人愚蠢）。
+**Inverted reading order (*Crafting Engineering Strategy*, Ch. 11)**: writing order (explore → diagnose → refine → policy → operate) is not reading order. For an approval audience, Policy comes first (it keeps the approval meeting from derailing into a research discussion); for an org-rollout audience, Policy + Operations come first; the thinking (refine / diagnose / explore) goes last but **must not be deleted** (future readers must be able to trace the reasoning, or they will assume the authors were foolish).
 
-**开头与长度（Staff Engineer）**：开头段落用 SCQA（Situation/Complication/Question/Answer）；愿景类文档 1-2 页封顶（读者在 5-6 页掉线）；假设没人读到结尾。
+**Opening and length (*Staff Engineer*)**: open with a SCQA paragraph (Situation / Complication / Question / Answer); vision-class documents cap at 1-2 pages (readers drop off at 5-6); assume nobody reads to the end.
 
-**文档自带过程（Exec Primer Ch11）**：元数据（日期、审批状态、去哪提问）、唯一 canonical source、具名联系人；发布前请未参与者标出不清楚的地方；发布后关闭文档内评论（开放的评论串=未获批的战略）。
+**The document carries its process (Primer, Ch. 11)**: metadata (date, approval status, where to ask questions), a single canonical source, a named contact; before release, have someone uninvolved flag unclear areas; after release, disable in-document comments (an open comment thread signals an unapproved strategy).
 
-**具体性（Staff Engineer）**：具体的陈述创造对齐，泛化的陈述创造对齐的幻觉；Show your work——保留理由让别人能在形势变化时修改扩展。
+**Specificity (*Staff Engineer*)**: specific statements create alignment; generic statements create the illusion of alignment. Show your work — keep the reasoning so others can modify and extend as context shifts.
 
-## 3. 现状与扩展缝（代码锚点）
+## 3. Current state and extension seams (code anchors)
 
-- Profile 的唯一闭集：`skills/writing-workflow/scripts/schema.lib.mjs:141` `PROFILES = ['technical','research','opinion','technical-ste']`。`brief.profile` 在 `brief-run.lib.mjs:104` 走 `readEnum`，未知 id 在文件查找前即报 `INVALID_INPUT`。
-- Profile 加载：`state.lib.mjs:51-59` 从 `profiles/` 目录按 id 读文件；**缺文件是静默的**（返回 null profile）——enum 与磁盘文件是两道独立门。
-- Profile schema：`check-profile.lib.mjs:121-147`——`schemaVersion:"1"`、`id`、`description`、`applicableLanguages:string[]`、`rules:[{id,instruction,rationale,severity}]`、`protectedTerms:string[]`；未知字段拒绝。
-- **genre 分支在代码中只有一处**：protectedTerms 进机械比对（`preservation.lib.mjs:107-108`）。phase 推导、record 门控全部按 `operation`（write/review/edit）分支，从不按 profile。
-- 同步面（改动清单）：`schema.lib.mjs` enum；`references/contracts.md:33` 与 §6；`article-writing/SKILL.md:40,67-73` 路由表；`language-editing/SKILL.md:37`；`article-review/SKILL.md:33-41`（目前无 profile 行，本次补上）；`README.md:17-18,129` + `README.zh.md:16,113`（双语必须同 commit，`pnpm check:readme --write` 重录哈希）；`tests/package-shape.spec.ts:23` `PROFILE_IDS`（驱动 schema 校验循环）；`tests/contracts.spec.ts:294`（enum pin：`profile:'poetry'` 必须失败）；`.claude-plugin/marketplace.json:17` 描述。
-- 语义约束：profiles 是「prompts, not gates」（`references/review-rubric.md:53-55`）；脚本只验证结构、身份与保义，「不证明判断正确」。
+- The only closed set for profiles: `skills/writing-workflow/scripts/schema.lib.mjs:141`, `PROFILES = ['technical','research','opinion','technical-ste']`. `brief.profile` goes through `readEnum` at `brief-run.lib.mjs:104`; an unknown id fails with `INVALID_INPUT` before any file lookup.
+- Profile loading: `state.lib.mjs:51-59` reads `profiles/<id>.json` by id; **a missing file is silent** (returns a null profile) — the enum and the on-disk file are two independent gates with opposite failure modes.
+- Profile schema: `check-profile.lib.mjs:121-147` — `schemaVersion:"1"`, `id`, `description`, `applicableLanguages:string[]`, `rules:[{id,instruction,rationale,severity}]`, `protectedTerms:string[]`; unknown fields are rejected.
+- **Genre branching exists in exactly one place in code**: protected terms feeding the mechanical compare (`preservation.lib.mjs:107-108`). Phase derivation and record gating branch on `operation` (write/review/edit), never on profile.
+- Synchronization surfaces (the change list): the `schema.lib.mjs` enum; `references/contracts.md:33` and its §6; the `article-writing/SKILL.md:40,67-73` routing table; `language-editing/SKILL.md:37`; `article-review/SKILL.md:33-41` (currently has no profile row — this change adds one); `README.md:17-18,129` + `README.zh.md:16,113` (both languages must move in the same commit; re-record hashes with `pnpm check:readme --write`); `tests/package-shape.spec.ts:23` `PROFILE_IDS` (drives the schema-validation loop); `tests/contracts.spec.ts:294` (enum pin: `profile:'poetry'` must fail); the description in the repo-root `.claude-plugin/marketplace.json`.
+- Semantic constraint: profiles are "prompts, not gates" (`references/review-rubric.md:53-55`); scripts validate structure, identity, and preservation — they "do not prove that a judgment is correct."
 
-## 4. 概念模型：genre 仍是 profile，分两档能力
+## 4. Concept model: a genre is still a profile, in two capability tiers
 
-**决策 D1：不引入新的「文档类型」概念。** 文档类型 = profile id。理由：
+**Decision D1: do not introduce a new "document type" concept.** A document type is a profile id. Rationale:
 
-1. 现有架构中 profile 已经承载了 genre 的全部职责（风格规则、术语保护、语言适用面），且代码面只有 protectedTerms 一处消费——扩展成本极低。
-2. 新开概念（如 `genre` 字段或独立目录）会造出与 profile 并列的第二套元数据，两套元数据的组合语义（genre × profile）没有任何消费者。
-3. 前三类新文档（technical-essay/academic/natural-prose）所需的全部能力都在现有 profile schema 内。
+1. In the current architecture the profile already carries every responsibility of a genre (style rules, term protection, language applicability), and the code consumes only protected terms — the extension cost is minimal.
+2. A new concept (say, a `genre` field or a parallel directory) would create a second metadata family beside profiles, and the combination semantics (genre × profile) would have no consumer.
+3. Everything the first three new genres need fits inside the existing profile schema.
 
-**决策 D2：分两档交付。**
+**Decision D2: deliver in two tiers.**
 
-- **Tier A（纯 profile）**：technical-essay、academic、natural-prose。只动 enum、加 JSON、改文档与测试，零逻辑变更。
-- **Tier B（结构骨架）**：engineering-strategy 需要的「必须有诊断节/方针节/行动节、SCQA 开头、阅读顺序约束」超出了 rules 文本的表达力。给 profile schema 增加一个**可选** `structure` 字段，承载结构骨架，check 阶段做有限机械验证。
+- **Tier A (pure profiles)**: technical-essay, academic, natural-prose. Only the enum, new JSON files, docs, and tests — zero logic change.
+- **Tier B (structure skeleton)**: engineering-strategy needs "must contain a diagnosis section / policy section / actions section, SCQA opening, reading-order constraints," which exceeds what rule text can express. Add a single **optional** `structure` field to the profile schema to carry the skeleton, with limited mechanical verification at check time.
 
-**决策 D3：不新增 skill、不新增 operation。** engineering-strategy 由 `article-writing` 的 profile 路由承接（新增触发描述「技术战略、路线汇报、给管理层的战略文档」）。理由：`packages/compat/cc-plugin-loader/tests/dsh-cc-writing.spec.ts:41` 钉死 4-skill；工作流的 research 阶段恰好可以承载战略文档的 explore/diagnose 材料收集；新增 operation 会牵动 `OPERATIONS`、`BRIEF_FIELDS`、`derivePhase`、`nextRequiredStage` 四处 operation-keyed 分支，收益不成比例。
+**Decision D3: no new skill, no new operation.** engineering-strategy is carried by `article-writing`'s profile routing (its trigger description gains "engineering strategy, roadmap reporting, strategy documents for management"). Rationale: `packages/compat/cc-plugin-loader/tests/dsh-cc-writing.spec.ts:41` pins the skill count at 4; the workflow's research stage happens to be the natural carrier for the explore/diagnose material a strategy document needs; a new operation would drag four operation-keyed branch sites (`OPERATIONS`, `BRIEF_FIELDS`, `derivePhase`, `nextRequiredStage`) for disproportionate benefit.
 
-**决策 D4：record/derivePhase 继续不按 genre 分支。** engineering-strategy 的诊断材料走 research stage（同一个「收集上下文」阶段，材料类型由 profile 规则约定，不由代码门控）。academic 的文献综述同理复用。
+**Decision D4: record/derivePhase keep branching on operation, not genre.** engineering-strategy's diagnostic material goes through the research stage (the same "collect context" stage; the material type is dictated by profile rules, not by code gating). academic's literature review reuses it the same way.
 
-## 5. 新 profile 规格
+## 5. New profile specifications
 
-### 5.1 `technical-essay`（技术散文）
+### 5.1 `technical-essay`
 
-定位：讲清一个技术主题的长文，有叙事线但保持术语精确。介于 `technical`（偏说明书）与 `opinion`（偏论辩）之间。
+Position: a long-form piece that makes one technical subject clear, with a narrative line but precise terminology. Between `technical` (leans manual) and `opinion` (leans argument).
 
-规则要点（每条写成可独立判定的标准）：
-- 单一主线：全文能用一句话说出「本文让读者明白什么」；每个 H2 服务于这条主线。
-- 概念先于机制：新术语在首次使用前用一句日常语言定义；术语首次出现处加粗或行内定义。
-- 示例配比：抽象论述连续超过两段必须落到具体例子（代码、数据、事故、场景）。
-- 图示纪律：每张图在正文中有指涉（「如图 N」）且图题自足——图被单独截走也能看懂。
-- 不确定性如实：性能/成本/风险主张标注条件与量级，不裸断言。
-- `protectedTerms`：留空数组（由 brief 按具体主题注入技术术语）。
+Rule highlights (each written as an independently decidable criterion):
+- Single throughline: the whole piece can state in one sentence "what this article makes the reader understand"; every H2 serves that line.
+- Concept before mechanism: every new term is defined in plain language before first use; the first occurrence is bolded or given an inline definition.
+- Example ratio: after more than two consecutive paragraphs of abstraction, the text must land on a concrete example (code, data, incident, scenario).
+- Figure discipline: every figure is referenced in the body ("see Figure N") and has a self-contained caption — legible even when screenshotted alone.
+- Uncertainty stated honestly: performance / cost / risk claims carry conditions and magnitudes; no bare assertions.
+- `protectedTerms`: empty array (the brief injects the topic's technical terms).
 
-`applicableLanguages: ["zh","en"]`。
+`applicableLanguages: ["zh","en"]`.
 
-### 5.2 `academic`（学术论文）
+### 5.2 `academic`
 
-定位：论证结构严格的学术文体（论文、长综述、技术报告的学术写法）。
+Position: strictly argued academic writing (papers, long surveys, and academic-style technical reports).
 
-规则要点：
-- 论文骨架：Abstract/引言（贡献清单）、相关工作、方法、评估/论证、限制、结论。缺限制节即缺陷。
-- 主张-证据配对：每个非平凡主张有引用、数据或形式论证支撑；表述强度与证据强度匹配（证据是相关性的不得写因果）。
-- 限定语保护：may/suggest/consistent with 一类限定语在 copy edit 中不可削弱或删除（这是 protectedTerms 之外的语义规则，进 review rubric）。
-- 术语一致：同一概念全文一个名字；同义改写仅在首次定义时出现。
-- 引用纪律：每条引用在正文有承载句（不是括号堆叠）；引用支撑的是句子实际说的话。
-- 时态与人称：方法用过去时/被动或既定惯例；贡献清单用现在时。
+Rule highlights:
+- Paper skeleton: abstract/introduction (contribution list), related work, method, evaluation/argument, limitations, conclusion. A missing limitations section is itself a defect.
+- Claim-evidence pairing: every non-trivial claim is backed by a citation, data, or a formal argument; claim strength matches evidence strength (correlational evidence must not be worded as causal).
+- Hedge protection: hedges such as "may" / "suggest" / "consistent with" must not be weakened or removed during copy editing (a semantic rule beyond protectedTerms; goes into the review rubric).
+- Terminology consistency: one concept, one name throughout; synonymous paraphrase appears only at first definition.
+- Citation discipline: every citation has a carrying sentence in the body (no parenthetical stacking), and the citation supports what the sentence actually says.
+- Tense and voice: method in past tense / passive or the venue's established convention; contribution list in present tense.
 
-`applicableLanguages: ["zh","en"]`。
+`applicableLanguages: ["zh","en"]`.
 
-### 5.3 `natural-prose`（日常自然文章）
+### 5.3 `natural-prose`
 
-定位：博客、随笔、 newsletter 一类口语可读的非正式文章。与 `opinion` 的区别：opinion 服务论证，natural-prose 服务「像人说话」。它是对现有四个正式 profile 的补充面，规则以「减法」为主：
+Position: informal, conversational, readable writing — blogs, essays, newsletters. Distinction from `opinion`: opinion serves argument; natural-prose serves "sounds like a person talking." It complements the four existing formal profiles, and its rules subtract rather than add:
 
-- 禁模板化开头（「在当今快速发展的时代」「随着…的普及」）与模板化结尾（「总之…让我们共同期待」）。
-- 段落呼吸：平均段长不超 5 句；连续三段等长即缺陷（节奏单一）。
-- 不做三连排比凑数；删除不承担信息的三段式总结。
-- 语气与读者距离一致：全文同一个「说话人」，不中途从聊天切换到布道。
-- 首段话头：第一句把读者放进具体场景或问题，不从背景综述开始。
-- 每句能读出来不拗口（朗读测试）。
+- Ban templated openings ("in today's rapidly developing era"; "with the growing popularity of …") and templated endings ("in conclusion … let us look forward together").
+- Paragraph breathing: average paragraph length stays under 5 sentences; three consecutive equal-length paragraphs is a defect (monotone rhythm).
+- No filler triads; delete three-part summaries that carry no information.
+- Consistent voice and reader distance: one "speaker" throughout; no mid-piece switch from chatting to preaching.
+- First-sentence hook: the opening sentence puts the reader inside a concrete scene or problem; no background survey openers.
+- Every sentence survives being read aloud without stumbling (the read-aloud test).
 
-`applicableLanguages: ["zh","en"]`。zh 侧与 lieflat/humanizer 类本地技能的分工：本 profile 只在 writing-workflow 内生效（规则化），不调用那些一次性清理技能；两者可先后使用，不冲突。
+`applicableLanguages: ["zh","en"]`. Division of labor with local post-hoc de-AI-flavor cleanup skills on the zh side: this profile operates only inside writing-workflow (as rules) and never invokes those one-shot cleanup skills; the two can be used in sequence without conflict.
 
-### 5.4 `engineering-strategy`（工程战略文档）——Tier B
+### 5.4 `engineering-strategy` — Tier B
 
-定位：向管理层汇报技术战略/路线选择的文档。规格直接来自 §2.2 的书摘。
+Position: a document reporting technical strategy or roadmap choices to management. Its spec comes directly from the book digests in §2.2.
 
-**structure 骨架**（新字段，见 §6）：
+**structure skeleton** (new field; see §6):
 
 ```json
 {
@@ -146,31 +146,31 @@ dsh-cc-writing 目前只有四个 profile：`technical`、`research`、`opinion`
     "openingPattern": "scqa",
     "sections": [
       {"id": "summary",     "headingHint": "TL;DR / 摘要", "required": true,  "order": 1},
-      {"id": "policy",       "headingHint": "指导方针",     "required": true,  "order": 2},
-      {"id": "operations",   "headingHint": "落实机制",     "required": false, "order": 3},
-      {"id": "diagnosis",    "headingHint": "诊断",         "required": true,  "order": 4},
+      {"id": "policy",      "headingHint": "指导方针",     "required": true,  "order": 2},
+      {"id": "operations",  "headingHint": "落实机制",     "required": false, "order": 3},
+      {"id": "diagnosis",   "headingHint": "诊断",         "required": true,  "order": 4},
       {"id": "explore",      "headingHint": "背景与调研",   "required": false, "order": 5}
     ],
-    "audienceVariantNote": "审批场景 policy 前置；组织落地场景 policy+operations 前置；diagnosis/explore 殿后但不可删"
+    "audienceVariantNote": "Approval audience: policy first. Org rollout: policy + operations first. Diagnosis and explore go last but must not be deleted."
   }
 }
 ```
 
-规则要点（structure 之外的风格规则）：
-- 方针三问：每条 guiding policy 通过 Applicable / Enforced / Creates Leverage 三问（Exec Primer 质量门）。
-- 取舍显性：方针必须写明放弃了什么（「选择 A 意味着不做 B」）；无取舍的方针是 fluff。
-- 反模式四禁（Rumelt）：fluff、不直面挑战、目标当战略、坏目标——review 时逐条对照。
-- 具体性：政策用比例/阈值/机制表述（「新服务默认 Rust，除非 X」「每季度 20% 平台时间」），不写方向形容词。
-- 长度纪律：正文 1-2 页起步假设（愿景类封顶 2 页），细节外链；假设读者在第三页消失。
-- Show your work：诊断保留数据与推理（roadmap、竞争压力、财务约束、1:1 收集的问题），供未来读者追溯。
-- 文档自带元数据：日期、审批状态、canonical source 链接、去哪提问（具名渠道或人）。
-- 发布前由未参与者读一遍标出不清楚处（写作流程中的 review 阶段承载，进 SKILL.md 路由说明）。
+Rule highlights (style rules beyond the structure):
+- The three policy questions: every guiding policy passes Applicable / Enforced / Creates Leverage (the Primer quality gate).
+- Explicit tradeoffs: a policy must state what it gives up ("choosing A means not doing B"); a policy without a tradeoff is fluff.
+- The four banned anti-patterns (Rumelt): fluff, failure to face the challenge, goals-as-strategy, bad objectives — checked item by item at review.
+- Specificity: policies are stated as ratios / thresholds / mechanisms ("new services default to Rust unless X", "20% platform time each quarter"), not direction adjectives.
+- Length discipline: assume a 1-2 page budget (vision-class documents cap at 2 pages), details behind links; assume the reader vanishes at page three.
+- Show your work: the diagnosis retains data and reasoning (roadmap, competitive pressure, financial constraints, issues collected in 1:1s) for future readers to trace.
+- The document carries its metadata: date, approval status, canonical-source link, and where to ask questions (a named channel or person).
+- Before release, an uninvolved reader flags unclear areas (carried by the workflow's review stage; noted in the SKILL.md routing text).
 
-`applicableLanguages: ["zh","en"]`。
+`applicableLanguages: ["zh","en"]`.
 
-## 6. Schema 变更（Tier B）
+## 6. Schema change (Tier B)
 
-`check-profile.lib.mjs` 的 `validateProfile` 增加对可选 `structure` 字段的校验：
+`validateProfile` in `check-profile.lib.mjs` gains validation for an optional `structure` field:
 
 ```
 structure?: {
@@ -180,86 +180,87 @@ structure?: {
 }
 ```
 
-约束：
-- `sections` 非空时 `id` 唯一、`order` 严格递增、`order` 从 1 起。
-- `openingPattern` 目前仅 `"scqa" | "none"` 两个值——枚举保持最小，未来有书证再扩。
-- 无 `structure` 字段的 profile（全部既有 profile 与三个 Tier A 新 profile）行为不变。加法、可选；`schemaVersion` 保持 `1`。注意现有 `readObject` 拒绝未知字段，所以「同版本内加可选字段」意味着所有读取方（`validateProfile`）必须与字段同 PR 扩展白名单；profile 只在包内分发，不存在旧版本 reader 读新 profile 的跨版本流转场景，若未来出现再升 v2。
+Constraints:
+- When `sections` is non-empty: `id` unique, `order` strictly increasing starting from 1.
+- `openingPattern` currently allows only `"scqa" | "none"` — the enum stays minimal; extend only with book-backed evidence.
+- Profiles without `structure` (all existing profiles and the three Tier A additions) behave unchanged. The change is additive and optional; `schemaVersion` stays `1`. Note that the current `readObject` rejects unknown fields, so "adding an optional field within the same version" means every reader (`validateProfile`) must extend its allow-list in the same PR. Profiles ship only inside the package, so there is no cross-version profile circulation today; revisit as v2 only if that ever changes.
 
-**机械验证边界（关键决策 D5）**：check 阶段对 `outline`（结构骨架，刻意不叫 `structure`——那是既有 review stage 的名字，见下）只验证两件事：
-1. `required:true` 的节在最终正文中存在（按 heading 匹配，见下）；
-2. 出现的骨架节之间保持声明的相对顺序。
+**Mechanical-verification boundary (key decision D5)**: at check time the `outline` check (deliberately not named `structure` — that is an existing review stage; see below) verifies exactly two things:
+1. Every `required:true` section exists in the final body (by heading match; see below).
+2. The skeleton sections that do appear keep their declared relative order.
 
-**不验证**：节的写作质量、SCQA 是否真的写成了 SCQA、方针是否隐含取舍——这些是 review 阶段的模型判断，写进 profile rules 与 review rubric。这条边界是对「prompts, not gates」承诺的延续。
+**Not verified**: section writing quality, whether the opening truly reads as SCQA, whether a policy implies a tradeoff — these are model judgments at review time, encoded in profile rules and the review rubric. This boundary continues the "prompts, not gates" promise.
 
-**概念命名（P1-4 折叠）**：新概念统一叫 `outline`（profile 的字段名仍为 `structure`，因为它描述文档结构本身；但 finding/检查结果类别叫 `outline`）。`structure` 一词已被 review stage（`STAGES`，`schema.lib.mjs:156`）与 proposal intent（`PROPOSAL_INTENTS:177`）占用，二者都是模型判断面（`reviews/` 工件）；新检查是机械面，混名会让实现者把它挂进 structure review 流。
+**Naming (fold of r1 P1-4)**: the new concept is uniformly called `outline` (the profile field remains `structure` because it describes the document's structure; the check result category is `outline`). The word `structure` is already taken by a review stage (`STAGES`, `schema.lib.mjs:156`) and a proposal intent (`PROPOSAL_INTENTS:177`), both model-judgment surfaces (the `reviews/` artifacts); the new check is mechanical, and the name collision would tempt an implementer to wire it into the structure review flow.
 
-**工件归属与回放契约（P0-1 折叠）**：outline 检查结果**不进** check 工件的 `changes` 数组。`changes` 的每一项是 `{type ∈ CHANGE_TYPES, before, after, disposition, reason}`（`check-profile.lib.mjs:44-90`），由 `compareBodies` 独家生产，`record.lib.mjs:390-408` 的 `verifyMechanicalChanges` 会拒绝任何机械重放无法复现的 change——「required 节缺失」是 after-body 的绝对属性，没有自然的 before/after 表示，塞进 `changes` 要么过不了重放校验、要么被迫伪造 diff。改为在 check 工件增加一个**顶层 `outline` 字段**：
+**Artifact home and replay contract (fold of r1 P0-1)**: the outline result does **not** go into the check artifact's `changes` array. Every `changes` entry is `{type ∈ CHANGE_TYPES, before, after, disposition, reason}` (`check-profile.lib.mjs:44-90`), produced exclusively by `compareBodies`, and `verifyMechanicalChanges` (`record.lib.mjs:390-408`) **rejects any change the mechanical replay cannot reproduce** — "a required section is missing" is an absolute property of the after-body with no natural before/after representation; putting it into `changes` either fails replay validation or forces a fabricated diff. Instead the check artifact gains a **top-level `outline` field**:
 
 ```
 outline?: {
   status: "compliant" | "non-compliant",
-  missingRequiredSections: string[],   // section id 列表
+  missingRequiredSections: string[],   // section ids
   orderViolations: [{section, declaredOrder, actualOrder}]
 }
 ```
 
-- `outline` 是 after-body 的纯函数：check 记录时计算，重放时按 body hash 重新计算比对——与 `checks/` 工件「可独立验证」的契约同构，且**完全不动** `CHANGE_TYPES`、`compareBodies`、`verifyMechanicalChanges` 与 `mechanicalStatus`（`clean` 仍只表示机械 diff 为空，不再隐含 outline 合规——二者分离，各自诚实）。
+- `outline` is a pure function of the after-body: computed when the check is recorded, recomputed and compared on replay from the body hash — isomorphic to the `checks/` artifact's "independently verifiable" contract — and it **leaves untouched** `CHANGE_TYPES`, `compareBodies`, `verifyMechanicalChanges`, and `mechanicalStatus` (`clean` still means only "empty mechanical diff"; it no longer implies outline compliance — the two are separated, each honest).
+- The field is present only when the run's profile declares `structure`; the check artifact shape is unchanged for every other profile.
 
-**执法路径（r2 P0/P1 折叠：不走 finding 机制；r3 F1 收紧可观察行为口径）**：outline 不合规**不铸造 finding**。finding 只存在于 review 工件（`validateReview` 的 stage ∈ `STAGES`、category ∈ 封闭 `CATEGORIES`，`schema.lib.mjs:156-172`，且带 outline 违规没有的位置字段），check 记录步骤没有铸造 finding 的通道。改为把 `outline.status` 直接接进 **`evaluateCompletion`**（`mutation.lib.mjs:299-338`）：最新一次 check 的 `outline.status === "non-compliant"` 时 **finalize 被挡**（完成态判 `blocked`，理由指向 outline）。注意：`derivePhase`（`state.lib.mjs:167-199`）照旧把记录过 check 的 run 推到 `phase:'checked'`——本设计**不改 phase 推导**，「挡在 finalize 而非挡在 checked」是接受的行为口径，不在状态机上加新状态。修复路径就是工作流的常规路径：修订正文（proposal/apply 或重 draft）→ 重新 check → `outline.status` 转为 compliant。不新增 finding category、不新增 `PROPOSAL_INTENTS`、不动 review schema。
+**Enforcement path (folds of r2 P0/P1 and r3 F1)**: outline non-compliance **mints no finding**. Findings exist only in review artifacts (`validateReview` requires stage ∈ `STAGES` and category ∈ the closed `CATEGORIES` list, `schema.lib.mjs:156-172`, plus position fields an outline violation does not have); the check-record step has no channel that mints findings. Instead `outline.status` feeds directly into **`evaluateCompletion`** (`mutation.lib.mjs:299-338`): when the latest check has `outline.status === "non-compliant"`, **finalize is blocked** (completion judges `blocked`, with the reason pointing at outline). Note that `derivePhase` (`state.lib.mjs:167-199`) still advances a run that has recorded a check to `phase:'checked'` — this design **does not touch phase derivation**; "blocked at finalize, not at checked" is the accepted behavior contract, and no new state is added to the state machine. The repair path is the workflow's ordinary path: revise the body (proposal/apply or a fresh draft) → re-check → `outline.status` becomes compliant. No new finding category, no new `PROPOSAL_INTENTS` entry, no review-schema change.
 
-**实现落点（r2 P1 折叠 + r3 F1/F5 补钉，钉到函数）**：
-1. `check-profile.lib.mjs` `validateCheck` 的 `readObject` 字段白名单增加**可选**顶层 `outline` 字段，嵌套形状固定为：`status ∈ {"compliant","non-compliant"}`（readEnum）、`missingRequiredSections: string[]`、`orderViolations: [{section: string, declaredOrder: number, actualOrder: number}]`（嵌套 readObject）。可选性是硬要求：profile-less run 与旧 run 的既有 check 工件都没有该字段。
-2. `record.lib.mjs`（recordCheck）：outline 计算 + 按 body hash 重放校验（与 `verifyMechanicalChanges` 同处，after-snapshot 已在此读取）。
-3. `mutation.lib.mjs`（evaluateCompletion）：增加 outline 输入（见上）。出口口径（r4 P2 补钉）：outline 不合规时**复用既有 run `outcome:"blocked"`**（contracts.md:53 已含该值，不改枚举），`missing` 加 `"outline"` 项——不新增 outcome 值。
-4. `commands.lib.mjs:234-252`（nextRequiredStage）：最新 check 的 outline 不合规时返回新 stage token `re-check`（词表加一项；`finalize` 之外唯一新增出口），文案「补齐 required 节后重新 check」。插入位置钉死：write 分支优先链 `finalize` 判定的**紧前**（即 structure/semantic review 都齐、check 已记录之后才可能返回 `re-check`）。
-5. 匹配器边界（r2 P2 折叠）：一个 H2 标题至多服务一个骨架节（两个 section 的备选列表命中同一标题时，declaredOrder 靠前者获得匹配）；同一 section 被多个相同标题命中时取第一个匹配。
-6. `outline` 字段仅当 profile 声明了 `structure` 时出现；其余 profile 的 check 工件形状不变。
+**Implementation sites (folds of r2 P1 and r3 F1/F5, pinned to functions)**:
+1. `check-profile.lib.mjs`, `validateCheck`: the `readObject` field allow-list gains an **optional** top-level `outline` field with a fixed nested shape — `status ∈ {"compliant","non-compliant"}` (readEnum), `missingRequiredSections: string[]`, `orderViolations: [{section: string, declaredOrder: number, actualOrder: number}]` (nested readObject). Optionality is a hard requirement: existing check artifacts of profile-less runs and old runs carry no such field.
+2. `record.lib.mjs` (`recordCheck`): outline computation plus replay verification against the body hash (alongside `verifyMechanicalChanges`, which already reads the after-snapshot here).
+3. `mutation.lib.mjs` (`evaluateCompletion`): gains the outline input (above). Exit vocabulary (r4 P2 pin): on outline non-compliance, **reuse the existing run `outcome:"blocked"`** (`contracts.md:53` already contains the value; the enum is unchanged) and add an `"outline"` entry to `missing` — no new outcome value.
+4. `commands.lib.mjs:234-252` (`nextRequiredStage`): when the latest check is outline-non-compliant, return the new stage token `re-check` (one addition to the vocabulary; the only new exit besides `finalize`), with the guidance text "add the required sections and re-check". Insertion point pinned: **immediately before** the `finalize` decision in the write branch's priority chain (so `re-check` is reachable only after structure/semantic reviews are present and a check is recorded).
+5. Matcher edges (fold of r2 P2): one H2 heading serves at most one skeleton section (when two sections' alternative lists hit the same heading, the section with the lower `declaredOrder` wins the match); when a section is hit by multiple identical headings, the first match wins.
+6. `outline` appears only when the profile declares `structure`; the check artifact shape is unchanged for every other profile.
 
-**匹配器规格（P1-3 折叠，钉死为纯 heading 匹配）**：
-- 只匹配 **H2**（ATX `##`）。setext 标题按 `markdown.lib.mjs:136` 现状视作 prose，不参与匹配——这是已知限制，写进 contracts.md。无 H2 的文档 ⇒ 所有 required 节报 missing。
-- `headingHint` 是 `/` 分隔的备选标题列表（如 `"TL;DR / 摘要"`）；匹配规则：对每个 H2 标题文本 trim + 小写化后，与每个备选的 trim + 小写化做**相等**比较（不做子串、不做语言归一）。命中即认为该骨架节存在。
-- 相对顺序：**只对命中了骨架节的 H2 之间**比较 declaredOrder 严格递增；未命中任何骨架节的 H2（作者自己的章节）位置任意，不影响判定。optional 节缺失合法。
-- 无位置回退。作者换了标题写法导致漏检 ⇒ 判 compliant（软匹配漏检），由 review 阶段的 profile rule 兜底——这保持判定确定性且可回放，代价（漏检）在 contracts.md 里如实声明。`synonyms` 数组留作 profile 作者的手动扩备选手段（`headingHint` 的 `/` 列表本身就够用），不做模糊匹配。
+**Matcher specification (fold of r1 P1-3, pinned to pure heading matching)**:
+- Match **H2 only** (ATX `##`). Setext headings count as prose per the current `markdown.lib.mjs:136` behavior and do not participate — a known limitation, to be documented in contracts.md. A document with no H2 ⇒ every required section is reported missing.
+- `headingHint` is a `/`-separated list of alternative headings (e.g. `"TL;DR / 摘要"`). Match rule: each H2 heading text, trimmed and lowercased, is compared for **equality** (no substring, no language normalization) against each alternative, trimmed and lowercased. A hit means the skeleton section exists.
+- Relative order: `declaredOrder` must be strictly increasing **only among H2s that matched skeleton sections**; H2s matching no skeleton section (the author's own sections) may sit anywhere and do not affect the verdict. Optional sections may be absent.
+- No positional fallback. A reworded heading that misses ⇒ judged compliant (a soft-match miss), backstopped by the profile rule at review — this keeps the verdict deterministic and replayable, with the cost (misses) declared honestly in contracts.md. A `synonyms` array remains available to profile authors as a manual way to extend the alternatives (the `/` list in `headingHint` already suffices); no fuzzy matching.
 
-## 7. 实现清单（按文件）
+## 7. Implementation checklist (by file)
 
-| # | 文件 | 变更 |
+| # | File | Change |
 |---|---|---|
-| 1 | `scripts/schema.lib.mjs:141` | PROFILES 增加 4 个 id |
-| 2 | `profiles/technical-essay.json` 等 ×4 | 新 profile（§5 规格） |
-| 3 | `scripts/check-profile.lib.mjs` | validateProfile 增加 `structure` 校验；validateCheck 的 `readObject` 字段白名单增加顶层 `outline` 字段 |
-| 4 | `scripts/record.lib.mjs`（recordCheck）+ `scripts/mutation.lib.mjs`（evaluateCompletion）+ `scripts/commands.lib.mjs:234-252`（nextRequiredStage 新增 `re-check` token） | outline 计算 + 按 body hash 重放校验 + finalize 门 + 引导文案（§6 执法路径；`CHANGE_TYPES`/`compareBodies`/`verifyMechanicalChanges`/`mechanicalStatus`/`derivePhase` 全部不动） |
-| 5 | `references/contracts.md` | Phase 1 只改 Brief.profile enum 文案（:33）；**§6 structure 契约归 Phase 2**（r3 F4：Phase 1 不该交付尚不存在的字段契约） |
-| 6 | `article-writing/SKILL.md` | 路由表加 4 行（:40）+ profile 描述段（:67-73）+ 触发描述加「技术战略/路线汇报」 |
-| 7 | `article-review/SKILL.md` | 补 profile 行（现缺） |
-| 8 | `language-editing/SKILL.md:37` | 「closest profile」文案列举更新 |
-| 9 | `README.md` + `README.zh.md` | genre 句 + profile 数（four→eight）双语同步 |
-| 10 | `README.i18n.yaml` | `pnpm check:readme --write` 重录哈希（记忆里的坑：`pnpm docs:parity` 不透传，用 check:readme 的 write 通道） |
-| 11 | `tests/package-shape.spec.ts:23` | PROFILE_IDS 加 4 id（驱动 schema 校验循环） |
-| 12 | `tests/contracts.spec.ts` | Phase 1 部分：enum pin 补三个新 id 用例（`poetry` 仍失败）；Phase 2 部分：structure 校验正反用例 + validateCheck 的 outline 字段正反用例 |
-| 13 | `tests/workflow.spec.ts` / fixtures | engineering-strategy 的 outline 门端到端用例（§8.2） |
-| 14 | 仓库根 `.claude-plugin/marketplace.json:16-19`（注意：**不在**插件包内——插件包只带 `.claude-plugin/plugin.json`；评审 P2-5 纠正了原稿的错误路径） | 描述句更新（无测试 pin，纯文案） |
+| 1 | `scripts/schema.lib.mjs:141` | Add the 4 ids to PROFILES |
+| 2 | `profiles/technical-essay.json` etc. ×4 | New profiles (§5 specs) |
+| 3 | `scripts/check-profile.lib.mjs` | validateProfile gains `structure` validation; validateCheck's `readObject` allow-list gains the top-level `outline` field |
+| 4 | `scripts/record.lib.mjs` (recordCheck) + `scripts/mutation.lib.mjs` (evaluateCompletion) + `scripts/commands.lib.mjs:234-252` (nextRequiredStage gains the `re-check` token) | Outline computation + body-hash replay verification + finalize gate + guidance text (§6 enforcement path; `CHANGE_TYPES` / `compareBodies` / `verifyMechanicalChanges` / `mechanicalStatus` / `derivePhase` all untouched) |
+| 5 | `references/contracts.md` | Phase 1 changes only the Brief.profile enum text (:33); **the §6 structure contract belongs to Phase 2** (r3 F4: Phase 1 must not ship a contract for a field that does not exist yet) |
+| 6 | `article-writing/SKILL.md` | Routing table +4 rows (:40) + profile description paragraph (:67-73) + trigger description gains "engineering strategy / roadmap reporting" |
+| 7 | `article-review/SKILL.md` | Add the (currently missing) profile row |
+| 8 | `language-editing/SKILL.md:37` | Update the "closest profile" enumeration |
+| 9 | `README.md` + `README.zh.md` | Genre sentence + profile count (four → eight), both languages in sync |
+| 10 | `README.i18n.yaml` | Re-record hashes with `pnpm check:readme --write` (use check:readme's write channel; `pnpm docs:parity` does not pass it through) |
+| 11 | `tests/package-shape.spec.ts:23` | Add the 4 ids to PROFILE_IDS (drives the schema-validation loop) |
+| 12 | `tests/contracts.spec.ts` | Phase 1 part: enum pin gains cases for the three new ids (`poetry` still fails); Phase 2 part: positive/negative `structure` validation cases + positive/negative `outline`-field cases for validateCheck |
+| 13 | `tests/workflow.spec.ts` / fixtures | End-to-end outline-gate case for engineering-strategy (§8.2) |
+| 14 | Repo-root `.claude-plugin/marketplace.json:16-19` (note: **not** inside the plugin package — the package ships only `.claude-plugin/plugin.json`; the r1 review corrected the original wrong path) | Description update (no test pin; text only) |
 
-不做：`OPERATIONS`、`BRIEF_FIELDS`、`derivePhase`（r3 F1：phase 照旧到 `checked`，门在 finalize——注意 nextRequiredStage 移入「做」清单第 4 行）、capability manifest（`docs/claude-code-capabilities.yaml` 无 dsh-cc-writing 行，已核实）、cc-plugin-loader 测试（4-skill 不变）。
+Explicitly untouched: `OPERATIONS`, `BRIEF_FIELDS`, `derivePhase` (r3 F1: the phase still advances to `checked`; the gate is at finalize — note nextRequiredStage moved into the "do" list, row 4), the capability manifest (`docs/claude-code-capabilities.yaml` has no dsh-cc-writing row, verified), and the cc-plugin-loader test (the 4-skill pin is unchanged).
 
-## 8. 验证计划
+## 8. Verification plan
 
-1. **单测**（vitest，包内）：structure 校验正反用例（缺失 required 节 / 顺序颠倒 / 无 structure 的 profile 不受影响）；profile 循环校验（package-shape 自动覆盖 4 个新 JSON）；enum pin（新 id 接受、`poetry` 拒绝）。
-2. **端到端**（fixtures 驱动 `writing.mjs`，完整走 write-op 要求的全链路）：init(profile=engineering-strategy) → record research/plan/draft → record structure review + semantics review（findings 全 addressed）→ record check（semanticStatus 走到 no-issue-found）→ 该 check 报 `outline.status="non-compliant"`（missingRequiredSections 非空，`changes` 为空且 `mechanicalStatus:"clean"`——二者分离各自诚实）。此刻断言门归因可分离：`status` 命中 outline 理由而非 review-missing（fixture 控制变量：另一条用例只缺 reviews 不缺 outline，二者报错必须可区分）。`nextRequiredStage === 're-check'`。→ 修订正文补节（常规 draft/proposal/apply 路径）→ 重新 review+check `outline.status="compliant"` → finalize 通过。断言 exit code、门归因、`re-check` token 与重放一致性（重算 outline 与记录值逐字段相等）。
-3. **门禁**：`pnpm check:readme`、包内 vitest、（docs-only 部分不涉及）capability/parity 与本包无关已核实。
-4. **活体验收**（实现后另行会话）：用一段真实技术战略素材走 article-writing + engineering-strategy profile，人工核对 SCQA 开头、policy 前置、诊断殿后是否符合 §5.4 规格。
+1. **Unit tests** (vitest, in-package): positive/negative `structure` validation (missing required section / inverted order / a profile without `structure` unaffected); the profile loop validation (package-shape automatically covers the 4 new JSON files); enum pin (new ids accepted, `poetry` rejected).
+2. **End-to-end** (fixtures driving `writing.mjs`, walking the full write-op chain): init(profile=engineering-strategy) → record research/plan/draft → record structure review + semantics review (all findings addressed) → record check (semanticStatus reaches no-issue-found) → that check reports `outline.status="non-compliant"` (missingRequiredSections non-empty, `changes` empty and `mechanicalStatus:"clean"` — the two stay separated, each honest). At this point assert the gate attribution is isolatable: `status` hits the outline reason, not review-missing (control-variable fixture: a second case missing only reviews but not outline; the two errors must be distinguishable). `nextRequiredStage === 're-check'`. → Revise the body to add the section (the ordinary draft/proposal/apply path) → re-review + re-check with `outline.status="compliant"` → finalize passes. Assert exit codes, gate attribution, the `re-check` token, and replay consistency (recomputed outline equals the recorded value field by field).
+3. **Gates**: `pnpm check:readme`, the in-package vitest suite. (The docs-only portion touches nothing else; capability/parity verified unrelated to this package.)
+4. **Live acceptance** (a separate session after implementation): run real strategy material through article-writing + the engineering-strategy profile and manually check the SCQA opening, policy-first ordering, and diagnosis-last placement against the §5.4 spec.
 
-## 9. 分期交付
+## 9. Phased delivery
 
-**Phase 1（小 PR，纯数据，只含三个 Tier A profile）**：#1（enum 只加 technical-essay/academic/natural-prose 三个 id）、对应 #2 三个 JSON、#5（仅 enum 文案）+ #6-#10 文档同步、#11/#12 的 Phase 1 部分。**engineering-strategy 整体推迟到 Phase 2**（评审 P1-2 折叠：`validateProfile` 的 `readObject` 拒绝未知字段，Phase 1 若带上含 `structure` 的 engineering-strategy.json 会直接红在 `package-shape.spec.ts:153-163` 的 profile 校验循环上；enum 条目与 profile 文件必须与 schema 能力同 PR 落地）。预计 diff ~450 行。
+**Phase 1 (small PR, pure data, three Tier A profiles only)**: #1 (enum gains only technical-essay / academic / natural-prose), the three JSON files from #2, #5 (enum text only) + #6-#10 doc sync, and the Phase 1 parts of #11/#12. **engineering-strategy moves wholly to Phase 2** (fold of r1 P1-2: `validateProfile`'s `readObject` rejects unknown fields, so a Phase 1 carrying an engineering-strategy.json with `structure` would go red on the `package-shape.spec.ts:153-163` profile-validation loop; the enum entry and the profile file must land in the same PR as the schema capability). Estimated diff ~450 lines.
 
-- **Phase 2（逻辑 PR，叠在 Phase 1 上）**：#3/#4 `structure` schema + check 工件 `outline` 字段、匹配器与 evaluateCompletion 门（§6 折叠后规格）+ engineering-strategy profile 与 enum 条目 + #12 的 Phase 2 部分 + #13 端到端用例 + contracts.md §6。预计 diff ~400 行。
-- 两期一个 worktree 栈式 PR，Phase 2 base Phase 1。
+- **Phase 2 (logic PR, stacked on Phase 1)**: #3/#4 — the `structure` schema, the check artifact's `outline` field, the matcher, and the evaluateCompletion gate (the folded §6 specs) — plus the engineering-strategy profile and its enum entry, the Phase 2 part of #12, the #13 end-to-end cases, and the contracts.md §6 contract. Estimated diff ~400 lines.
+- Both phases on one worktree as stacked PRs, Phase 2 based on Phase 1.
 
-## 10. 风险与开放问题
+## 10. Risks and open questions
 
-1. **heading 匹配的脆性**（已在 §6 折叠定案：纯 headingHint 相等匹配 + 无位置回退，漏检走 review 兜底，contracts.md 声明）。剩余开放问题只有：中文标题的全角/半角差异是否先做 NFC 归一——倾向做（一行代码，判定仍确定）。
-2. **profile 静默缺失**（现状 `state.lib.mjs:56` 缺文件返回 null）：enum 扩到 7-8 个后，「enum 有、文件缺」的配置错会更常见。建议 Phase 1 顺手把 loadProfile 对「enum 内 id 缺文件」改为响亮失败。折叠补充（P2-6）：失败码用 `INVALID_INPUT`，在 `loadRun` 边界抛出；影响面=同 run 的所有状态加载命令，但 profile 随包分发、包内不缺文件，实际触发仅限插件降级/手改磁盘的病态场景；单列 commit，message 里声明预期可观察变化。
-3. **natural-prose 与既有本地清理技能的边界**：文档面需写清分工（workflow 内规则化 vs 一次性成稿清理），避免用户困惑双通道。仅 README/SKILL 文案，无代码。
-4. **双语规则撰写成本**：profile 的 instruction 是语言无关还是 zh/en 双写？现状 `technical-ste` 只有 en。决定：三个日常文体 rules 写英文（模型消费，语言无关），headingHint 与面向用户的提示双写。engineering-strategy 的中文战略文档市场很大，其 rules 用英文写但 examples 双语。
-5. **structure 字段的长期形态**：若未来 academic 也要骨架（IMRaD），该字段须支持 per-language 变体（中文论文骨架）。当前只有 engineering-strategy 消费，先不做变体机制，YAGNI。
+1. **Heading-match brittleness** (settled in §6: pure headingHint equality matching, no positional fallback; misses backstopped by review; declared in contracts.md). The remaining open question is only whether to NFC-normalize full-width/half-width differences in Chinese headings first — leaning yes (one line of code; the verdict stays deterministic).
+2. **Silent profile absence** (today `state.lib.mjs:56` returns a null profile for a missing file): with the enum growing to 7-8 entries, the "enum has it, disk does not" configuration error becomes more common. Phase 1 should make `loadProfile` fail loudly for an in-enum id with a missing file. Folded supplement (r1 P2-6): fail with `INVALID_INPUT`, raised at the `loadRun` boundary; the blast radius is every state-loading command on the same run, but profiles ship inside the package and never go missing there, so the realistic trigger is plugin downgrade or manual disk edits; land it as its own commit whose message states the expected observable change.
+3. **Boundary between natural-prose and the local cleanup skills**: the documentation must state the division of labor (rule-based, in-workflow vs one-shot post-draft cleanup) so users are not confused by the two channels. README/SKILL text only; no code.
+4. **Bilingual rule-writing cost**: are profile instructions language-neutral or written twice (zh/en)? `technical-ste` today is en-only. Decision: the three everyday genres get English rules (model-consumed, language-neutral), with headingHints and user-facing hints bilingual. engineering-strategy's Chinese strategy-document market is large; its rules are written in English with bilingual examples.
+5. **Long-term shape of the `structure` field**: if `academic` later needs a skeleton (IMRaD), the field must support per-language variants (Chinese paper skeletons). Only engineering-strategy consumes it today; no variant machinery yet — YAGNI.
