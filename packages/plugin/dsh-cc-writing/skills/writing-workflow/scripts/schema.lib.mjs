@@ -138,7 +138,16 @@ export function readIdPattern(value, path, pattern, label) {
 
 export const OPERATIONS = ['write', 'review', 'edit']
 export const LANGUAGES = ['zh', 'en']
-export const PROFILES = ['technical', 'research', 'opinion', 'technical-ste', 'technical-essay', 'academic', 'natural-prose']
+export const PROFILES = [
+  'technical',
+  'research',
+  'opinion',
+  'technical-ste',
+  'technical-essay',
+  'academic',
+  'natural-prose',
+  'engineering-strategy',
+]
 export const EVIDENCE_MODES = ['ordinary', 'vwa']
 export const PHASES = [
   'initialized',
@@ -180,4 +189,6 @@ export const DISPOSITIONS = ['pending', 'expected', 'defect']
 export const SEMANTIC_STATUSES = ['not-run', 'no-issue-found', 'issues-found', 'incomplete']
 export const MECHANICAL_STATUSES = ['clean', 'changed']
 export const LANGUAGE_INTENTS = ['clarity', 'concision-style']
+export const OPENING_PATTERNS = ['scqa', 'none']
+export const OUTLINE_STATUSES = ['compliant', 'non-compliant']
 

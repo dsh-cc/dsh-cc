@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "engineering-strategy",
+  "description": "Engineering strategy document reporting technical strategy or roadmap choices to management: the Rumelt kernel (diagnosis / guiding policy / coherent actions), a SCQA opening, and a policy-first reading order.",
+  "applicableLanguages": ["zh", "en"],
+  "rules": [
+    {
+      "id": "engineering-strategy-explicit-tradeoffs",
+      "instruction": "A policy must state what it gives up (\"choosing A means not doing B\"); a policy without a tradeoff is fluff.",
+      "rationale": "design §5.4; Rumelt, Good Strategy Bad Strategy, Ch. 5 (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-specificity",
+      "instruction": "Policies are stated as ratios / thresholds / mechanisms (\"new services default to Rust unless X\", \"20% platform time each quarter\"), not direction adjectives.",
+      "rationale": "design §5.4; Staff Engineer (§2.2)",
+      "severity": "advisory"
+    }
+  ],
+  "protectedTerms": [],
+  "structure": {
+    "openingPattern": "scqa",
+    "sections": [
+      { "id": "summary", "headingHint": "TL;DR / Summary / 摘要", "required": true, "order": 1 },
+      { "id": "policy", "headingHint": "Guiding Policy / 指导方针", "required": true, "order": 2 },
+      { "id": "operations", "headingHint": "Operations / 落实机制", "required": false, "order": 3 },
+      { "id": "diagnosis", "headingHint": "Diagnosis / 诊断", "required": true, "order": 4 },
+      { "id": "explore", "headingHint": "Explore / 背景与调研", "required": false, "order": 5 }
+    ],
+    "audienceVariantNote": "Approval audience: policy first. Org rollout: policy + operations first. Diagnosis and explore go last but must not be deleted. / 审批场景 policy 前置；组织落地场景 policy+operations 前置；diagnosis/explore 殿后但不可删。"
+  }
+}

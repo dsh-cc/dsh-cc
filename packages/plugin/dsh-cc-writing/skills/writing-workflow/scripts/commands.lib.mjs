@@ -209,6 +209,7 @@ function statusCommand(root, input) {
   }
   const derived = brief === null || staleBrief ? null : derivePhase(ctx)
   const earliest = staleBrief ? 'brief' : stalePlan ? 'plan' : staleBody ? 'body' : staleArtifacts.length > 0 ? 'artifact' : null
+  const nextStage = staleBrief ? 'new-run' : nextRequiredStage(ctx, brief)
   return {
     runPath: runRel,
     runId: run.runId,
@@ -223,7 +224,8 @@ function statusCommand(root, input) {
     staleArtifacts,
     orphanArtifacts: orphans,
     earliestInvalidatedPrerequisite: earliest,
-    nextStage: staleBrief ? 'new-run' : nextRequiredStage(ctx, brief),
+    nextStage,
+    nextStageGuidance: NEXT_STAGE_GUIDANCE[nextStage] ?? null,
     structuralRound: run.structuralRound,
     languagePass: run.languagePass,
     languageIntentsUsed: run.languageIntentsUsed,
@@ -239,6 +241,8 @@ function nextRequiredStage(ctx, brief) {
     if (!contextComplete(ctx)) return 'context'
     if (reviews.structure === undefined) return 'structure-review'
     if (reviews.semantics === undefined || check === null) return 'semantic-review'
+    // Write-branch only: the recorded outline is read as stored (design §6).
+    if (outlineNonCompliant(check)) return 're-check'
     return 'finalize'
   }
   if (brief.operation === 'edit') {
@@ -249,6 +253,15 @@ function nextRequiredStage(ctx, brief) {
   if (reviews.structure === undefined) return 'structure-review'
   if (reviews.language === undefined) return 'language-review'
   return 'finalize'
+}
+
+/** Status is advisory on stored values; finalize is the recompute authority. */
+function outlineNonCompliant(check) {
+  return check !== null && check.outline !== undefined && check.outline !== null && check.outline.status === 'non-compliant'
+}
+
+const NEXT_STAGE_GUIDANCE = {
+  're-check': 'add the required sections and re-check',
 }
 
 // ------------------------------------------------------------------ dispatch
