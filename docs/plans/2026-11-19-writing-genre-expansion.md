@@ -185,13 +185,33 @@ structure?: {
 - `openingPattern` 目前仅 `"scqa" | "none"` 两个值——枚举保持最小，未来有书证再扩。
 - 无 `structure` 字段的 profile（全部既有 profile 与三个 Tier A 新 profile）行为不变。**加法、可选、向后兼容**；`schemaVersion` 保持 `1`（旧 reader 读新 profile 只是忽略未知字段失败——注意：现有 `readObject` 拒绝未知字段，所以这不是「旧 reader 兼容」而是「同版本内加可选字段」。若未来有跨版本 profile 流转需求再升 v2，当前 profile 只在包内分发，无此需求）。
 
-**机械验证边界（关键决策 D5）**：check 阶段对 `structure` 只验证两件事：
-1. `required:true` 的节在最终正文中存在（按 heading 匹配，headingHint 是提示不是字面量）；
+**机械验证边界（关键决策 D5）**：check 阶段对 `outline`（结构骨架，刻意不叫 `structure`——那是既有 review stage 的名字，见下）只验证两件事：
+1. `required:true` 的节在最终正文中存在（按 heading 匹配，见下）；
 2. 出现的骨架节之间保持声明的相对顺序。
 
-**不验证**：节的写作质量、SCQA 是否真的写成了 SCQA、方针是否隐含取舍——这些是 review 阶段的模型判断，写进 profile rules 与 review rubric。这条边界是对「prompts, not gates」承诺的延续：结构存在性是文件性质（可机械复查、可 hash 回放），内容质量不是。
+**不验证**：节的写作质量、SCQA 是否真的写成了 SCQA、方针是否隐含取舍——这些是 review 阶段的模型判断，写进 profile rules 与 review rubric。这条边界是对「prompts, not gates」承诺的延续。
 
-check 结果进既有 `checks/` 工件：新增一个 finding 类别 `structure`（severity required 的节缺失即 open finding，走既有 proposal→apply→re-check 循环）。这复用 finding 不可变 + addressed 派生标签的全部既有语义，不新增状态机状态。
+**概念命名（P1-4 折叠）**：新概念统一叫 `outline`（profile 的字段名仍为 `structure`，因为它描述文档结构本身；但 finding/检查结果类别叫 `outline`）。`structure` 一词已被 review stage（`STAGES`，`schema.lib.mjs:156`）与 proposal intent（`PROPOSAL_INTENTS:177`）占用，二者都是模型判断面（`reviews/` 工件）；新检查是机械面，混名会让实现者把它挂进 structure review 流。
+
+**工件归属与回放契约（P0-1 折叠）**：outline 检查结果**不进** check 工件的 `changes` 数组。`changes` 的每一项是 `{type ∈ CHANGE_TYPES, before, after, disposition, reason}`（`check-profile.lib.mjs:44-90`），由 `compareBodies` 独家生产，`record.lib.mjs:390-408` 的 `verifyMechanicalChanges` 会拒绝任何机械重放无法复现的 change——「required 节缺失」是 after-body 的绝对属性，没有自然的 before/after 表示，塞进 `changes` 要么过不了重放校验、要么被迫伪造 diff。改为在 check 工件增加一个**顶层 `outline` 字段**：
+
+```
+outline?: {
+  status: "compliant" | "non-compliant",
+  missingRequiredSections: string[],   // section id 列表
+  orderViolations: [{section, declaredOrder, actualOrder}]
+}
+```
+
+- `outline` 是 after-body 的纯函数：check 记录时计算，重放时按 body hash 重新计算比对——与 `checks/` 工件「可独立验证」的契约同构，且**完全不动** `CHANGE_TYPES`、`compareBodies`、`verifyMechanicalChanges` 与 `mechanicalStatus`（`clean` 仍只表示机械 diff 为空，不再隐含 outline 合规——二者分离，各自诚实）。
+- `outline.status === "non-compliant"` 产生一个类别为 `outline` 的 open finding，走既有 proposal→apply→re-check 循环（finding 不可变 + addressed 派生标签语义原样复用），不新增状态机状态。
+- `outline` 字段仅当 profile 声明了 `structure` 时出现；其余 profile 的 check 工件形状不变。
+
+**匹配器规格（P1-3 折叠，钉死为纯 heading 匹配）**：
+- 只匹配 **H2**（ATX `##`）。setext 标题按 `markdown.lib.mjs:136` 现状视作 prose，不参与匹配——这是已知限制，写进 contracts.md。无 H2 的文档 ⇒ 所有 required 节报 missing。
+- `headingHint` 是 `/` 分隔的备选标题列表（如 `"TL;DR / 摘要"`）；匹配规则：对每个 H2 标题文本 trim + 小写化后，与每个备选的 trim + 小写化做**相等**比较（不做子串、不做语言归一）。命中即认为该骨架节存在。
+- 相对顺序：**只对命中了骨架节的 H2 之间**比较 declaredOrder 严格递增；未命中任何骨架节的 H2（作者自己的章节）位置任意，不影响判定。optional 节缺失合法。
+- 无位置回退。作者换了标题写法导致漏检 ⇒ 判 compliant（软匹配漏检），由 review 阶段的 profile rule 兜底——这保持判定确定性且可回放，代价（漏检）在 contracts.md 里如实声明。`synonyms` 数组留作 profile 作者的手动扩备选手段（`headingHint` 的 `/` 列表本身就够用），不做模糊匹配。
 
 ## 7. 实现清单（按文件）
 
@@ -200,7 +220,7 @@ check 结果进既有 `checks/` 工件：新增一个 finding 类别 `structure`
 | 1 | `scripts/schema.lib.mjs:141` | PROFILES 增加 4 个 id |
 | 2 | `profiles/technical-essay.json` 等 ×4 | 新 profile（§5 规格） |
 | 3 | `scripts/check-profile.lib.mjs` | validateProfile 增加 structure 校验 |
-| 4 | `scripts/commands.lib.mjs` / check 相关 | check 输出增加 structure lint（required 节存在性 + 顺序） |
+| 4 | `scripts/commands.lib.mjs` / check 相关 | check 工件增加顶层 `outline` 字段（§6 规格：纯函数计算 + 按 body hash 重放；`CHANGE_TYPES`/`compareBodies`/`verifyMechanicalChanges`/`mechanicalStatus` 全部不动） |
 | 5 | `references/contracts.md` | Brief.profile enum 文案 + §6 增 structure 契约 |
 | 6 | `article-writing/SKILL.md` | 路由表加 4 行（:40）+ profile 描述段（:67-73）+ 触发描述加「技术战略/路线汇报」 |
 | 7 | `article-review/SKILL.md` | 补 profile 行（现缺） |
@@ -210,27 +230,28 @@ check 结果进既有 `checks/` 工件：新增一个 finding 类别 `structure`
 | 11 | `tests/package-shape.spec.ts:23` | PROFILE_IDS 加 4 id（驱动 schema 校验循环） |
 | 12 | `tests/contracts.spec.ts` | enum pin 补新 id 用例 + structure 校验正反用例 + poetry 仍失败 |
 | 13 | `tests/workflow.spec.ts` / fixtures | 增加 engineering-strategy 的 structure lint 用例（节缺失→open finding→apply→绿） |
-| 14 | `.claude-plugin/marketplace.json:17` | 描述句更新（无测试 pin，纯文案） |
+| 14 | 仓库根 `.claude-plugin/marketplace.json:16-19`（注意：**不在**插件包内——插件包只带 `.claude-plugin/plugin.json`；评审 P2-5 纠正了原稿的错误路径） | 描述句更新（无测试 pin，纯文案） |
 
 不做：`OPERATIONS`、`BRIEF_FIELDS`、`derivePhase`、`nextRequiredStage`、capability manifest（`docs/claude-code-capabilities.yaml` 无 dsh-cc-writing 行，已核实）、cc-plugin-loader 测试（4-skill 不变）。
 
 ## 8. 验证计划
 
 1. **单测**（vitest，包内）：structure 校验正反用例（缺失 required 节 / 顺序颠倒 / 无 structure 的 profile 不受影响）；profile 循环校验（package-shape 自动覆盖 4 个新 JSON）；enum pin（新 id 接受、`poetry` 拒绝）。
-2. **端到端**（fixtures 驱动 `writing.mjs`）：init(profile=engineering-strategy) → record research/plan/draft → check 报 structure finding → proposal+apply 补节 → re-check 绿 → finalize。断言 exit code 与 finding 类别。
+2. **端到端**（fixtures 驱动 `writing.mjs`）：init(profile=engineering-strategy) → record research/plan/draft → check 报 `outline.status="non-compliant"`（missingRequiredSections 非空，`changes` 为空且 `mechanicalStatus:"clean"`——二者分离各自诚实）→ proposal+apply 补节 → re-check `outline.status="compliant"` → finalize。断言 exit code、finding 类别与重放一致性（重算 outline 与记录值逐字段相等）。
 3. **门禁**：`pnpm check:readme`、包内 vitest、（docs-only 部分不涉及）capability/parity 与本包无关已核实。
 4. **活体验收**（实现后另行会话）：用一段真实技术战略素材走 article-writing + engineering-strategy profile，人工核对 SCQA 开头、policy 前置、诊断殿后是否符合 §5.4 规格。
 
 ## 9. 分期交付
 
-- **Phase 1（小 PR，纯数据）**：#1/#2/#5(文案)/#6-#10/#11/#12(仅 enum)。风险接近零，先让三个日常文体可用。预计 diff ~600 行（4 个 JSON 占大头）。
-- **Phase 2（逻辑 PR，叠在 Phase 1 上）**：#3/#4 structure schema + check lint + #13 端到端用例 + contracts.md §6。预计 diff ~300 行。
+**Phase 1（小 PR，纯数据，只含三个 Tier A profile）**：#1（enum 只加 technical-essay/academic/natural-prose 三个 id）、对应 #2 三个 JSON、#5-#10 文档同步、#11/#12。**engineering-strategy 整体推迟到 Phase 2**（评审 P1-2 折叠：`validateProfile` 的 `readObject` 拒绝未知字段，Phase 1 若带上含 `structure` 的 engineering-strategy.json 会直接红在 `package-shape.spec.ts:153-163` 的 profile 校验循环上；enum 条目与 profile 文件必须与 schema 能力同 PR 落地）。预计 diff ~450 行。
+
+- **Phase 2（逻辑 PR，叠在 Phase 1 上）**：#3/#4 `structure` schema + check 工件 `outline` 字段与匹配器（§6 折叠后规格）+ engineering-strategy profile 与 enum 条目 + #13 端到端用例 + contracts.md §6。预计 diff ~400 行。
 - 两期一个 worktree 栈式 PR，Phase 2 base Phase 1。
 
 ## 10. 风险与开放问题
 
-1. **heading 匹配的脆性**：required 节存在性按 heading 识别，作者换个标题写法（「我们的判断」vs「诊断」）会漏检。缓解：headingHint 只作匹配提示，check 同时接受「节序匹配」（第 N 个 H2 对应 order N）；文档在 contracts.md 里声明这是软匹配，漏检走 review 阶段的 profile rule 兜底。开放问题：是否需要 profile 里给每个 section id 配 synonyms 数组——Phase 2 评审时定。
-2. **profile 静默缺失**（现状 `state.lib.mjs:56` 缺文件返回 null）：enum 扩到 8 个后，「enum 有、文件缺」的配置错会更常见。建议 Phase 1 顺手把 loadProfile 对「enum 内 id 缺文件」改为响亮失败（这是行为变更，单列 commit 并在 commit message 声明预期可观察变化）。开放问题：是否算 scope creep——倾向做，因为新用户第一次踩到静默 null 会以为 profile 生效了。
+1. **heading 匹配的脆性**（已在 §6 折叠定案：纯 headingHint 相等匹配 + 无位置回退，漏检走 review 兜底，contracts.md 声明）。剩余开放问题只有：中文标题的全角/半角差异是否先做 NFC 归一——倾向做（一行代码，判定仍确定）。
+2. **profile 静默缺失**（现状 `state.lib.mjs:56` 缺文件返回 null）：enum 扩到 7-8 个后，「enum 有、文件缺」的配置错会更常见。建议 Phase 1 顺手把 loadProfile 对「enum 内 id 缺文件」改为响亮失败。折叠补充（P2-6）：失败码用 `INVALID_INPUT`，在 `loadRun` 边界抛出；影响面=同 run 的所有状态加载命令，但 profile 随包分发、包内不缺文件，实际触发仅限插件降级/手改磁盘的病态场景；单列 commit，message 里声明预期可观察变化。
 3. **natural-prose 与既有本地清理技能的边界**：文档面需写清分工（workflow 内规则化 vs 一次性成稿清理），避免用户困惑双通道。仅 README/SKILL 文案，无代码。
 4. **双语规则撰写成本**：profile 的 instruction 是语言无关还是 zh/en 双写？现状 `technical-ste` 只有 en。决定：三个日常文体 rules 写英文（模型消费，语言无关），headingHint 与面向用户的提示双写。engineering-strategy 的中文战略文档市场很大，其 rules 用英文写但 examples 双语。
 5. **structure 字段的长期形态**：若未来 academic 也要骨架（IMRaD），该字段须支持 per-language 变体（中文论文骨架）。当前只有 engineering-strategy 消费，先不做变体机制，YAGNI。
