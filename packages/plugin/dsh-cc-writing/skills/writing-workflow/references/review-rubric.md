@@ -58,6 +58,19 @@ vision budget, or a diagnosis with no retained data and reasoning, is a
 structural finding too. These are model judgments; the outline check confirms
 only that the required headings exist in the declared order.
 
+Four further judgments for this profile. An unnamed policy — one the reader
+cannot quote as a short phrase that means the same thing out of context — is a
+style finding, because the organization repeats names, not section numbers. A
+document that ends by restating its goals rather than turning each policy back
+on the reader as an audit question, or that names no point at which its effect
+will be reviewed, is a structural finding: it cannot be judged later. Confidence
+that outruns the reasoning (assertion where the document should state a limit)
+is a `missing-premise` finding — but do not confuse a stated limit with fluff:
+"I don't know the whole answer, but I may know bits of it" is calibrated honesty,
+whereas fluff is empty confidence. Finally, a diagnosis supported only by survey
+averages and no named incident is a reasoning finding: a percentage alone is hard
+to interpret, while a traced anecdote carries the mechanism.
+
 ## 2. Severity
 
 `major` covers:

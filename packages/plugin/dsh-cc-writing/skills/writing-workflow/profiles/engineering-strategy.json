@@ -51,6 +51,30 @@
       "instruction": "Before release, an uninvolved reader flags unclear areas (carried by the workflow's review stage; noted in the SKILL.md routing text).",
       "rationale": "design §5.4; Engineering Executives' Primer, Ch. 11 (§2.2)",
       "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-close-with-self-audit-and-a-revisit-commitment",
+      "instruction": "Close by turning each policy back on the reader as a yes/no audit question, and commit to a named revisit point (a date, an event, or an observable threshold) at which the strategy's effect will be reviewed; a strategy that ends on a restatement of its own goals has no way to be judged later.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (four closing audit questions), Engineering Executives' Primer, Ch. 3 (review impact after two months) (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-name-the-policies",
+      "instruction": "Give each guiding policy a short name that survives being quoted out of context (\"High-Velocity Decision Making\", \"Resist Proxies\"); the name is the unit the organization repeats back, so an unnamed policy decays into a section number.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (four named defenses as section headings) (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-calibrated-honesty",
+      "instruction": "State plainly what you do not know and how confident you are (\"I don't know the whole answer, but I may know bits of it\"); this is not fluff — fluff is empty confidence, while a stated limit tells the reader how much weight the reasoning carries.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (explicit epistemic downgrade), Rumelt, Ch. 3 (fluff is its own anti-pattern) (§2.2)",
+      "severity": "advisory"
+    },
+    {
+      "id": "engineering-strategy-anecdotes-before-averages",
+      "instruction": "Support the diagnosis with named incidents and first-hand observations, not only survey averages: a single traced anecdote carries the mechanism and the stakes, where a percentage alone is hard to interpret and can mislead.",
+      "rationale": "design §5.4; 2016 Letter to Shareholders (many anecdotes rather than only survey averages) (§2.2)",
+      "severity": "advisory"
     }
   ],
   "protectedTerms": [],

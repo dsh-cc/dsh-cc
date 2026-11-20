@@ -40,7 +40,7 @@ Mapping: the profile rule shape (`{id, instruction, rationale, severity}`) is is
 
 Mapping: writing-workflow already *is* that loop (draft → review → proposal → apply → check, with immutable findings and the derived `addressed` label). **The genre's role is to feed task-specific feedback dimensions into this loop** — the profile replaces Self-Refine's few-shot feedback prompt. No new mechanism is needed.
 
-### 2.2 The four books (genre spec for engineering strategy)
+### 2.2 The four books and one specimen (genre spec for engineering strategy)
 
 The four books converge strongly on what a strategy document looks like; they yield the genre rules for engineering-strategy:
 
@@ -64,6 +64,10 @@ The four books converge strongly on what a strategy document looks like; they yi
 **The document carries its process (Primer, Ch. 11)**: metadata (date, approval status, where to ask questions), a single canonical source, a named contact; before release, have someone uninvolved flag unclear areas; after release, disable in-document comments (an open comment thread signals an unapproved strategy).
 
 **Specificity (*Staff Engineer*)**: specific statements create alignment; generic statements create the illusion of alignment. Show your work — keep the reasoning so others can modify and extend as context shifts.
+
+**The shareholder letter as a fifth source (2016 Letter to Shareholders)**: the Amazon 2016 letter is a high-grade specimen of executive-grade strategic writing and supplies four rules the four books leave implicit. (a) **Named policies**: its four defenses are section headings — "True Customer Obsession", "Resist Proxies", "Embrace External Trends", "High-Velocity Decision Making" — so the policy, not the section number, is what the organization repeats back. (b) **Calibrated honesty**: "Such a question can't have a simple answer… I don't know the whole answer, but I may know bits of it" — an explicit epistemic downgrade that tells the reader how much weight the reasoning carries; this is not fluff, because fluff is empty confidence rather than a stated limit. (c) **Anecdotes before averages**: good designers "study and understand many anecdotes rather than only the averages you'll find on surveys", because "that's hard to interpret and could unintentionally mislead" — a named incident carries the mechanism where a percentage does not. (d) **A closing self-audit and revisit commitment**: the letter ends by turning each defense into a question for the reader ("Are you falling prey to proxies, or do they serve you?") and, per the Primer's two-month review, names when the strategy will be judged; a document that ends by restating its own goals gives future readers no way to evaluate it.
+
+Genre boundary worth stating explicitly: a shareholder letter is a leadership essay, not an organization-level strategy document of the Larson kind. Its diagnosis is woven through the prose rather than carried by a "Diagnosis" heading, and its section headings *are* the policies — so such a document would not pass the §6 outline check, and that is by design. The `structure` skeleton serves documents that must be enforced through visible, approval-readable sections; it is not a universal document shape.
 
 ## 3. Current state and extension seams (code anchors)
 
@@ -167,6 +171,10 @@ Rule highlights (style rules beyond the structure):
 - Show your work: the diagnosis retains data and reasoning (roadmap, competitive pressure, financial constraints, issues collected in 1:1s) for future readers to trace.
 - The document carries its metadata: date, approval status, canonical-source link, and where to ask questions (a named channel or person).
 - Before release, an uninvolved reader flags unclear areas (carried by the workflow's review stage; noted in the SKILL.md routing text).
+- Close with a self-audit and a revisit commitment: turn each policy back on the reader as a yes/no audit question, and name the point at which the strategy's effect will be reviewed (a date, an event, or an observable threshold); ending on a restatement of the goals leaves the document unjudgeable later.
+- Name the policies: each guiding policy gets a short name that survives being quoted out of context ("High-Velocity Decision Making", "Resist Proxies") — the name is the unit the organization repeats back, so an unnamed policy decays into a section number.
+- Calibrated honesty: state plainly what you do not know and how confident you are; fluff is empty confidence, whereas a stated limit tells the reader how much weight the reasoning carries.
+- Anecdotes before averages: support the diagnosis with named incidents and first-hand observations, not only survey averages — one traced anecdote carries the mechanism and the stakes, where a percentage alone is hard to interpret and can mislead.
 
 `applicableLanguages: ["zh","en"]`.
 
