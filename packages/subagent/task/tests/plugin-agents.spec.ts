@@ -188,7 +188,12 @@ describe('Task dispatch of the real dsh-cc-agents plugin (mounted from the repo)
         const childId = (spec['childId'] as string | undefined) ?? `child-${continuable.length + 1}`
         const runId = `run-${continuable.length + 1}`
         emit('subagent/start', { runId, provider: providerName, id: childId, local: true })
-        continuable.push(spec['request'] as Record<string, unknown>)
+        // rc.5 flat spec: strip the envelope; the rest is the folded request.
+        const {
+          provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+          ...request
+        } = spec
+        continuable.push(request)
         void (async () => {
           emit('subagent/end', {
             runId, provider: providerName, id: childId, local: true,

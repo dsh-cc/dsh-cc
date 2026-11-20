@@ -168,7 +168,9 @@ describe('chat boundary rejects System One models (llm/stream guard)', () => {
     const run = await subagents.startActivation({
       provider: 'spawn',
       label: 'gauge-child',
-      request: { prompt: [{ type: 'text', text: 'work' }], parent: parent as Agent, agentOptions: { provider: 'mock', model: routes.resolve('gauge').model } },
+      prompt: [{ type: 'text', text: 'work' }],
+      parent: parent as Agent,
+      agentOptions: { provider: 'mock', model: routes.resolve('gauge').model },
       signal: new AbortController().signal,
       delivery: 'caller',
     })

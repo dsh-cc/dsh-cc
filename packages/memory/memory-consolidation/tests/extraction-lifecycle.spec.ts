@@ -199,9 +199,9 @@ describe('single-listener mode handoff', () => {
     let disposals = 0
     const prompts: string[] = []
     const subagents = {
-      async startActivation(spec: { label: string; request: { prompt: readonly { text: string }[] } }) {
+      async startActivation(spec: { label: string; prompt: readonly { text: string }[] }) {
         activations += 1
-        prompts.push(spec.request.prompt[0]?.text ?? '')
+        prompts.push(spec.prompt[0]?.text ?? '')
         const run = deferred<unknown>()
         let disposed = false
         const dispose = (): Promise<void> => {

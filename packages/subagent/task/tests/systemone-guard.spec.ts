@@ -63,7 +63,11 @@ async function mount() {
       const childId = (spec['childId'] as string | undefined) ?? `child-${starts.length + 1}`
       const runId = `run-${starts.length + 1}`
       const providerName = spec['provider'] as string
-      const request = (spec['request'] ?? {}) as Record<string, unknown>
+      // rc.5 flat spec: strip the envelope; the rest is the provider request.
+      const {
+        provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+        ...request
+      } = spec
       emit('subagent/start', { runId, provider: providerName, id: childId, local: true })
       starts.push({ provider: providerName, request, delivery: spec['delivery'] })
       void (async () => {

@@ -14,10 +14,15 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { FileSystem } from '@dsh-cc/memory'
 import { startMemoryJob } from '../src/memory-job.ts'
 
+/** rc.5 flat activation spec: the request fields ride the spec top level. */
 interface ActivationSpec {
   provider: string
   label: string
-  request: Record<string, unknown>
+  prompt: readonly { type: 'text'; text: string }[]
+  parent: Agent
+  maxDepth?: number
+  outputSchema?: Record<string, unknown>
+  toolFilter?: unknown
   signal: AbortSignal
   delivery: string
 }
@@ -89,10 +94,10 @@ describe('startMemoryJob dispatch (rc.5 activation contract)', () => {
     expect(spec.provider).toBe('fork')
     expect(spec.label).toBe('memory-consolidation')
     expect(spec.delivery).toBe('caller')
-    expect(spec.request['maxDepth']).toBe(1)
-    expect(spec.request['outputSchema']).toBeDefined()
-    // rc.5: no toolFilter on the start request (composition seam applies it).
-    expect(spec.request['toolFilter']).toBeUndefined()
+    expect(spec.maxDepth).toBe(1)
+    expect(spec.outputSchema).toBeDefined()
+    // rc.5: no toolFilter on the start spec (composition seam applies it).
+    expect(spec.toolFilter).toBeUndefined()
     // One-shot dispose policy: the settled fork must not stay resident.
     expect(subagents.disposed).toBe(1)
   })

@@ -261,7 +261,6 @@ function continuableSeam(childId: string): SubagentsLike {
       dispose: () => Promise.resolve(),
     }),
     getProvider: () => ({ prepareContinuable() {} }),
-    list: () => [],
   } as unknown as SubagentsLike
 }
 

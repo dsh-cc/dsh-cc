@@ -47,14 +47,13 @@ export interface SubagentsSeam {
   registerProvider(provider: unknown): () => void
   /** Look up a provider by name, for backend resolution at `start`. */
   getProvider(name: string): unknown | undefined
-  /** Establish a managed child (rc.5); the plugin provider's execution path. */
+  /** Establish a managed child (rc.5 flat spec); the plugin provider's execution path. */
   startActivation(spec: {
     provider: string
     label: string
-    request: Record<string, unknown>
     signal: AbortSignal
     delivery: 'parent' | 'caller'
-  }): Promise<{
+  } & Record<string, unknown>): Promise<{
     childId: string
     result: Promise<unknown>
     dispose(): Promise<void>
@@ -147,18 +146,17 @@ export class AgentProvider implements SubagentBackend {
       this.gatePatterns?.() ?? DEFAULT_ACTOR_CONTRACT_MODELS,
     )
     // label/signal live at the activation-spec level; toolFilter/persona are
-    // gone from the request (the composition seam applies them).
+    // gone from the request (the composition seam applies them). `rest` can
+    // never carry label/signal (destructured out above) — rc.5 flat spec.
     const { label, signal, ...rest } = delegation
     const activation = await this.subagents.startActivation({
       provider: this.backendName,
       label: typeof label === 'string' ? label : this.name,
-      request: {
-        ...rest,
-        prompt: [{ type: 'text', text: gatedPrompt }],
-        ...(modelOverride !== undefined
-          ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
-          : {}),
-      },
+      ...rest,
+      prompt: [{ type: 'text', text: gatedPrompt }],
+      ...(modelOverride !== undefined
+        ? { agentOptions: { ...delegation['agentOptions'] as object, ...modelOverride } }
+        : {}),
       signal: signal as AbortSignal,
       delivery: 'caller',
     })

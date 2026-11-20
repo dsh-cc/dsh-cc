@@ -28,17 +28,15 @@ import {
 } from '@dsh-cc/memory'
 import type { MemoryWrite } from '@dsh-cc/memory'
 
-/** Structural subset of the subagent seam used here. */
+/** Structural subset of the subagent seam used here (rc.5 flat spec). */
 interface SubagentService {
   startActivation(spec: {
     provider: string
     label: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      maxDepth?: number
-      outputSchema?: Record<string, unknown>
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    maxDepth?: number
+    outputSchema?: Record<string, unknown>
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{ result: Promise<SubagentResultLike>; dispose(): Promise<void> }>
@@ -341,16 +339,14 @@ export async function startMemoryJob(
     provider,
     label,
     signal: controller.signal,
-    request: {
-      prompt: [{ type: 'text', text: prompt }],
-      parent: agent,
-      // Defense-in-depth recursion cap: the top-level listener already gates on
-      // depth zero, so this fork's child never delegates. maxDepth is compared
-      // against the CHILD's resolved depth (parent + 1); a top-level parent's
-      // child resolves to 1 and passes, a grandchild to 2 is rejected.
-      maxDepth: 1,
-      outputSchema: MEMORY_WRITES_SCHEMA,
-    },
+    prompt: [{ type: 'text', text: prompt }],
+    parent: agent,
+    // Defense-in-depth recursion cap: the top-level listener already gates on
+    // depth zero, so this fork's child never delegates. maxDepth is compared
+    // against the CHILD's resolved depth (parent + 1); a top-level parent's
+    // child resolves to 1 and passes, a grandchild to 2 is rejected.
+    maxDepth: 1,
+    outputSchema: MEMORY_WRITES_SCHEMA,
     delivery: 'caller',
   })
   // Kill the running fork exactly once (idempotent upstream): on abort, on

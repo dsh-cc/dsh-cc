@@ -99,7 +99,12 @@ export class PluginAgentIndex {
    * `{ id, definition }` pairs. The scan is synchronous and uncached.
    */
   list(): { id: string; definition: AgentDefinition }[] {
-    const seam = this.getSeam()
+    // rc.5: `list()` is gone from the harness service and from `SubagentsLike`
+    // (S2 seam-type cleanup); this scan still duck-types an OPTIONAL `list` so
+    // hermetic seam overrides keep working until the S4 rewrite moves discovery
+    // to the `ccPluginAgents` service. Against the real rc.5 seam there is no
+    // enumeration, so this degrades to "no plugin agents" rather than crashing.
+    const seam = this.getSeam() as (SubagentsLike & { list?(): string[] }) | undefined
     // The seam is duck-typed: a host (or test harness) may expose a partial
     // seam without `list` — treat that as "no plugin agents", not a crash.
     if (seam === undefined || typeof seam.list !== 'function') return []

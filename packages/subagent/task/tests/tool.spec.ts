@@ -122,7 +122,13 @@ function makeSeam(
       const providerName = spec['provider'] as string
       const provider = byName.get(providerName)
       if (provider === undefined) throw new Error(`unknown provider "${providerName}"`)
-      const request = (spec['request'] ?? {}) as Record<string, unknown>
+      // rc.5 flat spec: request fields ride the spec top level; strip the
+      // envelope (provider/label/signal/delivery/childId/name) exactly like
+      // the harness manager does when it builds the provider-facing request.
+      const {
+        provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+        ...request
+      } = spec
       const caps = provider.capabilities as unknown as Record<string, boolean>
       if (request['maxDepth'] !== undefined && caps['depthLimit'] === false) throw new Error('UNSUPPORTED_CAPABILITY maxDepth')
       if (request['outputSchema'] !== undefined && caps['outputSchema'] === false) throw new Error('UNSUPPORTED_CAPABILITY outputSchema')

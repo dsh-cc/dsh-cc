@@ -40,12 +40,10 @@ interface SubagentsSeam {
   startActivation(spec: {
     provider: string
     label: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      outputSchema?: Record<string, unknown>
-      maxDepth?: number
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    outputSchema?: Record<string, unknown>
+    maxDepth?: number
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{ childId: string; result: Promise<{ stopReason: string }>; dispose(): Promise<void> }>
@@ -95,12 +93,10 @@ describe('memory-recall child tool surface (integration tripwire)', () => {
     const run = await subagents.startActivation({
       provider: 'fork',
       label: 'memory-recall',
-      request: {
-        prompt: [{ type: 'text', text: 'select memories' }],
-        parent,
-        outputSchema: RECALL_FILES_SCHEMA,
-        maxDepth: 1,
-      },
+      prompt: [{ type: 'text', text: 'select memories' }],
+      parent,
+      outputSchema: RECALL_FILES_SCHEMA,
+      maxDepth: 1,
       signal,
       delivery: 'caller',
     })
@@ -122,12 +118,10 @@ describe('memory-recall child tool surface (integration tripwire)', () => {
     const run = await subagents.startActivation({
       provider: 'fork',
       label: 'memory-recall-unfiltered',
-      request: {
-        prompt: [{ type: 'text', text: 'select memories' }],
-        parent,
-        outputSchema: RECALL_FILES_SCHEMA,
-        maxDepth: 1,
-      },
+      prompt: [{ type: 'text', text: 'select memories' }],
+      parent,
+      outputSchema: RECALL_FILES_SCHEMA,
+      maxDepth: 1,
       signal,
       delivery: 'caller',
     })

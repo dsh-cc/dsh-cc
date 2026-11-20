@@ -64,19 +64,16 @@ export interface SubagentsLike {
     label: string
     /** Caller-reserved durable id (becomes the child's session id; local backends only). */
     childId?: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      agentOptions?: Record<string, string>
-      maxDepth?: number
-      /** Child working directory; the harness manager resolves and applies it. */
-      cwd?: string
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    agentOptions?: Record<string, string>
+    maxDepth?: number
+    /** Child working directory; the harness manager resolves and applies it. */
+    cwd?: string
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<ActivationLike>
   getProvider(name: string): unknown
-  list(): string[]
   /**
    * Duck-typed interrupt (harness `ctx.subagents.interrupt`): cancels a live
    * child's current turn; admission is synchronous and an absent/settled
@@ -84,16 +81,6 @@ export interface SubagentsLike {
    * Absent → abort degrades to a prompt resolve without interrupting.
    */
   interrupt?(childId: string, authority: { kind: 'ancestor'; agent: Agent }): void
-  /**
-   * Duck-typed `listChildren` (harness `ctx.subagents.listChildren`): the
-   * durable direct-children catalog of one parent session. rc.2 row shape
-   * (`SubagentCatalogEntry` = `{id, createdAt} & mode/label` — the old
-   * `activity`/`hasChildren`/`kind` fields are gone). Used by the §3.6
-   * capacity guard. Absent → the guard degrades open.
-   */
-  listChildren?(parentSessionId: string, signal?: AbortSignal): Promise<
-    { id: string; mode?: string }[]
-  >
 }
 
 /** A structural subset of a provider descriptor exposing the capability probe. */
@@ -333,13 +320,11 @@ export async function collectForeground(
               provider: PROVIDER_SPAWN,
               label,
               childId: durableChildId,
-              request: {
-                prompt,
-                parent,
-                ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
-                ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
-                ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
-              },
+              prompt,
+              parent,
+              ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
+              ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
+              ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
               signal,
               delivery: 'parent',
             })
@@ -450,13 +435,11 @@ export async function startBackground(
         provider: PROVIDER_SPAWN,
         label,
         childId: durableChildId,
-        request: {
-          prompt,
-          parent,
-          ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
-          ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
-          ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
-        },
+        prompt,
+        parent,
+        ...('agentOptions' in rest ? { agentOptions: rest.agentOptions } : {}),
+        ...('maxDepth' in rest ? { maxDepth: rest.maxDepth } : {}),
+        ...(request.cwd !== undefined ? { cwd: request.cwd } : {}),
         signal,
         delivery: 'parent',
       })

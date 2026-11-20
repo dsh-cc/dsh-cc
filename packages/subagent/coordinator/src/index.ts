@@ -188,10 +188,8 @@ export function installCoordinatorMode(
       const started = await provider.startActivation({
         provider: registry.provider,
         label: args.name,
-        request: {
-          prompt: [{ type: 'text' as const, text: args.prompt }],
-          parent: agent,
-        },
+        prompt: [{ type: 'text' as const, text: args.prompt }],
+        parent: agent,
         signal: exec.signal,
         delivery: 'parent',
       })

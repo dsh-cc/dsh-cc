@@ -86,7 +86,8 @@ describe('cc-shell background composition (§4.11)', () => {
     const started = await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'pinned child',
-      request: { prompt: [{ type: 'text', text: 'child task' }], parent },
+      prompt: [{ type: 'text', text: 'child task' }],
+      parent,
       signal: new AbortController().signal,
       delivery: 'parent',
     })
@@ -113,13 +114,16 @@ describe('cc-shell background composition (§4.11)', () => {
     }, { timeout: 10_000 })
   }, 20_000)
 
-  it('a child send_message({agent_id: parent}) wakes the parked parent with the child\'s message', async () => {
+  it('a child send_message({agent: lead}) wakes the parked parent with the child\'s message', async () => {
     // The §4.10 delivery protocol over the composed cc rows: the child calls
     // the harness send_message control tool addressed to the parent session,
     // the parked parent's wake pre-step fires, and the formatted child
     // message lands in the parent's inbox as an 'agent-message'.
+    // rc.5 (S3 argument shape): send_message targets by `agent` NAME — the
+    // tree root's name is 'lead', which resolveName answers without the
+    // sessionQuery service this minimal composition deliberately omits.
     const { ctx, parent, wakeCount } = await compose([
-      toolCallResponse('r1', 'send_message', { agent_id: 'parent', message: 'FINDING: composed' }),
+      toolCallResponse('r1', 'send_message', { agent: 'lead', message: 'FINDING: composed' }),
       textResponse('wrapping up'),
     ])
     const delivered: { source?: string; text: string }[] = []
@@ -134,7 +138,8 @@ describe('cc-shell background composition (§4.11)', () => {
     await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'reporting child',
-      request: { prompt: [{ type: 'text', text: 'child task' }], parent },
+      prompt: [{ type: 'text', text: 'child task' }],
+      parent,
       signal: new AbortController().signal,
       delivery: 'parent',
     })
@@ -160,7 +165,8 @@ describe('cc-shell background composition (§4.11)', () => {
     const started = await ctx.subagents.startActivation({
       provider: 'spawn',
       label: 'settling child',
-      request: { prompt: [{ type: 'text', text: 'child task' }], parent },
+      prompt: [{ type: 'text', text: 'child task' }],
+      parent,
       signal: new AbortController().signal,
       delivery: 'parent',
     })

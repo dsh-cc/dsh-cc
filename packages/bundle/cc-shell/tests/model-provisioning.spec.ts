@@ -44,9 +44,14 @@ function makeSubagentsSeam(): { seam: { registerProvider: (p: unknown) => () => 
       // duplicate under mountAgents' duplicate preflight and skips every agent.
       getProvider: (name: string) => (name === 'spawn' ? backend : undefined),
       // rc.5: the provider routes through spawn's activation; the fake records
-      // the activation REQUEST (same record the old fork echo captured).
+      // the flat activation spec minus the envelope (same record the old fork
+      // echo captured as the request).
       startActivation: async (spec: Record<string, unknown>) => {
-        backend.last = spec['request'] as never
+        const {
+          provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+          ...request
+        } = spec
+        backend.last = request as never
         return { childId: 'fake-child', messageId: 'fake-m', result: Promise.resolve(), dispose: () => Promise.resolve() }
       },
     },

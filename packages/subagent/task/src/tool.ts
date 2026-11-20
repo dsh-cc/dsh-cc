@@ -283,11 +283,14 @@ export function registerTaskTool(
             + 'run_in_background: true.',
           )
         }
+        // rc.5 flat spec: label/signal never ride inside a spread — destructure
+        // them out of `base`, spread the request rest (prompt/parent/maxDepth).
+        const { label, signal, ...forkRequest } = base
         const activation = await seam.startActivation({
           provider: FORK_SENTINEL,
-          label: base.label,
-          request: base,
-          signal: exec.signal,
+          label,
+          ...forkRequest,
+          signal,
           delivery: 'caller',
         })
         // One-shot dispose policy: post-publication abort goes through

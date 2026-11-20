@@ -108,8 +108,13 @@ describe('RECALL_FILES_SCHEMA', () => {
     const requests: Array<Record<string, unknown>> = []
     const ctx = new Context()
     ctx.provide('subagents' as never, {
-      startActivation: async (spec: { request: Record<string, unknown> }) => {
-        requests.push(spec.request)
+      startActivation: async (spec: Record<string, unknown>) => {
+        // rc.5 flat spec: strip the envelope; the rest is the start request.
+        const {
+          provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+          ...request
+        } = spec
+        requests.push(request)
         return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)
@@ -130,8 +135,13 @@ describe('SubagentMemorySelector start request hardening', () => {
     const requests: Array<Record<string, unknown>> = []
     const ctx = new Context()
     ctx.provide('subagents' as never, {
-      startActivation: async (spec: { request: Record<string, unknown> }) => {
-        requests.push(spec.request)
+      startActivation: async (spec: Record<string, unknown>) => {
+        // rc.5 flat spec: strip the envelope; the rest is the start request.
+        const {
+          provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+          ...request
+        } = spec
+        requests.push(request)
         return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)
@@ -355,8 +365,13 @@ describe('SubagentMemorySelector agentOptions forwarding', () => {
     const requests: Array<Record<string, unknown>> = []
     const ctx = new Context()
     ctx.provide('subagents' as never, {
-      startActivation: async (spec: { request: Record<string, unknown> }) => {
-        requests.push(spec.request)
+      startActivation: async (spec: Record<string, unknown>) => {
+        // rc.5 flat spec: strip the envelope; the rest is the start request.
+        const {
+          provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+          ...request
+        } = spec
+        requests.push(request)
         return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)
@@ -385,8 +400,13 @@ describe('memory apply() recall model stamping', () => {
       section: (_def: unknown) => {},
     } as never)
     ctx.provide('subagents' as never, {
-      startActivation: async (spec: { provider: string; request: Record<string, unknown> }) => {
-        calls.push({ name: spec.provider, request: spec.request })
+      startActivation: async (spec: Record<string, unknown>) => {
+        // rc.5 flat spec: strip the envelope; the rest is the start request.
+        const {
+          provider: _ep, label: _el, signal: _es, delivery: _ed, childId: _ec, name: _en,
+          ...request
+        } = spec
+        calls.push({ name: spec['provider'] as string, request })
         return activationOf(Promise.resolve({ stopReason: 'completed', structured: { files: [] } }))
       },
     } as never)

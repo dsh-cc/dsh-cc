@@ -36,12 +36,10 @@ interface SubagentsSeam {
   startActivation(spec: {
     provider: string
     label: string
-    request: {
-      prompt: readonly { type: 'text'; text: string }[]
-      parent: Agent
-      agentOptions?: Record<string, string>
-      maxDepth?: number
-    }
+    prompt: readonly { type: 'text'; text: string }[]
+    parent: Agent
+    agentOptions?: Record<string, string>
+    maxDepth?: number
     signal: AbortSignal
     delivery: 'parent' | 'caller'
   }): Promise<{ childId: string; result: Promise<{ stopReason: string }>; dispose(): Promise<void> }>
@@ -87,12 +85,10 @@ describe('fork-seed effort restoration (D3.6 probe surface)', () => {
     const run = await subagents.startActivation({
       provider: 'fork',
       label: 'fork-child',
-      request: {
-        prompt: [{ type: 'text', text: 'inherited work' }],
-        parent,
-        agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
-        maxDepth: 3,
-      },
+      prompt: [{ type: 'text', text: 'inherited work' }],
+      parent,
+      agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
+      maxDepth: 3,
       signal,
       delivery: 'caller',
     })
@@ -109,12 +105,10 @@ describe('fork-seed effort restoration (D3.6 probe surface)', () => {
     const run = await subagents.startActivation({
       provider: 'spawn',
       label: 'spawn-child',
-      request: {
-        prompt: [{ type: 'text', text: 'fresh work' }],
-        parent,
-        agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
-        maxDepth: 3,
-      },
+      prompt: [{ type: 'text', text: 'fresh work' }],
+      parent,
+      agentOptions: { provider: 'mock', model: 'mock', reasoningEffort: 'max' },
+      maxDepth: 3,
       signal,
       delivery: 'caller',
     })

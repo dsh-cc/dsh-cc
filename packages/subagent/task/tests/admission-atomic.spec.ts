@@ -41,7 +41,6 @@ function world(initialRunning: number) {
       }
     },
     getProvider: () => ({ prepareContinuable: () => undefined }),
-    list: () => [],
   } satisfies SubagentsLike
   const parentOf = (id: string) => ({
     id,
