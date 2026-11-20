@@ -57,7 +57,7 @@ describe('delegation discipline — send_message advisory', () => {
   it('appends the advisory as the LAST content block in the delegator direction', async () => {
     const { postExecute } = await mount()
     const out = await postExecute(
-      { name: 'send_message', token: 't1', arguments: { subagent_id: 'child-1' }, agent: undefined },
+      { name: 'send_message', token: 't1', arguments: { agent: 'child-1' }, agent: undefined },
       { content: [] },
       async () => ({ kind: 'accept', content: [{ type: 'text', text: 'sent' }] }),
     )
@@ -74,7 +74,7 @@ describe('delegation discipline — send_message advisory', () => {
       {
         name: 'send_message',
         token: 't2',
-        arguments: { subagent_id: 'child-1' },
+        arguments: { agent: 'child-1' },
         agent: { id: 'agent-x', session: { header: { parentSession: 'child-1' } } },
       },
       { content: [] },

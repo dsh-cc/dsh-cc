@@ -454,7 +454,7 @@ describe('e2e — shunt gate exempts live subagents through the real plugin hook
     // the child from its persisted session — a NEW epoch, so SubagentStart
     // re-emits (lifecycle.ts createActivationObserver.start) and the live set
     // re-adds the id before the resumed turn's tool calls.
-    const send = await callTool(ctx, 'send_message', { agent_id: agentId, message: 'read it again' }, parent)
+    const send = await callTool(ctx, 'send_message', { agent: agentId, message: 'read it again' }, parent)
     expect(send.isError).toBe(false)
     // 4 child requests total: read→text (epoch 1), read→text (epoch 2).
     await waitFor(

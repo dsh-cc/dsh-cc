@@ -25,7 +25,6 @@ import { realpathSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import z from '@deepseek-ai/schemastery'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 // Type-only augmentation pulls: the harness packages declare their Context
 // members (`tools`, `sessionPersistence`, `agents`) and the tools Events on
@@ -47,6 +46,8 @@ import {
 } from './policy.ts'
 import { serializePerKey, ExecutionNoticeBus } from './serialize.ts'
 import { wireDispatchAdmission } from './dispatch-admission.ts'
+import { wirePostExecute } from './post-execute.ts'
+import { resolveSendTarget } from './name-resolution.ts'
 import { PinStore, type CorruptPin } from './store.ts'
 import type { ResumePin } from './pin.ts'
 
@@ -78,11 +79,6 @@ export const RESUME_PIN_STORE = 'resumePinStore'
 
 /** The spawn-time git identity probe timeout (matches the capture probe). */
 const GIT_PROBE_TIMEOUT_MS = 2_000
-
-/** Delegation-discipline advisory suffixed to delegator-direction send_message results. */
-const DELEGATION_DISCIPLINE_ADVISORY =
-  'Delegation discipline: `send_message` continues this agent’s current assignment only; '
-  + 'a NEW task needs a fresh `subagent_fork` spawn (a plain spawn, not `subagent_type: "fork"`).'
 
 /**
  * Normalize one `git rev-parse` output to a cwd-anchored absolute path (git
@@ -162,11 +158,6 @@ export async function refingerprintDefinition(
   } catch {
     return 'missing'
   }
-}
-
-/** The text of one tool result's content blocks (for annotation matching). */
-function resultText(result: { content: readonly ContentBlock[] }): string {
-  return result.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
 }
 
 /**
@@ -304,8 +295,15 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
   // evaluation + persistence + delivery admission are serialized per child.
   ctx.on('tools/pre-execute', async (exec, next) => {
     if (exec.name !== 'send_message') return next()
-    const target = (exec.arguments as { agent_id?: unknown } | null)?.agent_id
-    if (typeof target !== 'string' || target.length === 0) return next()
+    // R2 (rc.5): the target argument is `agent`, a NAME in the caller's tree
+    // (`lead`, a slash path, or a bare token with Session-id fallback), while
+    // pins/tombstones key by child Session id — resolve before comparing. An
+    // unattributable argument passes through: never block what cannot be
+    // attributed to a pinned child.
+    const argument = (exec.arguments as { agent?: unknown } | null)?.agent
+    if (typeof argument !== 'string' || argument.length === 0) return next()
+    const target = await resolveSendTarget(ctx, exec.agent, argument, exec.signal)
+    if (target === undefined) return next()
     // R8 tombstone gate: BEFORE pin admission (next()) — a tombstoned id
     // (grace-window auto-release after inactivity) never gets persistPass.
     // The markers are the process-local release-module state, published by
@@ -371,58 +369,11 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
 
   // §4.7: prefix the gate's notices onto the send_message result; annotate
   // list_agents for pinned children.
-  ctx.on('tools/post-execute', async (exec, result, next) => {
-    const out = await next()
-    if (out.kind !== 'accept') return out
-    if (exec.name === 'send_message') {
-      const notices = pendingNotices.take(exec.token)
-      const target = (exec.arguments as { subagent_id?: unknown } | null)?.subagent_id
-      const callerParent = (exec.agent as { session?: { header?: { parentSession?: unknown } } } | undefined)
-        ?.session?.header?.parentSession
-      // Child→parent result reports (explicitly instructed by the harness continuable initial
-      // prompt) are same-conversation sends: never annotate them. exec.agent === undefined or a
-      // non-matching parentSession is the delegator direction → the advisory fires.
-      const delegatorDirection = typeof target === 'string' && target.length > 0 && String(callerParent) !== target
-      if (notices.length > 0 || delegatorDirection) {
-        return {
-          kind: 'accept',
-          content: [
-            ...notices.map(text => ({ type: 'text' as const, text })),
-            ...(out.content ?? []),
-            ...(delegatorDirection ? [{ type: 'text' as const, text: DELEGATION_DISCIPLINE_ADVISORY }] : []),
-          ],
-        }
-      }
-      return out
-    }
-    if (exec.name === 'list_agents') {
-      const annotations: string[] = []
-      const text = resultText(result)
-      for (const childId of store.ids()) {
-        if (!text.includes(childId)) continue
-        const pin = readPin(childId)
-        if (pin === undefined) continue
-        if ('kind' in pin) {
-          annotations.push(`[resume-pin] ${childId}: state blocked (pin unreadable)`)
-          continue
-        }
-        const current = await refingerprintDefinition(pin, gatedPersonaOf)
-        const pinnedFingerprint = pin.definition.kind === 'named' ? pin.definition.fingerprint : undefined
-        const definitionChanged = current !== null && (pinnedFingerprint === undefined || current !== pinnedFingerprint)
-        const parts = [`state ${pin.resume.state}`]
-        if (definitionChanged) parts.push('definition changed')
-        if (pin.lastNotice !== undefined) parts.push(pin.lastNotice)
-        annotations.push(`[resume-pin] ${childId}: ${parts.join('; ')}`)
-      }
-      if (annotations.length > 0) {
-        annotations.push(
-          'Delegation discipline: an idle/ready child stays continuable for its CURRENT assignment only'
-          + ' — a new task needs a fresh `subagent_fork` spawn (plain spawn, not `subagent_type: "fork"`).',
-        )
-        return { kind: 'accept', content: [...(out.content ?? []), { type: 'text' as const, text: annotations.join('\n') }] }
-      }
-    }
-    return out
+  wirePostExecute(ctx, {
+    store,
+    readPin,
+    currentFingerprintOf: pin => refingerprintDefinition(pin, gatedPersonaOf),
+    pendingNotices,
   })
 
   // D3.5: the pinned provider/model/effort triple is applied DURABLY via

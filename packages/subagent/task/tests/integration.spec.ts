@@ -206,15 +206,17 @@ describe('Task background mode — control loop (§4.9)', () => {
       expect(child!.status).toBe('running')
     }, { timeout: 10_000 })
 
-    // (b) list_agents enumerates the child by the returned durable id.
+    // (b) list_agents enumerates the child — rc.5 rows render the runtime-
+    // assigned NAME (the parent's first child is `agent-1`), with the durable
+    // id behind the render for addressing (send_message by bare id below).
     const list = await callTool(ctx, 'list_agents', {}, parent)
     expect(list.isError).toBe(false)
-    expect(text(list as never)).toContain(agentId)
+    expect(text(list as never)).toContain('agent-1 [running]')
     expect(text(list as never)).toContain('long research')
 
     const child = ctx.agents.get(childId)!
     const cancelSpy = vi.spyOn(child, 'cancel')
-    const interrupt = await callTool(ctx, 'interrupt_agent', { agent_id: agentId }, parent)
+    const interrupt = await callTool(ctx, 'interrupt_agent', { agent: agentId }, parent)
     // (d) interrupt_agent stops the running turn. Under rc.2 the post-interrupt
     // lifecycle is INCONSISTENT in this composition: the interrupt is accepted
     // and `cancel({kind:'parent'}, {keepInbox:true})` fires exactly once, but
@@ -270,7 +272,7 @@ describe('Task background mode — idle-parent wake (§4.10)', () => {
     const { ctx, parent, wakeCount, delivered } = await setup([
       // The child addresses its finding to the parked parent by session id via
       // the harness send_message control tool (the sole child→parent channel).
-      toolCallResponse('r1', 'send_message', { agent_id: 'parent', message: 'FINDING: the answer' }),
+      toolCallResponse('r1', 'send_message', { agent: 'parent', message: 'FINDING: the answer' }),
       textResponse('wrapping up'),
     ])
 
@@ -311,7 +313,7 @@ describe('Task background mode — cold resume (§4.12)', () => {
     // send_message cold-resumes: a new Activation materializes from the
     // persisted session (no live handle existed before the delivery).
     expect(ctx.agents.get(childId)).toBeUndefined()
-    const send = await callTool(ctx, 'send_message', { agent_id: agentId, message: 'keep going' }, parent)
+    const send = await callTool(ctx, 'send_message', { agent: agentId, message: 'keep going' }, parent)
     expect(send.isError).toBe(false)
     expect(text(send as never)).toContain(`message delivered to agent ${agentId}`)
     await vi.waitFor(() => {

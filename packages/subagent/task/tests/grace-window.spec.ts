@@ -601,14 +601,34 @@ describe('release tombstone algebra', () => {
 // ── send_message gate ──────────────────────────────────────────────────────
 
 describe('send_message tombstone gate', () => {
-  function fakeCtx(markers: { isTombstoned: (id: string) => boolean } | undefined) {
+  // rc.5: the pre-execute gate resolves `arguments.agent` (a NAME) to the
+  // child Session id before the tombstone lookup — faked down to the
+  // documented bare-token fallback plus an optional explicit name map.
+  function nameResolution(names: Record<string, string> = {}) {
+    return {
+      resolveName: async (_caller: unknown, agent: string) => {
+        if (agent in names) return names[agent]!
+        if (agent.includes('/')) throw new Error('AGENT_NAME_NOT_FOUND')
+        return agent
+      },
+    }
+  }
+
+  function fakeCtx(
+    markers: { isTombstoned: (id: string) => boolean } | undefined,
+    opts: { subagents?: ReturnType<typeof nameResolution> } = {},
+  ) {
     const preExecute: { handler: (exec: unknown, next: () => unknown) => unknown }[] = []
+    // Opt-out sentinel: `{ subagents: undefined }` models a composition with
+    // no name resolver at all (a default parameter would eat the undefined).
+    const subagents = 'subagents' in opts ? opts.subagents : nameResolution()
     const ctx = {
       provide: () => {},
       get: (key: string) => (key === 'ccReleaseMarkers' ? markers : undefined),
       // The continuation-capacity gate reads the activation registry; a child
       // with no live activation is exactly the settled case these tests cover.
       agents: { get: () => undefined },
+      ...(subagents === undefined ? {} : { subagents }),
       on: (_name: string, handler: never) => {
         preExecute.push({ handler })
         return () => {}
@@ -619,6 +639,10 @@ describe('send_message tombstone gate', () => {
     return { ctx, preExecute }
   }
 
+  function sendExec(target: string) {
+    return { name: 'send_message', arguments: { agent: target }, agent: { id: 'parent' }, signal: new AbortController().signal }
+  }
+
   it('denies a tombstoned id BEFORE pin admission (next() never runs)', async () => {
     tombstoneReadyRow('t1')
     const root = mkdtempSync(join(tmpdir(), 'dsh-gate-'))
@@ -627,7 +651,26 @@ describe('send_message tombstone gate', () => {
       applyResumePinsPlugin(ctx as never, { pinsRoot: root })
       const gate = preExecute[0]!.handler as (exec: unknown, next: () => Promise<string>) => Promise<{ kind: string; reason: string }>
       const next = vi.fn(async () => 'next-called')
-      const decision = await gate({ name: 'send_message', arguments: { agent_id: 't1' } }, next)
+      const decision = await gate(sendExec('t1'), next)
+      expect(decision.kind).toBe('deny')
+      expect(decision.reason).toContain('auto-released after inactivity')
+      expect(next).not.toHaveBeenCalled()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // §3.3 regression (a), tombstone half: a tombstoned child addressed by its
+  // rc.5 NAME still hits the gate — resolution maps name → id → markers.
+  it('denies a tombstoned child addressed by its rc.5 list_agents name', async () => {
+    tombstoneReadyRow('t9-tombstoned-child')
+    const root = mkdtempSync(join(tmpdir(), 'dsh-gate-'))
+    try {
+      const { ctx, preExecute } = fakeCtx({ isTombstoned: id => isTombstoned(id) }, { subagents: nameResolution({ 'agent-1': 't9-tombstoned-child' }) })
+      applyResumePinsPlugin(ctx as never, { pinsRoot: root })
+      const gate = preExecute[0]!.handler as (exec: unknown, next: () => Promise<string>) => Promise<{ kind: string; reason: string }>
+      const next = vi.fn(async () => 'next-called')
+      const decision = await gate(sendExec('agent-1'), next)
       expect(decision.kind).toBe('deny')
       expect(decision.reason).toContain('auto-released after inactivity')
       expect(next).not.toHaveBeenCalled()
@@ -643,7 +686,24 @@ describe('send_message tombstone gate', () => {
       applyResumePinsPlugin(ctx as never, { pinsRoot: root })
       const gate = preExecute[0]!.handler as (exec: unknown, next: () => Promise<string>) => Promise<unknown>
       const next = vi.fn(async () => 'next-called')
-      await expect(gate({ name: 'send_message', arguments: { agent_id: 'live' } }, next)).resolves.toBe('next-called')
+      await expect(gate(sendExec('live'), next)).resolves.toBe('next-called')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // §3.3 degradation: without a resolver the gate cannot attribute the target,
+  // so even a tombstoned send passes through — it must never block on that
+  // evidence alone.
+  it('passes through when no name resolver exists in the composition', async () => {
+    tombstoneReadyRow('t1')
+    const root = mkdtempSync(join(tmpdir(), 'dsh-gate-'))
+    try {
+      const { ctx, preExecute } = fakeCtx({ isTombstoned: id => isTombstoned(id) }, { subagents: undefined })
+      applyResumePinsPlugin(ctx as never, { pinsRoot: root })
+      const gate = preExecute[0]!.handler as (exec: unknown, next: () => Promise<string>) => Promise<unknown>
+      const next = vi.fn(async () => 'next-called')
+      await expect(gate(sendExec('t1'), next)).resolves.toBe('next-called')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }

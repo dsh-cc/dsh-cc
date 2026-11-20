@@ -54,6 +54,16 @@ function stubPersistenceFace(snapshot: { sessionId: string } | undefined) {
   } as Record<string, unknown>
 }
 
+// rc.5 name seam, faked down to the documented fallback: a bare token that
+// matches no catalog name resolves to Session-id semantics, and a slash path
+// that names no tree member throws (harness resolveName).
+const bareIdResolution = {
+  resolveName: async (_caller: unknown, agent: string) => {
+    if (agent.includes('/')) throw new Error(`agent name ${JSON.stringify(agent)} was not found (AGENT_NAME_NOT_FOUND)`)
+    return agent
+  },
+}
+
 async function mount(
   pin: ResumePin,
   persistence: Record<string, unknown>,
@@ -81,6 +91,12 @@ async function mount(
     if (key === 'llm') (ctx as unknown as { provide: (key: string, value: unknown) => void }).provide('llm', value)
     else (ctx as unknown as Record<string, unknown>)[key] = value
   })
+  // Unless overridden, these id-addressed sends resolve through the bare-id
+  // name-fallback seam (`{ subagents: undefined }` models a composition with
+  // no resolver at all — the documented pass-through).
+  if (!('subagents' in extra)) {
+    (ctx as unknown as Record<string, unknown>).subagents = bareIdResolution
+  }
   const preExecute = (captured['tools/pre-execute'] as PreExecute[]).at(-1)!
   expect(typeof preExecute).toBe('function')
   return preExecute
@@ -99,7 +115,7 @@ function makeWorkspace(): string {
 
 function sendTo(childId: string) {
   return {
-    exec: { name: 'send_message', token: 't1', arguments: { agent_id: childId }, agent: undefined },
+    exec: { name: 'send_message', token: 't1', arguments: { agent: childId }, agent: { id: 'parent' } },
     next: async () => ({ kind: 'accept' as const, content: [{ type: 'text' as const, text: 'delivered' }] }),
   }
 }
@@ -134,5 +150,16 @@ describe('resume gate — session existence via the 0.1.5 persistence face (stat
     const out = await preExecute(exec, next)
     expect(out).toMatchObject({ kind: 'deny' })
     expect((out as { reason: string }).reason).toContain('PIN_ORPHANED')
+  })
+
+  // §3.3: with no name resolver in the composition the gate cannot attribute
+  // the target to a pin, so it must pass the send through rather than deny —
+  // a gate never blocks a message it cannot attribute to a pinned child.
+  it('no resolver in the composition ⇒ the gate passes a pinned child through instead of orphaning it', async () => {
+    const workspace = makeWorkspace()
+    const preExecute = await mount(makePin('child-9', workspace), stubPersistenceFace(undefined), { subagents: undefined })
+    const { exec, next } = sendTo('child-9')
+    const out = await preExecute(exec, next)
+    expect(out).toEqual({ kind: 'accept', content: [{ type: 'text', text: 'delivered' }] })
   })
 })
