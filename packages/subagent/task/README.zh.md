@@ -39,7 +39,7 @@ Claude Code 的 `Task` 工具允许主代理按 `subagent_type`（如 `deep-reas
    - `toolFilter` = 定义的 `toolRestriction`（allow/deny），**消毒**掉本组合已不再注册的工具名；
    - `maxDepth` = 3（硬编码为 `DEFAULT_MAX_DEPTH`，与 harness 默认一致；插件配置只暴露 `resumePins`，不可配置）。
 4. **其它不含冒号的类型**（工作区内找不到）→ **报错结果**，附带本工作区可用类型清单（或说明本工作区未定义任何 agent）；类型含 `:` 时提示带冒号感知的线索。
-5. **命中插件 agent 的 scoped id(`plugin:agent`)** → 以 `spawn` 启动，折叠方式与文件定义相同（persona、消毒后的 toolFilter、别名解析的 model、`maxDepth` 3），并从 `subagents` seam **实时**枚举。插件 agent **只能用其 scoped id** 寻址——裸插件 agent 名不可寻址，与 Claude Code 一致。
+5. **命中插件 agent 的 scoped id(`plugin:agent`)** → 以 `spawn` 启动，折叠方式与文件定义相同（persona、消毒后的 toolFilter、别名解析的 model、`maxDepth` 3），并从插件加载器在注册时发布的 root-realm `ccPluginAgents` 注册表**实时**发现（harness rc.5 移除了 `subagents` seam 的 provider 枚举）。插件 agent **只能用其 scoped id** 寻址——裸插件 agent 名不可寻址，与 Claude Code 一致。
 
 解析顺序是：保留哨兵（`general-purpose` / `fork`）→ 工作区文件定义 → 插件 agent scoped id。文件定义与 scoped 插件 id 占据互不相交的名字空间（`agentType` 含 `:` 的文件定义在发现时被跳过并告警），因此 scoped id 永远不会遮蔽文件类型，反之亦然。
 

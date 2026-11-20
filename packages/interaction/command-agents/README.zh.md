@@ -34,7 +34,7 @@ reject/timeout 流程、一套文案，以及一个进程本地的双集合标�
 ## Shared snapshot
 
 `src/snapshot.ts` 是一个基于注入服务的纯快照提供者
-（宿主平面的 `subagents.listChildren`、注册表的 `agents.get`、realm 内部的
+（`subagents.listDescendants` 过滤出直接子代、注册表的 `agents.get`、realm 内部的
 `resumePinStore`）。该插件挂载在 `cc-services` realm 内部，并把只读的
 `ccAgents` 服务发布到 ROOT 上下文（CcPlugins 模式），因此 TUI 的本地斜杠
 命令路径消费的是同一份快照。预设 surface 只渲染轻量详情；TUI 以增量方式

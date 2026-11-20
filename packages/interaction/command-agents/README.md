@@ -39,7 +39,7 @@ snapshot time) — never from the marker alone.
 ## Shared snapshot
 
 `src/snapshot.ts` is a pure snapshot provider over injected services
-(`subagents.listChildren` host-plane, `agents.get` registry, realm-interior
+(`subagents.listDescendants` filtered to direct children, `agents.get` registry, realm-interior
 `resumePinStore`). The plugin mounts INSIDE the `cc-services` realm and
 publishes the read-only `ccAgents` service on the ROOT context (CcPlugins
 pattern), so the TUI local-slash path consumes the SAME snapshot. The preset
