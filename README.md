@@ -74,8 +74,9 @@ Each release has one dsh version for CI verification. The launcher also uses tha
 
 | dsh-cc release | Verified dsh |
 | --- | --- |
-| `main` (unreleased, after v0.9.5) | 0.2.2-rc.5 |
-| v0.9.4 – v0.9.5 | 0.2.2-rc.1 |
+| `main` (unreleased, after v0.9.6-rc.3) | 0.2.2-rc.5 |
+| v0.9.6-rc.3 | 0.2.2-rc.5 |
+| v0.9.4 – v0.9.6-rc.2 | 0.2.2-rc.1 |
 | v0.9.3 | 0.2.1-rc.5 |
 | v0.8.3-rc.1 – v0.9.3-rc.4 | 0.2.0-rc.2 |
 | v0.8.2 | 0.1.7-rc.2 |

@@ -76,7 +76,9 @@ unset (inherit) is fail-closed — the block is stripped.
    defines none) — with a colon-aware hint when the type contains `:`.
 5. **A type matching a plugin agent's scoped id (`plugin:agent`)** → a `spawn` with the
    same fold as a file definition (persona, sanitized toolFilter, alias-resolved model,
-   `maxDepth` 3), enumerated live from the `subagents` seam. Plugin agents are addressed
+   `maxDepth` 3), discovered live from the root-realm `ccPluginAgents` registry that the
+   plugin loader publishes at registration time (harness rc.5 removed the `subagents`
+   seam's provider enumeration). Plugin agents are addressed
    **only by their scoped id** — a bare plugin agent name is not addressable, matching
    Claude Code.
 
