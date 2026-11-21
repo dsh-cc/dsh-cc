@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   contentDigest, envStatus, prepareAttemptBuild, provision, validatePin, validateReceipt, verifyEnv,
 } from '../skills/math-research/scripts/mathlib-env.mjs'
-import { HEX, isoNow, workspaces } from './helpers.ts'
+import { HEX, workspaces } from './helpers.ts'
 
 const roots = workspaces()
 afterEach(() => roots.cleanup())

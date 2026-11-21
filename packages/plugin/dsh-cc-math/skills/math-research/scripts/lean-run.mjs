@@ -7,7 +7,7 @@ import { assert, atomicJson, ensureWritable, exists, fail, hashFile, parseFlags,
 import { prepareAttemptBuild } from './mathlib-env.mjs'
 
 // L2 formal proof check with proof binding (design §4.1, §4.4) — the
-// soundness core. Two modes:
+// soundness core. Three modes:
 //
 //   --statement-check: elaborates statement.lean (which declares the theorem
 //     with `:= sorry`) in the env wrapper project, tolerates the `sorry`
@@ -20,6 +20,15 @@ import { prepareAttemptBuild } from './mathlib-env.mjs'
 //     and proofDeclName declaration checks, definitional-equality of the two
 //     recorded elaborated propositions, and the scoped axiom audit of
 //     proofDeclName admitting only {propext, Classical.choice, Quot.sound}.
+//   --anchor (reference-anchor equivalence, §4.3 row 2): builds the REFERENCE
+//     statement file (staged as proof.lean by anchor-check.mjs) and compares
+//     the RECORDED statement type against the elaboration of the reference
+//     declaration by the same Inspector definitional-equality path.
+//     `sorry` is tolerated here (type equality needs no proof, and benchmark
+//     references are frequently sorry-ed) and NO axiom audit runs — the
+//     reference is trusted evidence, not a claim of this run. status passed =
+//     equivalent, failure class `types-differ` = kernel evidence of a
+//     mismatch; any other failure means the check could not run.
 //
 // Scoped failure semantics (§4.4): L2 fails on ANY error, on ANY
 // sorry-bearing diagnostic — matched by the structured diagnostic's message
@@ -195,11 +204,12 @@ function assembleReport({ mode, problemDir, buildDir, diagnostics, raw, binding,
  * 'inspector') in the prepared attempt build dir and returns
  * { exitCode, stdout, stderr, timedOut }; the inspector phase additionally
  * leaves <build>/inspector-report.json, whose defeq/axiom verdict this
- * function consumes (Inspector pattern, §3.2).
+ * function consumes (Inspector pattern, §3.2). `options.anchor` selects the
+ * reference-anchor comparison mode (§4.3) instead of proof checking.
  */
 export async function runLeanRun(options, deps = {}) {
   const { io = fs, invokeLean = defaultInvokeLean, now = () => new Date().toISOString() } = deps
-  const mode = options.statementCheck ? 'statement-check' : 'proof-check'
+  const mode = options.anchor ? 'anchor-check' : options.statementCheck ? 'statement-check' : 'proof-check'
   const problemDir = resolve(options.problem)
   const binding = await loadBinding(problemDir)
   const receipt = await loadReceipt(resolve(options.env))
@@ -211,7 +221,7 @@ export async function runLeanRun(options, deps = {}) {
 
   const buildDir = options.buildDir
     ? resolve(options.buildDir)
-    : join(problemDir, 'attempts', options.statementCheck ? '_statement-check' : (options.attemptId ?? '_check'), 'build')
+    : join(problemDir, 'attempts', options.statementCheck ? '_statement-check' : options.anchor ? '_anchor-check' : (options.attemptId ?? '_check'), 'build')
   await prepareAttemptBuild(resolve(options.env), buildDir, { io })
   const sourceName = options.statementCheck ? 'statement.lean' : 'proof.lean'
   await io.copyFile(join(problemDir, sourceName), join(buildDir, `${SUBJECT}.lean`))
@@ -245,10 +255,10 @@ export async function runLeanRun(options, deps = {}) {
   // (a) any error fails, in BOTH modes.
   const errors = diagnostics.filter(diagnostic => diagnostic.severity === 'error')
   if (errors.length) return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, failure: { class: 'lean-error', detail: `${errors.length} error diagnostic(s)` } })
-  // (b) sorry-bearing diagnostics fail proof mode; statement-check tolerates
-  // exactly these and no other failure class.
+  // (b) sorry-bearing diagnostics fail proof mode; statement-check and the
+  // anchor comparison tolerate exactly these and no other failure class.
   const sorries = diagnostics.filter(isSorryDiagnostic)
-  if (!options.statementCheck && sorries.length) return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, failure: { class: 'sorry', detail: 'proof mode tolerates no sorry-bearing diagnostic' } })
+  if (!options.statementCheck && !options.anchor && sorries.length) return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, failure: { class: 'sorry', detail: 'proof mode tolerates no sorry-bearing diagnostic' } })
   if (raw !== null) return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, failure: { class: 'unparseable', detail: 'unparseable diagnostics output; raw text preserved' } })
   if (build.exitCode !== 0) return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, failure: { class: 'lean-error', detail: `lean exited ${build.exitCode} without a structured error diagnostic` } })
 
@@ -265,6 +275,24 @@ export async function runLeanRun(options, deps = {}) {
   let report
   try { report = readInspectorReport(reportText) }
   catch (error) { return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, failure: { class: 'unparseable', detail: error.detail ?? 'the inspector report is invalid' } }) }
+
+  if (options.anchor) {
+    // Reference-anchor equivalence (§4.3 row 2): the recorded statement type
+    // against the elaborated type of the REFERENCE declaration — same
+    // Inspector definitional-equality path, no axiom audit (the reference is
+    // trusted evidence, never a claim of this run).
+    const reference = report.proof ?? {}
+    if (reference.declaration !== binding.proofDeclName || !reference.kind || typeof reference.type !== 'string' || !reference.type) {
+      return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, failure: { class: 'binding', detail: `${binding.proofDeclName} was not elaborated in the reference statement file` } })
+    }
+    if (typeof report.typesMatch !== 'boolean') {
+      return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, typeInfo: { proofTypeText: reference.type, typesMatch: null }, failure: { class: 'unparseable', detail: 'the inspector produced no type-equality verdict for the reference' } })
+    }
+    const axioms = Array.isArray(report.axioms) ? report.axioms.map(String) : null
+    const typeInfo = { proofTypeText: reference.type, typesMatch: report.typesMatch }
+    if (!report.typesMatch) return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, axioms, typeInfo, failure: { class: 'types-differ', detail: 'the reference statement type is not definitionally equal to the recorded statement type' } })
+    return finish({ mode, problemDir, buildDir, diagnostics, raw, binding, hashes, axioms, typeInfo })
+  }
 
   if (options.statementCheck) {
     // Record the elaborated type into binding.json (§4.1 statement-check).
@@ -307,23 +335,26 @@ export async function runLeanRun(options, deps = {}) {
 // ---------------------------------------------------------------------------
 const HELP = [
   'lean-run — single-file Lean check with proof binding (design §4.1, §4.4)',
-  'usage: lean-run.mjs --problem <dir> --env <env-dir> [--statement-check] [--build-dir <dir>] [--attempt-id <id>] [--timeout-ms n] [--expect-hashes <hashes.json>]',
+  'usage: lean-run.mjs --problem <dir> --env <env-dir> [--statement-check | --anchor] [--build-dir <dir>] [--attempt-id <id>] [--timeout-ms n] [--expect-hashes <hashes.json>]',
   '  --statement-check  elaborate statement.lean (sorry tolerated HERE ONLY) and record its type in binding.json',
+  '  --anchor           elaborate proof.lean as the REFERENCE (sorry tolerated) and compare the recorded statement type with the reference decl type',
   '  default mode       build proof.lean in the per-attempt build dir; binding + scoped axiom audit via Inspector.lean',
-  'failures: lean-error · sorry · unparseable · binding · axiom-violation · timeout · io · hash-mismatch',
+  'failures: lean-error · sorry · unparseable · binding · axiom-violation · timeout · io · hash-mismatch · types-differ (--anchor only)',
   'exit codes: 0 passed · 1 failed · 2 blocked (config-invalid, receipt-invalid, toolchain-missing) · single-line JSON on stdout',
 ].join('\n')
 
 async function handle(argv, deps = {}) {
-  const options = parseFlags(argv, ['problem', 'env', 'statement-check', 'build-dir', 'attempt-id', 'timeout-ms', 'expect-hashes'], { required: ['problem', 'env'], booleans: ['statement-check'] })
+  const options = parseFlags(argv, ['problem', 'env', 'statement-check', 'anchor', 'build-dir', 'attempt-id', 'timeout-ms', 'expect-hashes'], { required: ['problem', 'env'], booleans: ['statement-check', 'anchor'] })
   if (options.help) return 'help'
   await ensureWritable(options.problem)
+  if (options['statement-check'] && options.anchor) fail('config-invalid', '--statement-check and --anchor are mutually exclusive')
   const timeoutMs = options['timeout-ms'] === undefined ? undefined : Number(options['timeout-ms'])
   if (timeoutMs !== undefined && (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 1800000)) fail('config-invalid', '--timeout-ms must be an integer in 1000..1800000')
   const report = await runLeanRun({
     problem: options.problem,
     env: options.env,
     statementCheck: Boolean(options['statement-check']),
+    anchor: Boolean(options.anchor),
     buildDir: options['build-dir'] ?? null,
     attemptId: options['attempt-id'] ?? null,
     timeoutMs,

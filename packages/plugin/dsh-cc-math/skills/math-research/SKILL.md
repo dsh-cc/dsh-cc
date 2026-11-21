@@ -33,8 +33,8 @@ only when **all** of the scripts it names exist under
 | --- | --- | --- |
 | M0 | `mathlib-env.mjs`, `mathlib-index.mjs`, `mathlib-search.mjs`, `lean-run.mjs`, `claim-ledger.mjs`, `budget-ledger.mjs` | environment, index, retrieval, L2 checker with proof binding, core claim states, budget ledger |
 | M1 | M0 + `math-verify.mjs`, `sympy-run.mjs` | three-layer verification, fidelity gate, `anchored` grade |
-| M2 | M1 + the search state contract (`search.json`, `attempts/`) | budgeted proof search, repair rounds, scaffolding |
-| M3 | M2 + `experience.mjs` | discovery loop, evaluator gate, extended claim table |
+| M2 | M1 + `search-state.mjs` (with `search.json` and `attempts/`) | budgeted proof search, repair rounds, scaffolding |
+| M3 | M2 + `experience.mjs`, `evaluator-gate.mjs` | discovery loop, evaluator gate, experience store, extended claim table |
 
 A missing script is a missing capability: report it and stop that step. Never
 imitate a check in prose, never widen a claim to cover a step that did not run,
@@ -84,7 +84,7 @@ only), `meta.json`, `fidelity.json`, `binding.json`, `search.json`,
    closure of that file — the import set is extensible, so add imports and
    re-retrieve rather than guessing a premise is absent.
 5. Check the statement artifact:
-   `node "${CLAUDE_SKILL_DIR}/scripts/lean-run.mjs" --problem <dir> --mode statement-check`.
+   `node "${CLAUDE_SKILL_DIR}/scripts/lean-run.mjs" --problem <dir> --statement-check`.
    This mode tolerates the `sorry` warning and records the elaborated type; the
    proof-checking mode never imports the sorry-ed declaration.
 6. Prove and check (M2 loop) and record the outcome. A goal closes only when a
@@ -117,27 +117,121 @@ ledger error. Absent Python ≥3.10 with sympy, `computation_verified` is
 
 ## M2 proof search
 
-Activates when the search state contract is present. At most 2 repair rounds per
-attempt, each consuming that attempt's envelope rather than a new attempt id.
-First 2 attempts serial, then parallel branches. A subgoal scaffold carries a
-required connecting implication and a depth cap of 3 that terminates the branch,
-not the problem. Reservations are made only by the main conversation, strictly
-before dispatching a child, and a reservation exceeding `maxAttempts` is
-refused. Resume order is fixed: reconcile `running` attempts by result hash
-first, then roll back unsettled intents — and rollback never refunds. Details in
-[prove.md](references/prove.md) and [budget.md](references/budget.md).
+Activates when `search-state.mjs` exists. `search.json` lives in the problem dir
+and is the only record of the loop; `search-state.mjs` is its sole writer and
+rewrites the whole file atomically.
+
+```
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" init --search problems/<id>/search.json \
+     --run-id <run-id> --problem-id <id> [--lineage p-001,p-002]
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" add-goal --search <search.json> \
+     --goal-id g-001 --statement-shape "<the goal's elaborated shape>" [--parent g-000]
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" add-attempt --search <search.json> \
+     --goal-id g-001 --op-id op-7 [--inputs <prompt-inputs.json>]
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" add-repair --search <search.json> --attempt-id attempt-003
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" record-result --search <search.json> \
+     --attempt-id attempt-003 --result attempts/attempt-003/result.json
+```
+
+Order of operations per attempt: reserve with `budget-ledger.mjs` (strictly
+before dispatch, opId recorded), `add-attempt`, dispatch, then `record-result`.
+A goal closes **only** on a `passed` result that carries the L2 typed record
+`{kind:"l2-pass", verdict:"pass", bindingHashes}` produced by `lean-run.mjs`; a
+result that merely reports diagnostics is refused with exit 2 and closes
+nothing. At most **2 repair rounds** per attempt (`add-repair` refuses the
+third) and they consume that attempt's envelope, not a new attempt id. First 2
+attempts run serially, then branches may run in parallel — children write only
+their own `attempts/<id>/` directory.
+
+Scaffolding (§5.4): a stuck goal may degrade into a subgoal **with a required
+connecting implication**:
+
+```
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" scaffold-open --search <search.json> \
+     --goal-id g-001 --child-problem-id p-002 --connecting-implication "<prop>"
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" scaffold-advance --search <search.json> \
+     --goal-id g-001 --child-problem-id p-002 --to child-proven --records <records.json>
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" scaffold-advance ... --to dead --cause <cause>
+```
+
+States are `open → child-proven → integrated | dead`. `child-proven` needs the
+child's own L2 pass; `integrated` needs the parent goal already closed by its own
+checked proof. The death causes are enumerated and nothing else is accepted:
+`child-falsified`, `child-fidelity-failed`, `child-unsolved-with-progress`,
+`child-budget-exhausted`, `implication-undischarged`, `parent-abandoned`. A dead
+scaffold leaves the parent goal open — other branches continue. Depth counts
+nodes with a cap of **3**: the fourth level terminates that branch (the goal
+becomes `abandoned`) and never the problem. Cycles are rejected through the
+`lineage`/`scaffoldOf` chain, so a child may never be an ancestor.
+
+Resume after any crash, in this fixed order:
+
+```
+node "${CLAUDE_SKILL_DIR}/scripts/search-state.mjs" resume --search <search.json> [--results <dir>]
+node "${CLAUDE_SKILL_DIR}/scripts/budget-ledger.mjs" resume --run <run-dir> --results <dir>
+```
+
+`search-state.mjs resume` reconciles in-flight attempts by result hash **first**
+(a result whose bytes changed, whose `inputHash` belongs to another dispatch, or
+which is malformed discards the attempt and reopens its goal), then marks what
+is left `discarded`. It reports the discarded `opIds`; the charge side stays with
+`budget-ledger.mjs`, and rollback never refunds. Full command reference:
+[prove.md](references/prove.md); budget rules: [budget.md](references/budget.md).
 
 ## M3 discovery
 
-Activates when `experience.mjs` exists. The loop selects parents with a seeded
-RNG, mutates programs, gates every individual behind the evaluator, and inserts
-scored results as new snapshots. The evaluator must pass user-supplied trusted
-examples before the loop starts, and every claimed invariant gets an independent
-second implementation — two model-generated implementations agreeing is weak
-evidence, not proof. Only then does a candidate generate a claim. The extended
-claim table (`experiment-supported`, `revalidation-pending`) and its transitions
-arrive with this milestone; the ledger rejects unknown states by explicit
-enumeration. See [discover.md](references/discover.md).
+Activates when `experience.mjs` and `evaluator-gate.mjs` exist. Manifest
+`discovery` carries the loop parameters (`selectionK`, `convergenceG`,
+`rngSeed`, `populationSize`, `programLanguage`, `evaluatorSignature`) and
+`trustedExamples` carries the pinned examples; there is no ambient setting.
+
+1. Select parents (seeded): `evaluator-gate.mjs select --run <run> --generation <n> --k <K>`
+   over `population/gen-<n>.json`. `selectParents` is pure — the same
+   `(population, K, rngState)` always yields the same parents and the same next
+   `rngState`, so *selection* is reproducible. Model-generated programs are not
+   bit-reproducible; never claim otherwise.
+2. Mutate programs (the model's job).
+3. Gate every individual — a failing individual is discarded, never scored:
+
+```
+node "${CLAUDE_SKILL_DIR}/scripts/evaluator-gate.mjs" gate --run <run-dir> \
+     --evaluator <program> --checker <independent-program>
+```
+
+   The evaluator must clear **every** trusted example (their sha256 is re-checked
+   on disk) and the independent double implementation must agree case by case.
+   Failing either exits 1. The evaluator/checker sha256 are pinned as the version
+   in the gate record; changing the evaluator mints a new version and moves
+   affected claims to `revalidation-pending`.
+4. Insert scored results via `experience.mjs` / `claim-ledger.mjs`; a candidate
+   generates a claim only after the gate passed.
+5. Terminal when the budget is exhausted or no improvement for `convergenceG`
+   generations.
+
+Experience store (§7.2) — the cross-run memory:
+
+```
+node "${CLAUDE_SKILL_DIR}/scripts/experience.mjs" query --query "<goal shape>" [--kind success|failure]
+node "${CLAUDE_SKILL_DIR}/scripts/experience.mjs" add-success --record <record.json>
+node "${CLAUDE_SKILL_DIR}/scripts/experience.mjs" add-failure --record <record.json>
+node "${CLAUDE_SKILL_DIR}/scripts/experience.mjs" block --reason "ablation <config>"
+```
+
+A success record is admitted only with a `formal_proof_valid` typed verification
+record whose verdict is `pass` — an unverified success is refused with exit 2.
+The store is append-only and chain-hashed (`verify`), single-writer through
+`.lock` (stale after 60s, fail-closed), and an ablation run marks it
+write-blocked so test-split writes are refused until `unblock`.
+
+Claim statuses in M3 (`claim-ledger.mjs`, full table in §6.3):
+`experiment-supported` requires evaluator-versioned evidence (`evaluatorVersion`
++ `snapshotRef`) and promotes to `proven` **only** through the same guard as
+`open → proven` (L2 pass + `anchored`/`human-confirmed` fidelity + no
+outstanding full-isolation L1 counterexample) — a `model-assessed` fidelity
+record does not promote. An evaluator version change parks any non-terminal
+claim in `revalidation-pending` (the entry records the prior state); a passed
+revalidation returns it to that state, a failed one supersedes it. See
+[discover.md](references/discover.md).
 
 ## Claims, receipts and reporting
 

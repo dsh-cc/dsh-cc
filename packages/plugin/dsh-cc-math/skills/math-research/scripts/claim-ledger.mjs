@@ -6,9 +6,11 @@ import { assert, atomicWrite, canonicalJson, ensureWritable, exists, fail, hashF
 import { validateRunManifest } from './run-manifest.lib.mjs'
 
 // Claim ledger (design §6.3, §9.2–9.4): chain-hashed `claims.jsonl` carrying
-// the M0 core claim states and the M0-subset transition table. Exactly one
-// writer (the main conversation); every append rewrites the whole file
-// atomically — no byte-append anywhere (§3.3).
+// the claim states and the transition table. M0 shipped the core subset; M3
+// extends it with `experiment-supported` and `revalidation-pending` and their
+// edges WITHOUT weakening any earlier edge. Exactly one writer (the main
+// conversation); every append rewrites the whole file atomically — no
+// byte-append anywhere (§3.3).
 //
 // Chain hash: each entry's `hash` is
 //   sha256( canonicalJson(entry-without-hash) + '\n' + prevHash )
@@ -18,25 +20,40 @@ import { validateRunManifest } from './run-manifest.lib.mjs'
 //
 // Transitions REQUIRE typed verification records `{kind, verdict,
 // bindingHashes?, evidence?}` produced by the verifier scripts (lean-run,
-// sympy-run, fidelity gate) plus evidence hashes that are re-checked at
-// append time (path exists + sha256 matches). Unknown states and
-// non-existent edges are rejected by explicit enumeration (exit 2) — the
-// M3 states arrive with their milestone, never silently.
+// sympy-run, fidelity gate, evaluator gate) plus evidence hashes that are
+// re-checked at append time (path exists + sha256 matches). Unknown states and
+// non-existent edges are rejected by explicit enumeration (exit 2).
+//
+// M3 specifics (§6.3):
+//  * `any(non-terminal) → revalidation-pending` on an evaluator version
+//    change; the entry records the `priorState`, and the return edge is
+//    `revalidation-pending → prior-state` (pass) or `→ superseded` (fail).
+//  * `experiment-supported → proven` is guarded EXACTLY like `open → proven`
+//    — L2 pass + anchored/human-confirmed fidelity + no outstanding
+//    full-isolation L1 counterexample. There is no weaker path, so a
+//    model-assessed fidelity record is refused.
 
 export const M0_STATES = Object.freeze(['open', 'proven', 'proven-of-formal-statement', 'falsified', 'superseded', 'fidelity-failed'])
+export const M3_STATES = Object.freeze(['experiment-supported', 'revalidation-pending'])
+export const CLAIM_STATES = Object.freeze([...M0_STATES.slice(0, 4), ...M3_STATES, ...M0_STATES.slice(4)])
 export const TERMINAL_STATES = Object.freeze(['superseded', 'fidelity-failed'])
-export const RECORD_KINDS = Object.freeze(['l2-pass', 'fidelity', 'counterexample', 'fidelity-correction', 'dispute', 'human-ruling', 'lean-negation'])
+export const RECORD_KINDS = Object.freeze(['l2-pass', 'fidelity', 'counterexample', 'fidelity-correction', 'dispute', 'human-ruling', 'lean-negation', 'experiment', 'evaluator-change', 'revalidation'])
 export const FIDELITY_GRADES = Object.freeze(['anchored', 'human-confirmed', 'model-assessed', 'disputed'])
+// Records that carry an evaluator version hash (§6.2 item 3, §6.3).
+const VERSIONED_KINDS = Object.freeze(['experiment', 'evaluator-change', 'revalidation'])
 const GENESIS_PREV = '0'.repeat(64)
 const CLAIM_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$/
 const HEX64 = /^[a-f0-9]{64}$/
 
 export const ledgerPath = runDir => join(runDir, 'claims.jsonl')
 
-// The M0 transition table (§6.3 subset): edge → required verification
-// records. `→ proven` variants share the v4/v5 guard: an outstanding
-// full-isolation L1 counterexample in the claim's history blocks promotion.
+// The full §6.3 transition table (M0 core + M3 rows): edge → required
+// verification records. `→ proven` variants share the v4/v5 guard: an
+// outstanding full-isolation L1 counterexample in the claim's history blocks
+// promotion. `restoresPrior` edges carry the claim back to the state it held
+// before the evaluator version changed.
 const FIDELITY_SUPPORTING_PROOF = ['anchored', 'human-confirmed']
+const EVALUATOR_VERSION_CHANGED = { evaluatorChange: true, requires: { 'evaluator-change': ['changed'] } }
 export const TRANSITIONS = Object.freeze({
   'open→proven': { requires: { 'l2-pass': ['pass'], fidelity: FIDELITY_SUPPORTING_PROOF }, counterexampleGuard: true },
   'open→proven-of-formal-statement': { requires: { 'l2-pass': ['pass'], fidelity: ['model-assessed'] }, counterexampleGuard: false },
@@ -49,6 +66,30 @@ export const TRANSITIONS = Object.freeze({
   'proven→fidelity-failed': { requires: { dispute: ['confirmed'] }, counterexampleGuard: false },
   'proven-of-formal-statement→fidelity-failed': { requires: { dispute: ['confirmed'] }, counterexampleGuard: false },
   'falsified→fidelity-failed': { requires: { dispute: ['confirmed'] }, counterexampleGuard: false },
+  // --- M3 (§6.3) -----------------------------------------------------------
+  'open→experiment-supported': { requires: { experiment: ['supported'] }, counterexampleGuard: false },
+  // v4: no weaker path than open → proven — L2 + anchored/human-confirmed
+  // fidelity + the same counterexample guard.
+  'experiment-supported→proven': { requires: { 'l2-pass': ['pass'], fidelity: FIDELITY_SUPPORTING_PROOF }, counterexampleGuard: true },
+  'experiment-supported→superseded': {
+    requiresAny: [[{ kind: 'fidelity-correction', verdicts: ['confirmed'] }], [{ kind: 'revalidation', verdicts: ['failed'] }]],
+    counterexampleGuard: false,
+  },
+  'experiment-supported→fidelity-failed': { requires: { dispute: ['confirmed'] }, counterexampleGuard: false },
+  'experiment-supported→revalidation-pending': { ...EVALUATOR_VERSION_CHANGED, counterexampleGuard: false },
+  'open→revalidation-pending': { ...EVALUATOR_VERSION_CHANGED, counterexampleGuard: false },
+  'proven→revalidation-pending': { ...EVALUATOR_VERSION_CHANGED, counterexampleGuard: false },
+  'proven-of-formal-statement→revalidation-pending': { ...EVALUATOR_VERSION_CHANGED, counterexampleGuard: false },
+  'falsified→revalidation-pending': { ...EVALUATOR_VERSION_CHANGED, counterexampleGuard: false },
+  // The round-trip: on a passed revalidation the claim returns to the state
+  // it held before the version change; on a failed one it is superseded.
+  'revalidation-pending→open': { requires: { revalidation: ['passed'] }, counterexampleGuard: false, restoresPrior: true },
+  'revalidation-pending→proven': { requires: { revalidation: ['passed'] }, counterexampleGuard: true, restoresPrior: true },
+  'revalidation-pending→proven-of-formal-statement': { requires: { revalidation: ['passed'] }, counterexampleGuard: false, restoresPrior: true },
+  'revalidation-pending→experiment-supported': { requires: { revalidation: ['passed'] }, counterexampleGuard: false, restoresPrior: true },
+  'revalidation-pending→falsified': { requires: { revalidation: ['passed'] }, counterexampleGuard: false, restoresPrior: true },
+  'revalidation-pending→superseded': { requires: { revalidation: ['failed'] }, counterexampleGuard: false },
+  'revalidation-pending→fidelity-failed': { requires: { dispute: ['confirmed'] }, counterexampleGuard: false },
 })
 
 export const edgeName = (from, to) => `${from}→${to}`
@@ -59,7 +100,7 @@ export const edgeName = (from, to) => `${from}→${to}`
 function validateRecord(record, index) {
   const label = `records[${index}]`
   assert(record && typeof record === 'object' && !Array.isArray(record), `${label} must be an object`)
-  const unknown = Object.keys(record).filter(key => !['kind', 'verdict', 'bindingHashes', 'isolation', 'mechanism', 'evidence'].includes(key))
+  const unknown = Object.keys(record).filter(key => !['kind', 'verdict', 'bindingHashes', 'isolation', 'mechanism', 'evidence', 'evaluatorVersion', 'snapshotRef'].includes(key))
   assert(unknown.length === 0, `${label} has unknown field(s): ${unknown.join(',')}`)
   assert(RECORD_KINDS.includes(record.kind), `${label}.kind must be one of ${RECORD_KINDS.join('|')}`)
   assert(typeof record.verdict === 'string' && record.verdict.length > 0, `${label}.verdict must be a non-empty string`)
@@ -69,6 +110,14 @@ function validateRecord(record, index) {
   }
   if (record.isolation !== undefined) assert(['full', 'partial'].includes(record.isolation), `${label}.isolation must be full|partial`)
   if (record.mechanism !== undefined) assert(['computation', 'lean'].includes(record.mechanism), `${label}.mechanism must be computation|lean`)
+  // §6.2 item 3: evaluator versions are hash-pinned into the records, and an
+  // experiment record names the population snapshot its evidence came from.
+  if (VERSIONED_KINDS.includes(record.kind)) {
+    assert(HEX64.test(record.evaluatorVersion ?? ''), `${label}.evaluatorVersion must be the lowercase sha256 of the evaluator program`)
+  }
+  if (record.kind === 'experiment') {
+    assert(typeof record.snapshotRef === 'string' && record.snapshotRef.trim().length > 0, `${label}.snapshotRef must name the population snapshot backing the evidence`)
+  }
   if (record.evidence !== undefined) {
     assert(Array.isArray(record.evidence), `${label}.evidence must be an array`)
     record.evidence.forEach((item, i) => {
@@ -94,9 +143,12 @@ export const entryPreimage = (entry, prevHash) => Buffer.concat([Buffer.from(can
 export const entryHash = (entry, prevHash) => sha256(entryPreimage(entry, prevHash))
 
 /** Entries on disk carry `hash`; the preimage commits to everything else. */
-function assembleEntry({ seq, claimId, at, type, from, to, statementFaithful, records }, prevHash) {
-  const preimage = { schemaVersion: 1, seq, claimId, at, type, from, to, statementFaithful, records, prevHash }
-  const fixed = { schemaVersion: 1, seq, claimId, at, type, from, to, statementFaithful, records, prevHash, hash: entryHash(preimage, prevHash) }
+function assembleEntry({ seq, claimId, at, type, from, to, statementFaithful, records, priorState = null }, prevHash) {
+  const base = { schemaVersion: 1, seq, claimId, at, type, from, to, statementFaithful, records, prevHash }
+  // `priorState` exists only on the entry that parks a claim in
+  // revalidation-pending: the hash covers it exactly when it is written.
+  const preimage = priorState === null ? base : { ...base, priorState }
+  const fixed = { ...preimage, hash: entryHash(preimage, prevHash) }
   return { line: JSON.stringify(fixed), entry: fixed }
 }
 
@@ -120,21 +172,30 @@ export async function loadLedger(runDir, { io = fs } = {}) {
 
 function assertEntryShape(entry, index) {
   const label = `entry ${index + 1}`
-  const expected = ['schemaVersion', 'seq', 'claimId', 'at', 'type', 'from', 'to', 'statementFaithful', 'records', 'prevHash', 'hash']
+  const required = ['schemaVersion', 'seq', 'claimId', 'at', 'type', 'from', 'to', 'statementFaithful', 'records', 'prevHash', 'hash']
+  const optional = ['priorState']
   const keys = Object.keys(entry).sort()
-  if (JSON.stringify(keys) !== JSON.stringify([...expected].sort())) fail('chain-invalid', `${label} must have exactly the fields ${expected.join(',')}`)
+  const unknown = keys.filter(key => !required.includes(key) && !optional.includes(key))
+  if (unknown.length > 0 || required.some(key => !keys.includes(key))) {
+    fail('chain-invalid', `${label} must have exactly the fields ${required.join(',')} (+ optional ${optional.join(',')})`)
+  }
   if (entry.schemaVersion !== 1 || entry.seq !== index || !CLAIM_ID.test(entry.claimId ?? '') || typeof entry.at !== 'string') fail('chain-invalid', `${label} has malformed identity fields`)
   if (!['genesis', 'transition'].includes(entry.type)) fail('chain-invalid', `${label} has unknown type`)
   if (!HEX64.test(entry.prevHash ?? '') || !HEX64.test(entry.hash ?? '')) fail('chain-invalid', `${label} has malformed hashes`)
-  if (!(M0_STATES.includes(entry.to))) fail('chain-invalid', `${label} targets a non-M0 state ${entry.to}`)
-  if (!(entry.from === null || M0_STATES.includes(entry.from))) fail('chain-invalid', `${label} has a non-M0 source state`)
+  if (!(CLAIM_STATES.includes(entry.to))) fail('chain-invalid', `${label} targets a state outside the §6.3 table: ${entry.to}`)
+  if (!(entry.from === null || CLAIM_STATES.includes(entry.from))) fail('chain-invalid', `${label} has a source state outside the §6.3 table`)
   if (!(Array.isArray(entry.records))) fail('chain-invalid', `${label} records must be an array`)
+  if (entry.priorState !== undefined) {
+    if (!CLAIM_STATES.includes(entry.priorState)) fail('chain-invalid', `${label} records an unknown priorState`)
+    if (entry.to !== 'revalidation-pending') fail('chain-invalid', `${label} carries priorState outside a revalidation-pending entry`)
+  }
 }
 
 /** Recompute the whole chain; any field edit is detected (§6.3). */
 export function verifyChain(entries) {
   let prev = GENESIS_PREV
   const claims = new Map()
+  const priorStates = new Map()
   for (const [index, entry] of entries.entries()) {
     assertEntryShape(entry, index)
     if (entry.prevHash !== prev) fail('chain-invalid', `entry ${index + 1} chain linkage broken`)
@@ -149,9 +210,15 @@ export function verifyChain(entries) {
     } else {
       if (!claims.has(entry.claimId)) fail('chain-invalid', `transition for unknown claim ${entry.claimId}`)
       if (claims.get(entry.claimId) !== entry.from) fail('chain-invalid', `entry ${index + 1} source state does not match the ledger`)
-      if (!TRANSITIONS[edgeName(entry.from, entry.to)]) fail('chain-invalid', `entry ${index + 1} is not an M0-table edge`)
+      const edge = TRANSITIONS[edgeName(entry.from, entry.to)]
+      if (!edge) fail('chain-invalid', `entry ${index + 1} is not a §6.3-table edge`)
+      // A revalidation round-trip may only return to the state it left.
+      if (edge.restoresPrior && priorStates.get(entry.claimId) !== entry.to) {
+        fail('chain-invalid', `entry ${index + 1} restores ${entry.to} but the claim left ${priorStates.get(entry.claimId) ?? 'nothing'}`)
+      }
       claims.set(entry.claimId, entry.to)
     }
+    if (entry.to === 'revalidation-pending') priorStates.set(entry.claimId, entry.priorState ?? entry.from)
     prev = entry.hash
   }
   return { entries: entries.length, head: prev === GENESIS_PREV ? null : prev, claims: Object.fromEntries(claims) }
@@ -173,7 +240,7 @@ async function appendEntry(runDir, fields, records, { io = fs, now = () => new D
   verifyChain(entries) // never append onto a tampered chain
   const prevHash = entries.length ? entries.at(-1).hash : GENESIS_PREV
   const at = now()
-  const { line, entry } = assembleEntry({ seq: entries.length, claimId: fields.claimId, at, ...fields.kind, records }, prevHash)
+  const { line, entry } = assembleEntry({ seq: entries.length, claimId: fields.claimId, at, ...fields.kind, records, priorState: fields.priorState ?? null }, prevHash)
   await atomicWrite(ledgerPath(runDir), entries.map(e => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : '') + line + '\n', io)
   return entry
 }
@@ -208,10 +275,20 @@ export function counterexampleGuard(entries, claimId) {
 
 function assertRequirements(from, to, records, manifest) {
   const edge = TRANSITIONS[edgeName(from, to)]
-  if (!edge) fail('illegal-transition', `${edgeName(from, to)} is not in the M0 transition table`)
-  for (const [kind, verdicts] of Object.entries(edge.requires)) {
+  if (!edge) fail('illegal-transition', `${edgeName(from, to)} is not in the §6.3 transition table`)
+  for (const [kind, verdicts] of Object.entries(edge.requires ?? {})) {
     const found = records.filter(record => record.kind === kind && verdicts.includes(record.verdict))
     if (!found.length) fail('missing-record', `${edgeName(from, to)} requires a ${kind} record with verdict ${verdicts.join('|')}`)
+  }
+  if (edge.requiresAny) {
+    // Any ONE alternative suffices (e.g. supersede-by-correction OR
+    // supersede-by-revalidation-failure); each alternative is all-of.
+    const satisfied = edge.requiresAny.some(alternative => alternative.every(spec =>
+      records.some(record => record.kind === spec.kind && spec.verdicts.includes(record.verdict))))
+    if (!satisfied) {
+      const described = edge.requiresAny.map(alternative => alternative.map(spec => `${spec.kind}:${spec.verdicts.join('|')}`).join('+')).join(' or ')
+      fail('missing-record', `${edgeName(from, to)} requires ${described}`)
+    }
   }
   if (edge.falsifyEvidence) {
     // §6.3: falsification needs a counterexample (full isolation tier for
@@ -228,10 +305,18 @@ function assertRequirements(from, to, records, manifest) {
   }
 }
 
+/** The state a claim held before it entered revalidation-pending (§6.3). */
+export function priorStateOf(entries, claimId) {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index]
+    if (entry.claimId === claimId && entry.to === 'revalidation-pending') return entry.priorState ?? entry.from ?? null
+  }
+  return null
+}
+
 export async function transition(runDir, claimId, to, records, { statementFaithful = null, io, now } = {}) {
   assert(CLAIM_ID.test(claimId ?? ''), 'claimId must match the claim-id grammar')
-  assert(M0_STATES.includes(to), `target state must be one of ${M0_STATES.join('|')}`, 'illegal-transition')
-  assert(to !== 'open', 'no transition targets open', 'illegal-transition')
+  assert(CLAIM_STATES.includes(to), `target state must be one of ${CLAIM_STATES.join('|')}`, 'illegal-transition')
   assert(Array.isArray(records), 'records must be an array')
   records.forEach(validateRecord) // shape validation precedes requirement checks
   if (statementFaithful !== null) assert(FIDELITY_GRADES.includes(statementFaithful), `statementFaithful must be one of ${FIDELITY_GRADES.join('|')}`)
@@ -240,15 +325,21 @@ export async function transition(runDir, claimId, to, records, { statementFaithf
   if (from === null) fail('config-invalid', `unknown claim ${claimId}`)
   if (TERMINAL_STATES.includes(from)) fail('illegal-transition', `${from} is terminal (§6.3: terminal states are never re-sources)`)
   const edge = TRANSITIONS[edgeName(from, to)]
+  if (to === 'open') assert(from === 'revalidation-pending', 'only a revalidation round-trip returns a claim to open', 'illegal-transition')
   const manifest = await loadManifest(runDir)
   assertRequirements(from, to, records, manifest)
   if (edge.counterexampleGuard) counterexampleGuard(entries, claimId)
+  if (edge.restoresPrior) {
+    const prior = priorStateOf(entries, claimId)
+    if (prior !== to) fail('illegal-transition', `revalidation round-trip must return ${claimId} to its prior state ${prior}, not ${to}`)
+  }
   if (statementFaithful === null) {
     if (to === 'proven') statementFaithful = null
     if (to === 'proven-of-formal-statement') statementFaithful = 'model-assessed'
   }
-  const entry = await appendEntry(runDir, { claimId, kind: { type: 'transition', from, to, statementFaithful } }, records, { io, now })
-  return { subcommand: 'transition', claimId, from, to, seq: entry.seq, hash: entry.hash }
+  const priorState = to === 'revalidation-pending' ? from : null
+  const entry = await appendEntry(runDir, { claimId, kind: { type: 'transition', from, to, statementFaithful }, priorState }, records, { io, now })
+  return { subcommand: 'transition', claimId, from, to, seq: entry.seq, hash: entry.hash, ...(priorState === null ? {} : { priorState }) }
 }
 
 export async function verify(runDir, { io } = {}) {
@@ -266,14 +357,15 @@ export async function status(runDir, { io } = {}) {
 // CLI
 // ---------------------------------------------------------------------------
 const HELP = [
-  'claim-ledger — chain-hashed claim records and M0 transitions (design §6.3, §9.2–9.4)',
+  'claim-ledger — chain-hashed claim records and §6.3 transitions (design §6.3, §9.2–9.4)',
   'usage: claim-ledger.mjs <subcommand> --run <dir> [options]',
   '  open --claim-id <id>',
   '  transition --claim-id <id> --to <state> --records <records.json> [--statement-faithful <grade>]',
   '  verify',
   '  status',
-  `M0 states: ${M0_STATES.join(', ')} · terminal: ${TERMINAL_STATES.join(', ')}`,
-  'records: [{kind, verdict, bindingHashes?, isolation?, mechanism?, evidence?: [{path, sha256}]}]',
+  `states: ${CLAIM_STATES.join(', ')} · terminal: ${TERMINAL_STATES.join(', ')}`,
+  'records: [{kind, verdict, bindingHashes?, isolation?, mechanism?, evaluatorVersion?, snapshotRef?, evidence?: [{path, sha256}]}]',
+  'M3: any non-terminal → revalidation-pending on an evaluator-change record; back to the prior state on revalidation:passed, → superseded on revalidation:failed',
   'exit codes: 0 ok · 2 blocked (config-invalid, illegal-transition, missing-record, chain-invalid, missing-evidence, evidence-mismatch, counterexample-outstanding) · single-line JSON on stdout',
 ].join('\n')
 

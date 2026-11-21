@@ -87,10 +87,10 @@ describe('mathlib-search retrieval (§4.2)', () => {
   it('--kind filters to the requested declaration kinds', async () => {
     const { indexPath } = await makeFixtureIndex()
     const db = openSearchDb(indexPath)
-    const all = search(db, { query: 'add*' }).map(row => row.name)
+    const all = search(db, { query: 'add*' }).map((row: { name: string }) => row.name)
     expect(all).toContain('Nat.add') // def
     expect(all).toContain('add_comm_left')
-    const onlyTheorems = search(db, { query: 'add*', kinds: ['theorem'] }).map(row => row.name)
+    const onlyTheorems = search(db, { query: 'add*', kinds: ['theorem'] }).map((row: { name: string }) => row.name)
     expect(onlyTheorems).toContain('Nat.add_comm')
     expect(onlyTheorems).not.toContain('Nat.add')
     db.close()
