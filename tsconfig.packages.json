@@ -130,6 +130,9 @@
       "path": "./packages/evaluation/vwa-eval"
     },
     {
+      "path": "./packages/evaluation/math-eval"
+    },
+    {
       "path": "./packages/plugin/dsh-cc-math"
     },
     {
