@@ -172,6 +172,16 @@ jobs:
         working-directory: dsh-cc
         run: node scripts/check-project-identity.mjs
 
+      # Mathematical Research Harness evaluation package structure check
+      # (design: docs/plans/2026-11-21-mathematical-research-harness.md
+      # §3.4 row 11): structure-only — gold-set shape, license allow-list,
+      # src inventory. Invoked directly (pure static, no node_modules, like
+      # the sibling gates); the root `pnpm math-eval:check` wraps the same
+      # script for local use.
+      - name: Math eval structure check (math-eval)
+        working-directory: dsh-cc
+        run: node packages/evaluation/math-eval/scripts/check-math-eval.mjs
+
       - name: Publishable manifest invariants (check:publish)
         working-directory: dsh-cc
         run: node scripts/check-publish-manifests.mjs
