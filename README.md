@@ -94,7 +94,7 @@ Maintainers: keep this table consistent with `DSH_HARNESS_REF` in `.github/workf
 
 ### Optional official plugins
 
-The bundles are sufficient for the quick start. The `dsh-cc` marketplace has five optional official plugins.
+The bundles are sufficient for the quick start. The `dsh-cc` marketplace has six optional official plugins.
 
 - **`dsh-cc-agents`** has three subagents, five skills, and optional Serena hooks.
   - `critic` uses `opus` for analysis and review.
@@ -108,6 +108,9 @@ The bundles are sufficient for the quick start. The `dsh-cc` marketplace has fiv
 - **`dsh-cc-shunt`** sends bulk reads and code generation again and again to worker subagents. Configure `haiku` for lower model cost.
 - **`cc-codex-bridge`** lets you run one specified Codex command form through its PreToolUse hook.
 - **`cc-grok-bridge`** lets you run one specified Grok command form through its PreToolUse hook.
+- **`dsh-cc-math`** has one mathematical research skill: Lean 4 formalization with a graded fidelity record, budgeted proof search against Mathlib premise retrieval, and evaluator-gated discovery loops.
+  - The Lean kernel is the only proof authority; fidelity checks are graded, not assumed.
+  - It needs Node 24 for `node:sqlite` FTS5, provisions pinned Lean and Mathlib once into `.math/` in your workspace, and treats Python with sympy as optional.
 
 Use the scoped subagent names, for example, `dsh-cc-agents:critic`. The bridge hooks do not get approval for each permitted command invocation.
 
@@ -131,7 +134,7 @@ To update an installed plugin, update the marketplace first. Then update the plu
 
 A marketplace update by itself does not update the installed plugin. Restart dsh after the plugin update.
 
-Read each plugin README for its configuration and limits: [agents](packages/plugin/dsh-cc-agents/README.md), [writing](packages/plugin/dsh-cc-writing/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md), [Codex](packages/plugin/cc-codex-bridge/README.md), and [Grok](packages/plugin/cc-grok-bridge/README.md).
+Read each plugin README for its configuration and limits: [agents](packages/plugin/dsh-cc-agents/README.md), [writing](packages/plugin/dsh-cc-writing/README.md), [shunt](packages/plugin/dsh-cc-shunt/README.md), [Codex](packages/plugin/cc-codex-bridge/README.md), [Grok](packages/plugin/cc-grok-bridge/README.md), and [math](packages/plugin/dsh-cc-math/README.md).
 
 ## Write and review documents with VWA
 

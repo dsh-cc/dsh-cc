@@ -130,6 +130,9 @@
       "path": "./packages/evaluation/vwa-eval"
     },
     {
+      "path": "./packages/plugin/dsh-cc-math"
+    },
+    {
       "path": "./packages/context/progress-rebuild"
     },
     {
