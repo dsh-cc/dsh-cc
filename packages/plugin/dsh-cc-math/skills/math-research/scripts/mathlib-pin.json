@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "mathlib": {
+    "repo": "leanprover-community/mathlib4",
+    "rev": "v4.35.0",
+    "sha256": ""
+  },
+  "expectedLean": "leanprover/lean4:v4.35.0"
+}
