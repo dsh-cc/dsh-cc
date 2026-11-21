@@ -55,7 +55,7 @@ The four books converge strongly on what a strategy document looks like; the 201
 - Mistaking goals for strategy: a wish list is not a plan for overcoming obstacles.
 - Bad objectives: goals that address no critical issue or cannot be executed.
 
-**Policy quality gate (Engineering Executives' Primer, Ch. 3)**: every policy must be Applicable (usable to navigate real tradeoffs), Enforced (you will actually hold teams accountable), and Creates Leverage (compounding, multiplicative impact).
+**Policy quality gate (The Engineering Executive's Primer, Ch. 3)**: every policy must be Applicable (usable to navigate real tradeoffs), Enforced (you will actually hold teams accountable), and Creates Leverage (compounding, multiplicative impact).
 
 **Inverted reading order (*Crafting Engineering Strategy*, Ch. 11)**: writing order (explore → diagnose → refine → policy → operate) is not reading order. For an approval audience, Policy comes first (it keeps the approval meeting from derailing into a research discussion); for an org-rollout audience, Policy + Operations come first; the thinking (refine / diagnose / explore) goes last but **must not be deleted** (future readers must be able to trace the reasoning, or they will assume the authors were foolish).
 
@@ -169,6 +169,7 @@ Rule highlights (style rules beyond the structure):
 - Specificity: policies are stated as ratios / thresholds / mechanisms ("new services default to Rust unless X", "20% platform time each quarter"), not direction adjectives.
 - Length discipline: assume a 1-2 page budget (vision-class documents cap at 2 pages), details behind links; assume the reader vanishes at page three.
 - Show your work: the diagnosis retains data and reasoning (roadmap, competitive pressure, financial constraints, issues collected in 1:1s) for future readers to trace.
+- Reading order is not writing order: order sections for the reader — an approval document leads with the policy and how it is enforced, and keeps the diagnosis and exploration last but present, never deleted (otherwise later readers cannot trace why the policy exists).
 - The document carries its metadata: date, approval status, canonical-source link, and where to ask questions (a named channel or person).
 - Before release, an uninvolved reader flags unclear areas (carried by the workflow's review stage; noted in the SKILL.md routing text).
 - Close with a self-audit and a revisit commitment: turn each policy back on the reader as a yes/no audit question, and name the point at which the strategy's effect will be reviewed (a date, an event, or an observable threshold); ending on a restatement of the goals leaves the document unjudgeable later (2016 Letter to Shareholders, closing audit questions; Primer, Ch. 3, review after two months).
