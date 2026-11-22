@@ -1,0 +1,109 @@
+name: math-plugin
+
+# Mathematical Research Harness plugin CI (design:
+# docs/plans/2026-11-21-mathematical-research-harness.md §3.4 row 12).
+#
+# The plugin's unit tests are fixture-and-mock driven (no network, no Lean
+# toolchain) and already ride the root `unit-tests` job on Node 24 (the
+# .nvmrc line — node:sqlite FTS5 is load-bearing there). This workflow
+# adds the two things unit-tests cannot cover:
+#
+# 1. pin-check (every push): the Mathlib pin file must stay structurally
+#    valid. An UNFILLED pin (empty sha256 / missing leanToolchain block)
+#    is reported as an explicit notice, never silently green — the pin is
+#    filled by the documented procedure in
+#    packages/plugin/dsh-cc-math/skills/math-research/references/evidence.md.
+# 2. cold-provision (workflow_dispatch only): `mathlib-env.mjs provision`
+#    from scratch — the M0 DoD ① check. It requires the filled pin and
+#    network access to the pinned archives; dispatch it after filling the
+#    pin or bumping it. Artifacts land in $RUNNER_TEMP (formal-design
+#    precedent: toolchain jobs never write into the checkout).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dsh-cc/packages/plugin/dsh-cc-math/**'
+      - 'dsh-cc/.github/workflows/math-plugin.yml'
+  pull_request:
+    paths:
+      - 'dsh-cc/packages/plugin/dsh-cc-math/**'
+      - 'dsh-cc/.github/workflows/math-plugin.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: math-plugin-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pin-check:
+    name: math-plugin-pin+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: dsh-cc/dsh-cc
+          path: dsh-cc
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: dsh-cc/.nvmrc
+
+      - name: Validate the Mathlib pin structure
+        working-directory: dsh-cc
+        run: |
+          node --input-type=module - <<'JS'
+          import { readFileSync } from 'node:fs';
+          const pin = JSON.parse(readFileSync(
+            'packages/plugin/dsh-cc-math/skills/math-research/scripts/mathlib-pin.json', 'utf8'));
+          const errors = [];
+          const m = pin?.mathlib ?? {};
+          if (!m.repo) errors.push('mathlib.repo missing');
+          if (!m.rev) errors.push('mathlib.rev missing');
+          if (!m.sha256) errors.push('mathlib.sha256 unfilled (see references/evidence.md pin procedure)');
+          if (!pin?.leanToolchain || !pin.leanToolchain.platforms) errors.push('leanToolchain block missing');
+          if (errors.length) {
+            console.log('::notice::Mathlib pin is UNFILLED — cold provisioning is dormant until the pin procedure completes. This is expected while the pin is pending; structural fields above must still be present.');
+            for (const e of errors) console.log('  - ' + e);
+            const structural = errors.filter(e => e.includes('missing'));
+            if (structural.length) { console.error('structural pin errors: ' + structural.join('; ')); process.exit(1); }
+            process.exit(0);
+          }
+          console.log('Mathlib pin is filled — cold provisioning can be dispatched.');
+          JS
+
+  cold-provision:
+    name: math-plugin-cold-provision
+    # Manual only: needs network to the pinned archives and ~2GB+ of
+    # download; the M0 DoD ① receipt check. Fails if the pin is unfilled.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: dsh-cc/dsh-cc
+          path: dsh-cc
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: dsh-cc/.nvmrc
+
+      - name: Provision the Mathlib environment from cold
+        working-directory: dsh-cc
+        env:
+          MATH_HOME: ${{ runner.temp }}/mrh-math-home
+        run: |
+          node packages/plugin/dsh-cc-math/skills/math-research/scripts/mathlib-env.mjs provision --dest "$MATH_HOME/env"
+          node packages/plugin/dsh-cc-math/skills/math-research/scripts/mathlib-env.mjs verify --dest "$MATH_HOME/env"
+
+      - name: Statement-check and proof-check smoke (M0 DoD ②③④)
+        working-directory: dsh-cc
+        env:
+          MATH_HOME: ${{ runner.temp }}/mrh-math-home
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec vitest run packages/plugin/dsh-cc-math

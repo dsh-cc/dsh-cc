@@ -94,7 +94,7 @@ dsh web
 
 ### 可选官方插件
 
-快速开始只需安装 bundles。`dsh-cc` 插件市场另提供五个可选的官方插件。
+快速开始只需安装 bundles。`dsh-cc` 插件市场另提供六个可选的官方插件。
 
 - **`dsh-cc-agents`** 提供三个子代理、五个 skill 和可选的 Serena hooks。
   - `critic` 使用 `opus` 做分析和评审。
@@ -108,6 +108,9 @@ dsh web
 - **`dsh-cc-shunt`** 将批量读取和重复代码生成交给 worker 子代理。配置 `haiku` 可降低模型成本。
 - **`cc-codex-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Codex 命令。
 - **`cc-grok-bridge`** 通过 PreToolUse hook 放行一种指定形式的 Grok 命令。
+- **`dsh-cc-math`** 提供一个数学研究 skill：带分级保真记录的 Lean 4 形式化、在 Mathlib 前提检索下按预算搜索证明，以及需通过评估器的发现循环。
+  - 只有 Lean 内核是证明的权威；保真分级判定，不默认成立。
+  - 需要 Node 24 以获得 `node:sqlite` 的 FTS5，会在工作区 `.math/` 下一次性准备固定版本的 Lean 与 Mathlib，Python 加 sympy 为可选项。
 
 子代理使用完整作用域名称，例如 `dsh-cc-agents:critic`。桥接 hook 不会为每次符合规定的命令调用请求审批。
 
@@ -131,7 +134,7 @@ dsh web
 
 仅更新插件市场不会更新已安装的插件。完成插件更新后请重启 dsh。
 
-各插件的配置和限制见：[agents](packages/plugin/dsh-cc-agents/README.zh.md)、[writing](packages/plugin/dsh-cc-writing/README.zh.md)、[shunt](packages/plugin/dsh-cc-shunt/README.zh.md)、[Codex](packages/plugin/cc-codex-bridge/README.zh.md) 和 [Grok](packages/plugin/cc-grok-bridge/README.zh.md)。
+各插件的配置和限制见：[agents](packages/plugin/dsh-cc-agents/README.zh.md)、[writing](packages/plugin/dsh-cc-writing/README.zh.md)、[shunt](packages/plugin/dsh-cc-shunt/README.zh.md)、[Codex](packages/plugin/cc-codex-bridge/README.zh.md)、[Grok](packages/plugin/cc-grok-bridge/README.zh.md) 和 [math](packages/plugin/dsh-cc-math/README.zh.md)。
 
 ## 用 VWA 写作与审查文档
 

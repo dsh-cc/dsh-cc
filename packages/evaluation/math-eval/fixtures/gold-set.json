@@ -1,0 +1,47 @@
+{
+  "$comment": "math-eval gold set (docs/plans/2026-11-21-mathematical-research-harness.md §8.1, §8.3). Structure only: fixture ingestion is a later wave, so every problemIds array is empty and every fixture record is a placeholder awaiting a recorded license and content sha256. No benchmark content is checked in here. The `splits` block pins the designated training split used for the experience-store snapshot; `test` is write-blocked so the G-vs-F contrast cannot be contaminated.",
+  "schemaVersion": 1,
+  "designRef": "docs/plans/2026-11-21-mathematical-research-harness.md#8.1",
+  "splits": {
+    "$comment": "§8.3: the experience snapshot is built ONLY from `train`; test problems are write-blocked. An empty snapshot makes G identical to F and every report must state that.",
+    "train": {
+      "purpose": "experience-store snapshot source (§8.3); never a reported-metric input",
+      "writeBlocked": false,
+      "problemIds": []
+    },
+    "test": {
+      "purpose": "reported-metric input only; write-blocked against the experience store",
+      "writeBlocked": true,
+      "problemIds": []
+    }
+  },
+  "fixtures": {
+    "minif2f": {
+      "$comment": "miniF2F valid subset (~48). Placeholder: no content ingested yet.",
+      "source": "miniF2F (valid subset)",
+      "license": "",
+      "licenseStatus": "unverified-pending-ingestion",
+      "fetchedAt": "",
+      "sha256": "",
+      "problemIds": []
+    },
+    "proofnet": {
+      "$comment": "ProofNet subset (~40). Three artifacts + reference formalizations natively present -> doubles as the M1 fidelity eval set AND the trusted-anchor source (§4.3, §8.1). Placeholder: no content ingested yet.",
+      "source": "ProofNet",
+      "license": "",
+      "licenseStatus": "unverified-pending-ingestion",
+      "fetchedAt": "",
+      "sha256": "",
+      "problemIds": []
+    },
+    "putnambench": {
+      "$comment": "PutnamBench sample (~30). Placeholder: no content ingested yet.",
+      "source": "PutnamBench",
+      "license": "",
+      "licenseStatus": "unverified-pending-ingestion",
+      "fetchedAt": "",
+      "sha256": "",
+      "problemIds": []
+    }
+  }
+}

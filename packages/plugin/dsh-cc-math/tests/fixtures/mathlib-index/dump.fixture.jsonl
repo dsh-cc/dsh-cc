@@ -1,0 +1,9 @@
+{"module": "Mathlib.Alg", "imports": ["Mathlib.Core"]}
+{"module": "Mathlib.Core", "imports": ["Mathlib.Base"]}
+{"module": "Mathlib.Base", "imports": []}
+{"module": "Mathlib.Other", "imports": []}
+{"name": "Nat.add_comm", "kind": "theorem", "module": "Mathlib.Core", "typeText": "∀ (a b : Nat), a + b = b + a"}
+{"name": "Nat.mul_comm", "kind": "theorem", "module": "Mathlib.Base", "typeText": "∀ (a b : Nat), a * b = b * a"}
+{"name": "add_comm_left", "kind": "theorem", "module": "Mathlib.Alg", "typeText": "∀ (a b c : Nat), a + b = b + a → (a + b) + c = (b + a) + c"}
+{"name": "Nat.add", "kind": "def", "module": "Mathlib.Core", "typeText": "Nat → Nat → Nat"}
+{"name": "unrelated_thing", "kind": "theorem", "module": "Mathlib.Other", "typeText": "True"}

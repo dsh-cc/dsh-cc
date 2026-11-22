@@ -172,6 +172,9 @@ packages/**/src/*.d.ts.map
 
 # formal-design runner artifacts (runs, evidence staging, locks)
 /.formal-design/
+# math-research harness artifacts (Mathlib env + index, runs, claims, budget,
+# evidence, experience store) — workspace-local by design, relocatable via MATH_HOME
+/.math/
 # per-run model outputs written inside specs/tla model dirs (cfgs are the
 # committed contract; these two are machine-local run state)
 specs/**/current-run.json

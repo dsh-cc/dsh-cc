@@ -1,0 +1,24 @@
+{
+  "name": "@dsh-cc/plugin-dsh-cc-math",
+  "version": "0.9.6-rc.3",
+  "description": "Official dsh-cc plugin: mathematical research harness — Lean-4 formalization with fidelity gating, verifier-driven proof search, and discovery workflows; plus structure-only evaluation tooling.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": [
+    ".claude-plugin/plugin.json",
+    "skills",
+    "README.md",
+    "README.zh.md"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsh-cc/dsh-cc.git",
+    "directory": "packages/plugin/dsh-cc-math"
+  }
+}
