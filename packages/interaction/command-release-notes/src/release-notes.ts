@@ -17,6 +17,32 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.9.6 — a mathematical research harness and two writing-citation repairs
+
+- **Math harness** — a new marketplace plugin, \`dsh-cc-math\`, adds a
+  Lean 4 formalization layer on top of the harness: receipt-disciplined
+  mathlib provisioning, a SQLite FTS5 search index with dependency
+  reachability, kernel-checked proof binding behind an axiom whitelist,
+  and a fidelity gate that grades a claim before any search budget is
+  spent. Claim, budget and search state each carry their own ledger, and
+  discovery rides a verifier-gated experience store that records nothing
+  it could not check. The Mathlib pin ships unfilled on purpose (filling
+  it needs one networked session); CI reports that as a notice and keeps
+  cold provisioning dormant rather than passing silently.
+- **Math evaluation** — a paired \`math-eval\` package carries a strict
+  run-manifest schema, a nine-config ablation matrix and four
+  attribution contrasts, so a technique's contribution is read off a
+  contrast instead of a single arm. The two new packages' 195 tests are
+  fixture- and mock-driven: no network, no Lean toolchain, no model
+  calls in CI.
+- **Writing citations** — the \`engineering-strategy\` profile cited a
+  book under the wrong title in five places and hung a chapter citation
+  on a rule that chapter does not support. The title is corrected to
+  *The Engineering Executive's Primer*, and *Crafting Engineering
+  Strategy* Ch. 11 — whose actual subject is that writing order is not
+  reading order — now backs its own rule, leaving \`show-your-work\` with
+  the source it really came from.
+
 ## 0.9.6-rc.3 — a new harness line and a name-addressed subagent surface
 
 - **Harness 0.2.2-rc.5** — the verified dsh line moves from \`0.2.2-rc.1\`

@@ -1,5 +1,5 @@
 {
   "name": "dsh-cc-math",
   "description": "Official dsh-cc plugin: mathematical research harness — Lean-4 formalization with fidelity gating, verifier-driven proof search, and discovery workflows; plus structure-only evaluation tooling.",
-  "version": "0.9.6-rc.3"
+  "version": "0.9.6"
 }
