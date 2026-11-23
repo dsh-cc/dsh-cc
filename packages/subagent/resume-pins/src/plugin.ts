@@ -47,7 +47,7 @@ import {
 import { serializePerKey, ExecutionNoticeBus } from './serialize.ts'
 import { wireDispatchAdmission } from './dispatch-admission.ts'
 import { wirePostExecute } from './post-execute.ts'
-import { resolveSendTarget } from './name-resolution.ts'
+import { agentsOf, resolveSendTarget } from './name-resolution.ts'
 import { PinStore, type CorruptPin } from './store.ts'
 import type { ResumePin } from './pin.ts'
 
@@ -328,8 +328,23 @@ export function apply(ctx: Context, config: ResumePinsPluginConfig): void {
       if ('kind' in found) {
         return { kind: 'deny' as const, reason: `[PIN_UNREADABLE] resume pin for ${target} is unreadable (${found.reason}); refusing to resume` }
       }
-      // Same-epoch steer to a live agent: untouched.
-      if (ctx.agents.get(SessionId(target)) !== undefined) return next()
+      // Same-epoch steer to a live agent: untouched. The registry is read
+      // through the same fail-soft seam as name resolution: property access on
+      // a cordis Context is realm-guarded (it throws `cannot get property
+      // "agents" without inject` from a foreign isolate realm instead of
+      // returning undefined), and an unreadable liveness signal cannot prove
+      // the target is cold — a gate never blocks a legitimate message on
+      // evidence it cannot read, so every degraded branch passes through.
+      const agentsRegistry = agentsOf(ctx)
+      let live: boolean | undefined
+      try {
+        live = agentsRegistry?.get === undefined
+          ? undefined
+          : agentsRegistry.get(SessionId(target)) !== undefined
+      } catch {
+        live = undefined
+      }
+      if (live === undefined || live) return next()
       const decision = await evaluateGate(found, await gateEnv(found, exec.agent), policy())
       if (decision.action === 'deny') {
         try {
