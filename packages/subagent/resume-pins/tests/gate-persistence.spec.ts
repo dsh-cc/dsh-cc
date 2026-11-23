@@ -68,6 +68,7 @@ async function mount(
   pin: ResumePin,
   persistence: Record<string, unknown>,
   extra: Record<string, unknown> = {},
+  configure?: (ctx: Context) => void,
 ): Promise<PreExecute> {
   const pinsRoot = mkdtempSync(join(tmpdir(), 'dsh-cc-resume-pins-gate-persist-'))
   const store = new PinStore(pinsRoot)
@@ -97,6 +98,9 @@ async function mount(
   if (!('subagents' in extra)) {
     (ctx as unknown as Record<string, unknown>).subagents = bareIdResolution
   }
+  // Post-mount shaping for realm-guard rigs: the gate resolves its services at
+  // CALL time, so accessors installed here govern the listener's reads.
+  configure?.(ctx)
   const preExecute = (captured['tools/pre-execute'] as PreExecute[]).at(-1)!
   expect(typeof preExecute).toBe('function')
   return preExecute
@@ -159,6 +163,57 @@ describe('resume gate — session existence via the 0.1.5 persistence face (stat
     const workspace = makeWorkspace()
     const preExecute = await mount(makePin('child-9', workspace), stubPersistenceFace(undefined), { subagents: undefined })
     const { exec, next } = sendTo('child-9')
+    const out = await preExecute(exec, next)
+    expect(out).toEqual({ kind: 'accept', content: [{ type: 'text', text: 'delivered' }] })
+  })
+})
+
+/**
+ * The same-epoch liveness read (`ctx.agents.get(...)`, plugin.ts:332) sits on
+ * the SAME realm-guarded seam as `subagentsOf`. Once the name resolution is
+ * fail-soft, a pinned `send_message` actually reaches this line — so an
+ * unguarded property read here would swap one inject error for another on the
+ * exact tool path being repaired. Unreadable liveness ⇒ pass through.
+ */
+describe('resume gate — realm-guarded agents registry', () => {
+  function guardAgents(registry: unknown) {
+    return (ctx: Context): void => {
+      const origGet = (ctx as unknown as { get: (name: string) => unknown }).get.bind(ctx)
+      ;(ctx as unknown as Record<string, unknown>).get = (name: string) =>
+        name === 'agents' ? registry : origGet(name)
+      Object.defineProperty(ctx, 'agents', {
+        configurable: true,
+        get() { throw new Error('cannot get property "agents" without inject') },
+      })
+    }
+  }
+
+  async function mountGuarded(
+    pin: ResumePin,
+    registry: unknown,
+    configure: (ctx: Context) => void,
+  ): Promise<PreExecute> {
+    return mount(pin, stubPersistenceFace({ sessionId: pin.childId }), {
+      llm: { resolveCallConfig: async (config: { provider: string; model: string }) => ({ provider: config.provider, model: config.model }) },
+    }, configure)
+  }
+
+  it('passes through when the registry is reachable but its membership call throws', async () => {
+    const workspace = makeWorkspace()
+    const preExecute = await mountGuarded(
+      makePin('child-live', workspace),
+      { get() { throw new Error('hostile registry') } },
+      guardAgents({ get() { throw new Error('hostile registry') } }),
+    )
+    const { exec, next } = sendTo('child-live')
+    const out = await preExecute(exec, next)
+    expect(out).toEqual({ kind: 'accept', content: [{ type: 'text', text: 'delivered' }] })
+  })
+
+  it('passes through when no registry form resolves at all', async () => {
+    const workspace = makeWorkspace()
+    const preExecute = await mountGuarded(makePin('child-noreg', workspace), undefined, guardAgents(undefined))
+    const { exec, next } = sendTo('child-noreg')
     const out = await preExecute(exec, next)
     expect(out).toEqual({ kind: 'accept', content: [{ type: 'text', text: 'delivered' }] })
   })

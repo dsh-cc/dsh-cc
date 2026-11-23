@@ -22,6 +22,18 @@
  */
 
 /**
+ * Pattern hazard (2026-11-21, recorded for the next preset refactor): two
+ * other plugins still read `ctx.subagents` as a bare property —
+ * `@dsh-cc/workflow-journal` (`apply()`, delegation realm) and
+ * `@dsh-cc/coordinator` (`installCoordinatorMode`, agent ctx). Both resolve
+ * today because of where they are MOUNTED, not because the read is safe under
+ * construction: any isolate/realm reshuffle of the preset tree can turn either
+ * into the same `without inject` throw. Route new service reads through
+ * `readService` (method form first, everything inside a try) instead of adding
+ * another bare property access.
+ */
+
+/**
  * The duck-typed slice of the subagents service the gates consult, kept
  * structural so hermetic unit rigs keep faking it without the harness
  * service class.
@@ -32,9 +44,57 @@ export interface SendTargetSubagents {
   listDescendants?: (rootId: unknown, signal?: AbortSignal) => Promise<readonly { id: unknown; path?: string }[]>
 }
 
+/** The liveness slice of the harness Agent registry the resume gate consults. */
+export interface AgentsRegistry {
+  get?: (id: unknown) => unknown
+}
+
+/**
+ * Read one service off a cordis Context or a literal test rig, fail-soft.
+ *
+ * The METHOD form runs first: on a cordis Context it is the canonical
+ * cross-realm resolver, while PROPERTY access is realm-guarded — reading a
+ * service provided on another plane throws
+ * `cannot get property "<name>" without inject` instead of returning
+ * undefined (the 2026-11-21 `list_agents` / `send_message` regression: the
+ * throw escaped this module and replaced the tool result). Only a DEFINED
+ * method result wins, so hermetic rigs keep working unchanged: plain objects
+ * have no `get`, and a real `Context` with the service stamped as a plain
+ * member resolves nothing through `get` and falls through to the property.
+ *
+ * Every lookup — including the `get` accessor and the service-member read —
+ * sits inside a `try` so a throwing proxy degrades instead of escaping: this
+ * module's contract is that an unattributable target returns `undefined` and
+ * a gate never blocks a legitimate message on evidence it cannot read.
+ */
+function readService(ctx: unknown, name: string): unknown {
+  try {
+    const getter = (ctx as { get?: (serviceName: string) => unknown } | null | undefined)?.get
+    if (typeof getter === 'function') {
+      const byMethod = getter.call(ctx, name)
+      if (byMethod !== undefined) return byMethod
+    }
+  } catch {
+    // Realm guard or hostile accessor: fall through to the property form.
+  }
+  try {
+    return (ctx as Record<string, unknown> | null | undefined)?.[name]
+  } catch {
+    return undefined
+  }
+}
+
 /** Read the subagents service off a cordis Context or a literal test rig. */
 function subagentsOf(ctx: unknown): SendTargetSubagents | undefined {
-  return (ctx as { subagents?: SendTargetSubagents } | null | undefined)?.subagents
+  return readService(ctx, 'subagents') as SendTargetSubagents | undefined
+}
+
+/**
+ * Read the harness Agent registry for the resume gate's liveness check,
+ * through the same fail-soft seam as {@link subagentsOf}.
+ */
+export function agentsOf(ctx: unknown): AgentsRegistry | undefined {
+  return readService(ctx, 'agents') as AgentsRegistry | undefined
 }
 
 /**

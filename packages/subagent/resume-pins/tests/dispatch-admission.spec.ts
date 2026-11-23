@@ -129,3 +129,50 @@ describe('continuation admission owns acceptance serialization, after approval',
   })
 
 })
+
+/**
+ * rc.5 name targeting on the admission path. The child→parent exemption
+ * compares the RESOLVED Session id with the caller's `parentSession`; when the
+ * name read is realm-guarded, the resolver must still run — otherwise the
+ * send falls back to the raw token, misses the exemption, and takes the
+ * sender's admission lease (queueing behind whatever holds it).
+ */
+describe('continuation admission — realm-guarded name resolution', () => {
+  it('resolves through ctx.get so a child→parent report keeps its exemption', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dispatch-admission-realm-')); roots.push(root)
+    const handlers = new Map<string, (...args: any[]) => Promise<any>>()
+    const service = { resolveName: async () => 'S-2' }
+    const ctx: Record<string, unknown> = {
+      get(name: string) { return name === 'subagents' ? service : undefined },
+      agents: { get: () => undefined },
+      provide() {}, effect() {}, logger: { warn() {} },
+      on(name: string, fn: any) { handlers.set(name, fn) },
+    }
+    Object.defineProperty(ctx, 'subagents', {
+      configurable: true,
+      get() { throw new Error('cannot get property "subagents" without inject') },
+    })
+    apply(ctx as never, { pinsRoot: root })
+    const execute = handlers.get('tools/execute')!
+    // Hold the SENDER's lease (admission is sender-keyed): the exempt path
+    // takes no lease and runs immediately; a raw-token fallback would queue.
+    const held = await acquireAdmission('child-x', new AbortController().signal)
+    const body = vi.fn(async () => ({ content: [] }))
+    const exec = {
+      name: 'send_message',
+      token: Symbol('dsh.tool.execution'),
+      arguments: { agent: 'lead' },
+      agent: { id: 'child-x', session: { header: { parentSession: 'S-2' } } },
+      signal: new AbortController().signal,
+    }
+    try {
+      await Promise.race([
+        execute!(exec, body),
+        new Promise((_resolve, reject) => setTimeout(() => reject(new Error('queued: admission never saw the resolved id')), 1000)),
+      ])
+      expect(body).toHaveBeenCalledOnce()
+    } finally {
+      held()
+    }
+  })
+})
