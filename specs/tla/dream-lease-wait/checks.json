@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "modelId": "dream-lease-wait",
+  "module": "Model",
+  "cases": [
+    {
+      "id": "convention",
+      "coverage": "core",
+      "specification": "Spec",
+      "constants": {
+        "WaitBound": "3",
+        "DreamBalks": "FALSE",
+        "FifoBreak": "FALSE",
+        "TimerFiresEarly": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SingleOwner",
+        "FifoNoOvertake",
+        "TimeoutOnlyAtBound",
+        "NoLostDream"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-dream-balks",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WaitBound": "3",
+        "DreamBalks": "TRUE",
+        "FifoBreak": "FALSE",
+        "TimerFiresEarly": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SingleOwner",
+        "FifoNoOvertake",
+        "TimeoutOnlyAtBound",
+        "NoLostDream"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-fifo-break",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WaitBound": "3",
+        "DreamBalks": "FALSE",
+        "FifoBreak": "TRUE",
+        "TimerFiresEarly": "FALSE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SingleOwner",
+        "FifoNoOvertake",
+        "TimeoutOnlyAtBound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    },
+    {
+      "id": "strict-timer-early",
+      "coverage": "expansion",
+      "specification": "Spec",
+      "constants": {
+        "WaitBound": "3",
+        "DreamBalks": "FALSE",
+        "FifoBreak": "FALSE",
+        "TimerFiresEarly": "TRUE"
+      },
+      "invariants": [
+        "TypeOK",
+        "SingleOwner",
+        "FifoNoOvertake",
+        "TimeoutOnlyAtBound"
+      ],
+      "properties": [],
+      "limits": {
+        "timeoutMs": 300000,
+        "heapMiB": 1024
+      }
+    }
+  ]
+}

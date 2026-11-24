@@ -37,6 +37,13 @@ import { readExistingIndex, readExtractionIndex } from './extraction-index.ts'
 import { surfaceCountOf } from './extraction-evidence.ts'
 import { createMemoryMutationLease, type MemoryMutationLease } from './mutation-lease.ts'
 import {
+  MAX_TIMER_DELAY_MS,
+  DEFAULT_DREAM_LEASE_WAIT_MS,
+  DreamLeaseWaitSchema,
+  settleDreamLease,
+  type DreamWaitCell,
+} from './acquire-dream-lease.ts'
+import {
   memoryWritePolicy,
   readIndexStrict,
   resolveWorkspaceMemoryDir,
@@ -89,6 +96,8 @@ export interface Config {
   subagentProviderName?: string
   /** Session store root the gates scan (default `<DSH_HOME>/sessions`). */
   sessionsRoot?: string
+  /** Dream's bounded FIFO lease wait, ms (default 10 min; `0` = balk). */
+  dreamLeaseWaitMs?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -101,6 +110,7 @@ export const Config: z<Config> = z.object({
   pressureCooldownMinutes: z.number().default(60),
   subagentProviderName: z.string().default('fork'),
   sessionsRoot: z.string(),
+  dreamLeaseWaitMs: DreamLeaseWaitSchema,
 })
 
 
@@ -120,7 +130,11 @@ export function apply(ctx: Context, config: Config = {}): void {
   const minSessions = config.minSessions ?? 5
   const pressureCooldownMinutes = config.pressureCooldownMinutes ?? 60
   const sessionsRoot = config.sessionsRoot ?? join(defaultDshHome(), 'sessions')
-
+  // Validated, not clamped; 0 is legal (apply() callers bypass the schema).
+  const dreamLeaseWaitMs = config.dreamLeaseWaitMs ?? DEFAULT_DREAM_LEASE_WAIT_MS
+  if (!Number.isFinite(dreamLeaseWaitMs) || dreamLeaseWaitMs < 0 || dreamLeaseWaitMs > MAX_TIMER_DELAY_MS) throw new Error(`dreamLeaseWaitMs must be a finite number in [0, ${MAX_TIMER_DELAY_MS}]`)
+  // Mount-scoped dream cancellation cell, threaded like `lease`.
+  const dreamWait: DreamWaitCell = { cancelled: false, wait: undefined }
   // Per-session extraction single-flight. Keyed by session id so each top-level
   // agent's in-flight flag and last-spawned event count are isolated.
   const flight = new Map<string, { extracting: boolean; lastEvents: number }>()
@@ -195,6 +209,11 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.effect(() => () => {
     flight.clear()
     dreamInFlight = false
+    // Abort the dream's queued wait BEFORE the coordinator dispose (the
+    // dispose releases the extraction owner, which would drain and grant
+    // the queued dream first, making the abort a no-op).
+    dreamWait.cancelled = true
+    dreamWait.wait?.abort()
     coordinator.dispose()
   }, 'memory-consolidation: reset flight state')
 
@@ -268,7 +287,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     if (config.dreamEnabled ?? true) {
       if (!dreamInFlight) {
         dreamInFlight = true
-        void runDream(ctx, agent, home, provider, lease, minHours, minSessions, pressureCooldownMinutes, sessionsRoot, scan)
+        void runDream(ctx, agent, home, provider, lease, minHours, minSessions, pressureCooldownMinutes, sessionsRoot, scan, { cell: dreamWait, waitMs: dreamLeaseWaitMs })
           .catch((err) => { ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${String(err)}`) })
           .finally(() => { dreamInFlight = false })
       }
@@ -312,6 +331,7 @@ async function runDream(
   pressureCooldownMinutes: number,
   sessionsRoot: string,
   scan: () => Promise<SessionScanResult>,
+  dreamLease: { cell: DreamWaitCell; waitMs: number },
 ): Promise<void> {
   const fs = ctx.get('fs')
   if (fs === undefined) return
@@ -357,19 +377,16 @@ async function runDream(
     if (!pass) return
     hints = window.hints
   }
-  // S1-04 §"The repo write lease and its relation to dream": the LOCAL lease is
-  // tried FIRST. A conflict returns without taking the original disk lock, so a
-  // dream never queues behind the disk lock and misleads other processes while
-  // the shared slot is busy. In `off` mode extraction never holds this lease, so
-  // the tryAcquire is then uncontended and dream behaves exactly as before.
-  const releaseLease = lease.tryAcquire(dir)
-  if (releaseLease === undefined) {
-    ctx.logger.debug({ event: 'memory:dream-lease', conflict: 1 })
-    return
-  }
+  // LOCAL-lease stage: specs/tla/dream-lease-wait (acquire-dream-lease.ts).
+  const sessionId = agent.session.header.id
+  const settled = await settleDreamLease(lease, dir, dreamLease.waitMs, dreamLease.cell,
+    (detail) => recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'lease-timeout', detail }),
+    (event, fields) => { ctx.logger.debug({ event, ...fields }) })
+  if (settled === undefined) return
+  const { release: releaseLease, acquiredAt } = settled
   let priorAt: number | null
   try {
-    priorAt = await tryAcquireLock(fs, dir, process.pid, now, policy)
+    priorAt = await tryAcquireLock(fs, dir, process.pid, acquiredAt, policy)
   } catch (err) {
     // The lease must never outlive a failed lock attempt.
     releaseLease()
@@ -385,7 +402,6 @@ async function runDream(
   // strand the lock (a startMemoryJob throw, an earlier silent death), so the
   // whole spawn is wrapped and every failure leaves a durable breadcrumb
   // before the rollback (plan §2.2, review Major-1/Major-2).
-  const sessionId = agent.session.header.id
   try {
     await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-started', detail: '' })
     const prompt = buildConsolidationPrompt(dir, sessionsRoot, hints)
@@ -411,7 +427,7 @@ async function runDream(
           // with the lock still stamped: the exact stale-window delay this fix
           // removes. The release is guarded (skipped when a reclaimer took the
           // file mid-dream) and best-effort (failures are swallowed inside).
-          await releaseLock(fs, dir, process.pid, now, policy)
+          await releaseLock(fs, dir, process.pid, acquiredAt, policy)
           // Success tombs the marker in BOTH modes — but only the arms this
           // dream's rebuild addressed (issue #335 Face B): the clear is
           // conditional on `pressure.armedAt` (captured at the dream's initial
@@ -433,7 +449,7 @@ async function runDream(
         // whole retry block gets its OWN try/catch mirroring the dispatch-throw
         // branch: a throw inside the retry must never strand the lock.
         if (outcome.status !== 'failed') {
-          void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
+          void rollbackLock(fs, dir, process.pid, acquiredAt, priorAt, policy)
           return
         }
         try {
@@ -447,7 +463,7 @@ async function runDream(
             // Same guarded, awaited release as the first attempt: the retry
             // reuses the ORIGINAL lock, so the same pid+epoch pair is still
             // ours to free.
-            await releaseLock(fs, dir, process.pid, now, policy)
+            await releaseLock(fs, dir, process.pid, acquiredAt, policy)
             // Same conditional clear as the first attempt: the retry reuses
             // the ORIGINAL captured arm (the retry's fork re-reads the
             // directory, so an arm older than a fresh capture is at worst
@@ -460,11 +476,11 @@ async function runDream(
             phase: 'outcome-failed',
             detail: `retry ${retryOutcome.status === 'failed' ? retryOutcome.detail : retryOutcome.status}`,
           })
-          void rollbackLock(fs, dir, process.pid, now, priorAt, policy)
+          void rollbackLock(fs, dir, process.pid, acquiredAt, priorAt, policy)
         } catch (err) {
           const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
           await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'outcome-failed', detail: `retry ${detail}` })
-          await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
+          await rollbackLock(fs, dir, process.pid, acquiredAt, priorAt, policy)
           ctx.logger.warn(`memory-consolidation: dream retry failed: ${detail}`)
         }
       } finally {
@@ -476,7 +492,7 @@ async function runDream(
     // identity (process.pid + the acquisition epoch `now`).
     const detail = err instanceof Error && err.stack ? `${String(err)}\n${err.stack}` : String(err)
     await recordDreamDiagnostic(ctx, fs, dir, policy, { sessionId, phase: 'dispatch-throw', detail })
-    await rollbackLock(fs, dir, process.pid, now, priorAt, policy)
+    await rollbackLock(fs, dir, process.pid, acquiredAt, priorAt, policy)
     ctx.logger.warn(`memory-consolidation: dream dispatch failed: ${detail}`)
     releaseLease()
   }

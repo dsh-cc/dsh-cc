@@ -7,7 +7,11 @@
  * modes: `dispatch-started` (spawn dispatched, outcome unknown = hang when the
  * file is never overwritten), `dispatch-throw` (the dispatch threw; detail
  * carries the error + stack), `outcome-failed` (the job settled as failed or
- * killed; detail carries the job outcome).
+ * killed; detail carries the job outcome), `lease-timeout` (the dream's
+ * bounded FIFO wait on the mutation lease expired — the only dream failure
+ * that was previously invisible; the write intentionally happens while an
+ * extraction may still own the slot: it targets a different file than the
+ * write-back and sits outside the lease's scope).
  *
  * The write mirrors lock.ts/pressure.ts byte-for-byte (`fs.writeText(target,
  * content, policy)` direct write) — it MUST NOT go through `writeMemoryFiles`,
@@ -25,7 +29,7 @@ import type { MemoryWritePolicy } from '@dsh-cc/memory'
 export const DREAM_DIAGNOSTIC_FILE = '.dream-last-error.json'
 
 /** The death mode the entry records. */
-export type DreamDiagnosticPhase = 'dispatch-started' | 'dispatch-throw' | 'outcome-failed'
+export type DreamDiagnosticPhase = 'dispatch-started' | 'dispatch-throw' | 'outcome-failed' | 'lease-timeout'
 
 /** One diagnostic record; written as `{ at, pid, ...entry }` JSON. */
 export interface DreamDiagnosticEntry {
