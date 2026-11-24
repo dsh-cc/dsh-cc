@@ -99,6 +99,26 @@ export interface DecisionRunner {
 /** The host service adds a bound scope source on top of the pure interface. */
 export interface BoundDecisionRunner extends DecisionRunner {
   scope(originSeq?: number): DecisionScope
+  /**
+   * Best-effort shadow-verdict append (the shadow-verdict ledger design,
+   * docs/plans/2026-11-25): persists one evaluation-grain row for the
+   * consumer feature's own ledger. Never rejects — callers `void` the
+   * promise. Optional so existing implementors and test doubles compile.
+   */
+  recordShadowVerdict?(input: ShadowVerdictRecordInput): Promise<void>
+}
+
+/**
+ * The structural record input the bound runner accepts. Kept feature-loose
+ * (the decision-usage package owns the closed per-feature schemas); consumer
+ * features pass their feature literal and a closed-schema payload.
+ */
+export interface ShadowVerdictRecordInput {
+  feature: string
+  /** Wire-decision uuids the evaluation consumed; [] for pre-dispatch terminals. */
+  decisionIds: readonly string[]
+  mode: 'shadow' | 'active'
+  payload: Record<string, unknown>
 }
 
 export interface DecisionBudgetPermitProvider {

@@ -42,5 +42,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "scripts": {
+    "shadow-verdict-report": "node scripts/shadow-verdict-report.mjs"
   }
 }

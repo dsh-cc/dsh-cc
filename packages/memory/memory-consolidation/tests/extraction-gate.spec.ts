@@ -105,6 +105,8 @@ interface RunnerSpy {
   identifyCalls(): number
   /** How often the gate minted a scope itself (it must never do so). */
   scopeCalls(): number
+  /** Shadow-verdict records the runner observed (empty when not captured). */
+  verdicts(): Array<{ feature: string; decisionIds: string[]; mode: string; payload: Record<string, unknown> }>
 }
 
 /**
@@ -118,6 +120,7 @@ function runnerSpy(options: {
   throwOnIdentify?: boolean
 } = {}): RunnerSpy {
   const requests: DecisionRequest[] = []
+  const verdictRecords: Array<{ feature: string; decisionIds: string[]; mode: string; payload: Record<string, unknown> }> = []
   let identifyCount = 0
   let scopeCount = 0
   const readRoute = (value: DecisionRouteIdentity | null | undefined): DecisionRouteIdentity | undefined =>
@@ -140,8 +143,12 @@ function runnerSpy(options: {
       scopeCount += 1
       return SCOPE
     },
+    recordShadowVerdict: (input) => {
+      verdictRecords.push({ feature: input.feature, decisionIds: [...input.decisionIds], mode: input.mode, payload: { ...input.payload } })
+      return Promise.resolve()
+    },
   }
-  return { runner, requests, identifyCalls: () => identifyCount, scopeCalls: () => scopeCount }
+  return { runner, requests, identifyCalls: () => identifyCount, scopeCalls: () => scopeCount, verdicts: () => verdictRecords }
 }
 
 function gateOf(spy: RunnerSpy | undefined, over: Partial<ExtractionDecisionSettings> = {}) {
@@ -380,5 +387,56 @@ describe('cancellation', () => {
     const verdict = await gateOf(spy).decide(completeWindow(), SCOPE, new AbortController().signal)
     expect(verdict).toEqual({ kind: 'cancelled' })
     expect(spy.requests).toHaveLength(1)
+  })
+})
+
+describe('shadow-verdict ledger recording (design docs/plans/2026-11-25)', () => {
+  it('records one would-skip row per answered run with window bounds and the threshold', async () => {
+    const spy = runnerSpy({ run: () => Promise.resolve(answeredRun(noulAnswer(0.05), 'decision-7')) })
+    const gate = createExtractionDecisionGate({
+      runner: spy.runner,
+      readSettings: () => settings({ skipProbability: 0.15, mode: 'shadow' }),
+    })
+    const window = completeWindow()
+    await gate.decide(window, SCOPE, new AbortController().signal)
+    expect(spy.verdicts()).toHaveLength(1)
+    const record = spy.verdicts()[0]!
+    expect(record).toMatchObject({
+      feature: 'memory-extraction',
+      decisionIds: ['decision-7'],
+      mode: 'shadow',
+    })
+    expect(record.payload).toMatchObject({
+      verdict: 'would-skip',
+      probability: 0.05,
+      skipThreshold: 0.15,
+      fromExclusive: window.fromExclusive,
+      throughInclusive: window.throughInclusive,
+    })
+    expect(typeof record.payload.surfaceEvents).toBe('number')
+    expect(typeof record.payload.stateBytes).toBe('number')
+  })
+
+  it('buckets the verdict at the skipProbability boundary and reports active mode', async () => {
+    const boundary = runnerSpy({ run: () => Promise.resolve(answeredRun(noulAnswer(0.150001), 'd-b')) })
+    await createExtractionDecisionGate({
+      runner: boundary.runner,
+      readSettings: () => settings({ skipProbability: 0.15, mode: 'active' }),
+    }).decide(completeWindow(), SCOPE, new AbortController().signal)
+    expect(boundary.verdicts()[0]!.payload.verdict).toBe('extract-uncertain')
+    expect(boundary.verdicts()[0]!.mode).toBe('active')
+
+    const positive = runnerSpy({ run: () => Promise.resolve(answeredRun(noulAnswer(0.9), 'd-p')) })
+    await createExtractionDecisionGate({
+      runner: positive.runner,
+      readSettings: () => settings({ mode: 'shadow' }),
+    }).decide(completeWindow(), SCOPE, new AbortController().signal)
+    expect(positive.verdicts()[0]!.payload.verdict).toBe('extract-positive')
+  })
+
+  it('records nothing for an unreadable answer (availability is the usage ledger\'s job)', async () => {
+    const spy = runnerSpy({ run: () => Promise.resolve(answeredRun(noulAnswer(Number.NaN), 'd-x')) })
+    await gateOf(spy).decide(completeWindow(), SCOPE, new AbortController().signal)
+    expect(spy.verdicts()).toHaveLength(0)
   })
 })

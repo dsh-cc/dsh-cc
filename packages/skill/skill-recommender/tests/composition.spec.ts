@@ -99,6 +99,9 @@ class FakeRunner implements SkillRecommendationRunner {
   /** Every `scope(originSeq?)` argument, to pin the watermark computation. */
   readonly scopeArgs: Array<number | undefined> = []
 
+  /** Shadow-verdict records the runner observed (design docs/plans/2026-11-25). */
+  readonly verdicts: Array<{ feature: string; decisionIds: string[]; mode: string; payload: Record<string, unknown> }> = []
+
   route: SkillRecommendationRouteIdentity | undefined = { ...WIDE_ROUTE }
 
   scopeValue: SkillRecommendationScope = { ...SCOPE }
@@ -120,6 +123,15 @@ class FakeRunner implements SkillRecommendationRunner {
   scope(originSeq?: number): SkillRecommendationScope {
     this.scopeArgs.push(originSeq)
     return originSeq === undefined ? { ...this.scopeValue } : { ...this.scopeValue, originSeq }
+  }
+
+  async recordShadowVerdict(input: {
+    feature: string
+    decisionIds: readonly string[]
+    mode: 'shadow' | 'active'
+    payload: Record<string, unknown>
+  }): Promise<void> {
+    this.verdicts.push({ feature: input.feature, decisionIds: [...input.decisionIds], mode: input.mode, payload: { ...input.payload } })
   }
 
   async run(request: SkillDecisionRequest): Promise<SkillDecisionRun> {
@@ -355,7 +367,6 @@ describe('unavailable outcomes', () => {
     const { ctx } = await host({ section: { mode: 'active' }, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(result.value.recommendations).toEqual([])
     expect(result.value.decisionIds).toEqual([])
@@ -394,7 +405,6 @@ describe('unavailable outcomes', () => {
     const { ctx } = await host({ section: { mode: 'active' }, runner, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(runner.requests.length).toBe(0)
   })
@@ -405,7 +415,6 @@ describe('unavailable outcomes', () => {
     const { ctx } = await host({ section: { mode: 'active', 'timeout-ms': 5 }, runner, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(runner.requests.length).toBe(0)
   })
@@ -417,7 +426,6 @@ describe('unavailable outcomes', () => {
     const { ctx } = await host({ section: { mode: 'active' }, runner, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(runner.requests.length).toBe(0)
   })
@@ -460,7 +468,6 @@ describe('unavailable outcomes', () => {
     const { ctx } = await host({ section: { mode: 'active' }, runner, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(result.value.recommendations).toEqual([])
   })
@@ -478,7 +485,6 @@ describe('post-await revalidation', () => {
     const { ctx } = await host({ section: { mode: 'active' }, runner, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(result.value.recommendations).toEqual([])
     // Changed identity is not a reason to ask again inside this request.
@@ -496,7 +502,6 @@ describe('post-await revalidation', () => {
     const { ctx } = await host({ section: { mode: 'active' }, runner, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(result.value.recommendations).toEqual([])
     expect(runner.requests.length).toBe(1)
@@ -510,7 +515,6 @@ describe('post-await revalidation', () => {
     const { ctx } = await host({ section, runner, skills })
 
     const result = await recommendOk(ctx, 'write interface tests')
-
     expect(result.value.status).toBe('unavailable')
     expect(result.value.recommendations).toEqual([])
     expect(runner.requests.length).toBe(1)
@@ -740,5 +744,63 @@ describe('unload', () => {
     expect((result as typeof result & { value: RecommendValue }).value.decisionIds).toEqual([])
     expect(runner.signals[0]?.aborted).toBe(true)
     expect(await names()).not.toContain(RECOMMEND_SKILL_NAME)
+  })
+})
+
+describe('the shadow-verdict ledger (design docs/plans/2026-11-25)', () => {
+  it('records one answered row per request, with the pre-zero shadow names', async () => {
+    const runner = new FakeRunner()
+    const skills = new FakeSkills([skill('code-writer'), skill('doc-writer')])
+    const rt = standaloneRuntime({ section: { mode: 'shadow' }, runner, skills })
+    const result = await rt.recommend({ task: 'write interface tests', actor: fakeAgent() })
+    expect(result.status).toBe('shadow')
+    expect(result.recommendations).toEqual([]) // the public shadow result is zeroed...
+    await settle()
+    expect(runner.verdicts).toHaveLength(1)
+    const record = runner.verdicts[0]!
+    expect(record).toMatchObject({ feature: 'skill-recommendation', mode: 'shadow' })
+    expect(record.decisionIds.length).toBeGreaterThanOrEqual(1)
+    // ...but the verdict row keeps the judged names the assembly saw.
+    expect(record.payload.recommended).toEqual(['code-writer', 'doc-writer'])
+    expect(record.payload.judged).toBe(record.payload.eligible)
+    expect(typeof record.payload.requestLatencyMs).toBe('number')
+    expect(record.payload.requestTimeoutMs).toBe(5000)
+    expect(record.payload.status).toBe('shadow')
+  })
+
+  it('records pre-dispatch terminals (route missing) with an empty join and the failure class', async () => {
+    const runner = new FakeRunner()
+    runner.route = undefined
+    const skills = new FakeSkills([skill('code-writer')])
+    const rt = standaloneRuntime({ section: { mode: 'shadow' }, runner, skills })
+    const result = await rt.recommend({ task: 'write interface tests', actor: fakeAgent() })
+    expect(result.status).toBe('unavailable')
+    await settle()
+    expect(runner.verdicts).toHaveLength(1)
+    expect(runner.verdicts[0]!.decisionIds).toEqual([])
+    expect(runner.verdicts[0]!.payload).toMatchObject({ status: 'unavailable', failureClass: 'unconfigured' })
+  })
+
+  it('records nothing for unreadable settings (mode unknown) and for mode off', async () => {
+    const runner = new FakeRunner()
+    const skills = new FakeSkills([skill('code-writer')])
+    const broken = standaloneRuntime({ section: { mode: 'bogus' }, runner, skills })
+    expect((await broken.recommend({ task: 't', actor: fakeAgent() })).status).toBe('unavailable')
+    const off = standaloneRuntime({ section: { mode: 'off' }, runner, skills })
+    expect((await off.recommend({ task: 't', actor: fakeAgent() })).status).toBe('off')
+    await settle()
+    expect(runner.verdicts).toHaveLength(0)
+  })
+
+  it('records an active recommendation row', async () => {
+    const runner = new FakeRunner()
+    const skills = new FakeSkills([skill('code-writer')])
+    const rt = standaloneRuntime({ section: { mode: 'active' }, runner, skills })
+    const result = await rt.recommend({ task: 'write interface tests', actor: fakeAgent() })
+    expect(result.status).toBe('recommended')
+    await settle()
+    expect(runner.verdicts).toHaveLength(1)
+    expect(runner.verdicts[0]!.mode).toBe('active')
+    expect(runner.verdicts[0]!.payload.status).toBe('recommended')
   })
 })

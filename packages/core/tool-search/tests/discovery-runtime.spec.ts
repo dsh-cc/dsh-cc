@@ -44,6 +44,8 @@ function entry(name: string): DeferredEntry {
 /** A scripted stand-in for S1-02's `BoundDecisionRunner`. */
 class FakeRunner implements DiscoveryRunner {
   readonly requests: DiscoveryDecisionRequest[] = []
+  /** Shadow-verdict records the runner observed (design docs/plans/2026-11-25). */
+  readonly verdicts: Array<{ feature: string; decisionIds: string[]; mode: string; payload: Record<string, unknown> }> = []
 
   /** Answers one request; mutated per test. */
   answer: (request: DiscoveryDecisionRequest) => DiscoveryDecisionRun = request => ({
@@ -67,6 +69,15 @@ class FakeRunner implements DiscoveryRunner {
     this.requests.push(request)
     await this.beforeAnswer()
     return this.answer(request)
+  }
+
+  async recordShadowVerdict(input: {
+    feature: string
+    decisionIds: readonly string[]
+    mode: 'shadow' | 'active'
+    payload: Record<string, unknown>
+  }): Promise<void> {
+    this.verdicts.push({ feature: input.feature, decisionIds: [...input.decisionIds], mode: input.mode, payload: { ...input.payload } })
   }
 }
 
@@ -221,5 +232,50 @@ describe('hostRunnerResolver (issue #359: the root-realm bridge)', () => {
   it('returns undefined when nothing resolves', () => {
     expect(hostRunnerResolver({})(actor)).toBeUndefined()
     expect(hostRunnerResolver({ get: () => undefined })(actor)).toBeUndefined()
+  })
+})
+
+describe('the shadow-verdict ledger (design docs/plans/2026-11-25)', () => {
+  it('records one row per evaluation with the post-selectNames name sets', async () => {
+    const runner = new FakeRunner()
+    const discovery = runtime({ mode: 'shadow', runner })
+    await discovery.evaluate({ query: 'capability', maxResults: 3, actor: {}, lexicalNames: ['capability_a'] })
+    expect(runner.verdicts).toHaveLength(1)
+    const record = runner.verdicts[0]!
+    expect(record).toMatchObject({ feature: 'tool-discovery', mode: 'shadow' })
+    expect(record.decisionIds).toHaveLength(1) // one batch judged both candidates
+    expect(record.payload).toMatchObject({
+      suggested: ['capability_a', 'capability_b'],
+      lexical: ['capability_a'],
+      differing: true,
+      suggestedOnly: 1,
+      lexicalOnly: 0,
+      candidatesJudged: 2,
+      originSeq: SCOPE.originSeq,
+    })
+    expect(String(record.payload.queryHash8)).toMatch(/^[0-9a-f]{16}$/)
+  })
+
+  it('cache-hit waiters each record their own row with the shared decisionIds', async () => {
+    const runner = new FakeRunner()
+    const discovery = runtime({ mode: 'shadow', runner, settings: { cacheEntries: 16 } as never })
+    const first = discovery.evaluate({ query: 'capability', maxResults: 3, actor: {}, lexicalNames: ['capability_a'] })
+    const second = discovery.evaluate({ query: 'capability', maxResults: 1, actor: {}, lexicalNames: ['capability_a'] })
+    await Promise.all([first, second])
+    // One wire judgment (the cache coalesced the flight) but TWO evaluation rows.
+    expect(runner.requests).toHaveLength(1)
+    expect(runner.verdicts).toHaveLength(2)
+    expect(runner.verdicts[0]!.decisionIds).toEqual(runner.verdicts[1]!.decisionIds)
+    expect(runner.verdicts[0]!.payload.suggested).toEqual(['capability_a', 'capability_b'])
+    expect(runner.verdicts[1]!.payload.suggested).toEqual(['capability_a'])
+  })
+
+  it('records active-mode rows too (post-flip monitoring; the gate filters)', async () => {
+    const runner = new FakeRunner()
+    const discovery = runtime({ mode: 'active', runner })
+    const evaluation = await discovery.evaluate({ query: 'capability', maxResults: 3, actor: {}, lexicalNames: [] })
+    expect(evaluation).toMatchObject({ kind: 'selected' })
+    expect(runner.verdicts).toHaveLength(1)
+    expect(runner.verdicts[0]!.mode).toBe('active')
   })
 })

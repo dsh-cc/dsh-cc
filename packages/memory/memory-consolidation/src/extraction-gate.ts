@@ -249,6 +249,7 @@ export function createExtractionDecisionGate(deps: ExtractionDecisionGateDeps): 
       const routeAlias = DECISION_LANE_ALIAS
       const before = identifyRoute(runner, routeAlias, scope)
       if (before === undefined) return EXTRACT_UNAVAILABLE
+      const state = buildState(window)
       const request: DecisionRequest = {
         feature: EXTRACTION_DECISION_FEATURE,
         mode: settings.mode === 'active' ? 'active' : 'shadow',
@@ -256,7 +257,7 @@ export function createExtractionDecisionGate(deps: ExtractionDecisionGateDeps): 
         questionVersion: EXTRACTION_QUESTION_VERSION,
         policyVersion: EXTRACTION_POLICY_VERSION,
         scope,
-        state: buildState(window),
+        state,
         questions: QUESTIONS as Record<string, SystemOneQuestion>,
         timeoutMs: settings.timeoutMs,
         maxInputTokens: settings.maxInputTokens,
@@ -274,6 +275,29 @@ export function createExtractionDecisionGate(deps: ExtractionDecisionGateDeps): 
       if (after === undefined || !sameRouteIdentity(before, after)) return EXTRACT_UNAVAILABLE
       const probability = readNoul(run.answers as Readonly<Record<string, unknown>>)
       if (probability === undefined) return EXTRACT_UNAVAILABLE
+      // Shadow-verdict ledger (design docs/plans/2026-11-25): one
+      // evaluation-grain row per answered window, fire-and-forget. The row
+      // is the "would the fork have been skipped" record doc 04 §Rollout
+      // requires, with the window bounds and shape counters.
+      if (runner.recordShadowVerdict !== undefined) {
+        void runner.recordShadowVerdict({
+          feature: EXTRACTION_DECISION_FEATURE,
+          decisionIds: [run.decisionId],
+          mode: settings.mode === 'active' ? 'active' : 'shadow',
+          payload: {
+            verdict:
+              probability <= settings.skipProbability ? 'would-skip'
+                : probability >= POSITIVE_PROBABILITY ? 'extract-positive'
+                  : 'extract-uncertain',
+            probability,
+            skipThreshold: settings.skipProbability,
+            fromExclusive: window.fromExclusive,
+            throughInclusive: window.throughInclusive,
+            surfaceEvents: window.events.length,
+            stateBytes: Buffer.byteLength(JSON.stringify(state), 'utf8'),
+          },
+        })
+      }
       if (probability <= settings.skipProbability) {
         return { kind: 'skip', probability, decisionId: run.decisionId }
       }

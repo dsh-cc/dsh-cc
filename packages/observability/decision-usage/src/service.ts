@@ -36,6 +36,8 @@ import type {
 import { decisionUsageDir } from './ledger.ts'
 import { createDecisionQuota, DecisionQuotaError } from './quota.ts'
 import type { DecisionQuota } from './quota.ts'
+import { appendShadowVerdict } from './shadow-verdicts.ts'
+import type { ShadowVerdictInput } from './shadow-verdicts.ts'
 import { createWarnOnce, resolveDecisionRoute } from './route.ts'
 import { decisionMaxRetries, decisionSessionLimits, decisionSettingsOf, parseDecisionSettings } from './settings.ts'
 import type { DecisionSettingsParseResult } from './settings.ts'
@@ -375,6 +377,28 @@ export function createSystemOneDecisionsService(deps: DecisionUsageServiceDeps):
               decisionId = 'unavailable'
             }
             return { status: 'unavailable', reason: 'error', decisionId }
+          }
+        },
+        /**
+         * Best-effort shadow-verdict append (the shadow-verdict ledger
+         * design): derives the session directory from the live host facts —
+         * the same reads the quota path uses — validates the payload against
+         * its feature's closed schema, and appends. Never rejects: callers
+         * void the promise; failures fold to one warn.
+         */
+        async recordShadowVerdict(input: ShadowVerdictInput): Promise<void> {
+          try {
+            const home = deps.home?.()
+            const projectKey = currentProjectKey(agent)
+            const sessionId = currentSessionId(agent)
+            if (home === undefined || home.length === 0 || projectKey === '' || sessionId === '') return
+            await appendShadowVerdict(decisionUsageDir(home, projectKey, sessionId), input, {
+              now,
+              uuid,
+              ...(deps.warn !== undefined ? { warn: warnRoute } : {}),
+            })
+          } catch {
+            // Never rejects, never throws into the feature path.
           }
         },
       }
