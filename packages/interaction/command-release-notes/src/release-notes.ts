@@ -17,6 +17,12 @@
 /** The bundled changelog, newest section first. */
 export const CHANGELOG = `# Release notes
 
+## 0.10.0-rc.1
+
+- fix(subagent): make resume-pin service reads fail-soft across realms (#446)
+- fix(memory): stop dream starvation on the mutation lease with a bounded FIFO wait (#447)
+- feat(observability): add the shadow-verdict ledger for the systemone consumer features (#448)
+
 ## 0.9.6 — a mathematical research harness and two writing-citation repairs
 
 - **Math harness** — a new marketplace plugin, \`dsh-cc-math\`, adds a
