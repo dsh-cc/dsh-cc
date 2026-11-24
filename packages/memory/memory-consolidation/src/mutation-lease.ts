@@ -7,9 +7,13 @@
  * `off` mode keeps the legacy uncoordinated scheduling, so this lease is the
  * only mutual exclusion between shadow/active-mode extraction and dream inside
  * one plugin instance: extraction holds it from before the fork starts until
- * `job.done`, dream only tryAcquires it and returns without taking the original
- * disk lock when the slot is busy. It provides no cross-process transaction and
- * does not widen the meaning of the existing disk lock.
+ * `job.done`. The dream takes the FAST path through `tryAcquire` and, when
+ * contended, queues through `acquire` with a BOUNDED wait (see
+ * acquire-dream-lease.ts and specs/tla/dream-lease-wait — the old balk
+ * starved dream structurally in shadow/active mode); a queued dream still
+ * never touches the original disk lock while merely waiting. It provides no
+ * cross-process transaction and does not widen the meaning of the existing
+ * disk lock.
  *
  * Two properties matter for correctness:
  * - at most one owner per canonical dir, and the queue is strictly FIFO, so a

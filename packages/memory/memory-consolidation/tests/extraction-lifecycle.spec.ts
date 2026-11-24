@@ -4,7 +4,9 @@
  * lifecycle truth table", §"The repo write lease and its relation to dream"):
  * disposal aborts the gate/job and gives the lease back, a failure cooldown is
  * only re-armed by a later stop, the active → off flip never double-dispatches,
- * and a dream lease conflict returns before the disk lock is ever touched.
+ * and while an extraction holds the local lease the dream has not taken the
+ * disk lock (the 2026-11-23 fix made the dream queue FIFO behind it instead
+ * of balking — specs/tla/dream-lease-wait).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -263,7 +265,7 @@ describe('dream wiring (local lease before the disk lock)', () => {
     await writeFile(join(dir, 'session.v3.jsonl.zstd'), zstdCompressSync(Buffer.from(`${header}\n`)))
   }
 
-  it('an in-flight extraction holding the local lease makes the dream round return without the disk lock', async () => {
+  it('while an extraction holds the local lease the dream has not taken the disk lock', async () => {
     await seedSession(tmpRoot, 's1')
     const ctx = new Context()
     const memoryHome = '/mem-dream-lease'
@@ -301,6 +303,9 @@ describe('dream wiring (local lease before the disk lock)', () => {
       sessionsRoot: tmpRoot,
       minSessions: 1,
       minHours: 0,
+      // The FIFO wait would keep a queued dream alive past the test end;
+      // the escape hatch keeps this pin about the DISK lock only.
+      dreamLeaseWaitMs: 0,
     })
     const agent = fakeAgent(memoryHome, 'session-dream-lease')
     const stop = async (): Promise<void> => {
@@ -311,13 +316,16 @@ describe('dream wiring (local lease before the disk lock)', () => {
     await stop()
     await vi.waitFor(() => expect(started).toContain('extract-memories'))
 
-    // Stop 2 runs while that lease is still held: the dream round must return
-    // BEFORE the original disk lock instead of queueing behind it.
+    // Stop 2 runs while that lease is still held: the dream round has not
+    // taken the disk lock (with the wait disabled, this stop's dream balks
+    // — the queued FIFO rescue is pinned by dream-lease-wait.spec.ts).
     started.length = 0
     fs.writes.length = 0
     await stop()
     await new Promise<void>((resolveWait) => { setTimeout(resolveWait, 40) })
     expect(started).toEqual([])
     expect(fs.writes.filter((key) => key.endsWith('.consolidation-lock'))).toEqual([])
+    // No queued waiter outlives the test (the balk escape hatch leaves none).
+    await ctx.fiber.dispose()
   })
 })
