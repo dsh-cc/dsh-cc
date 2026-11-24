@@ -8,6 +8,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -488,5 +490,56 @@ describe('frozen cascade sections (issue #373)', () => {
     } finally {
       holder.dispose()
     }
+  })
+})
+
+describe('shadow-verdict recording (design docs/plans/2026-11-25)', () => {
+  it('forAgent().recordShadowVerdict writes a parseable row into the session directory', async () => {
+    const { deps } = makeService()
+    const service = createSystemOneDecisionsService(deps)
+    const { agent } = fakeAgent()
+    const runner = service.forAgent(agent)
+    await runner.recordShadowVerdict?.({
+      feature: 'memory-extraction',
+      decisionIds: ['decision-7'],
+      mode: 'shadow',
+      payload: {
+        verdict: 'would-skip',
+        probability: 0.05,
+        skipThreshold: 0.15,
+        fromExclusive: 12,
+        throughInclusive: 47,
+        surfaceEvents: 42,
+        stateBytes: 1843,
+      },
+    })
+    const file = join(tmp, 'decision-usage', projectKeyOf(resolvePath(cwd)), 'sess-1', 'shadow-verdicts.jsonl')
+    const text = readFileSync(file, 'utf8')
+    const row = JSON.parse(text.trimEnd()) as Record<string, unknown>
+    expect(row).toMatchObject({
+      schemaVersion: 1,
+      feature: 'memory-extraction',
+      mode: 'shadow',
+      decisionIds: ['decision-7'],
+    })
+    expect(typeof row.eventId).toBe('string')
+    expect(typeof row.time).toBe('number')
+  })
+
+  it('never rejects and writes nothing for a rejected payload', async () => {
+    const { deps } = makeService()
+    const service = createSystemOneDecisionsService(deps)
+    const { agent } = fakeAgent()
+    const runner = service.forAgent(agent)
+    await expect(
+      runner.recordShadowVerdict?.({
+        feature: 'memory-extraction',
+        decisionIds: ['d'],
+        mode: 'shadow',
+        payload: { unknownKey: true } as never,
+      }),
+    ).resolves.toBeUndefined()
+    const dir = join(tmp, 'decision-usage', projectKeyOf(resolvePath(cwd)), 'sess-1')
+    await expect(readFile(join(dir, 'shadow-verdicts.jsonl'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

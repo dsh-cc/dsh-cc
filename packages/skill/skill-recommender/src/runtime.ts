@@ -45,6 +45,7 @@ import {
 } from './recommend.ts'
 import type { RecommendationOutcome } from './recommend.ts'
 import type { RecommendationSettings } from './settings.ts'
+import type { ShadowVerdictRecordInput } from '@dsh-cc/systemone'
 import type {
   SkillDescriptor,
   SkillRecommendationResult,
@@ -80,6 +81,14 @@ export interface RecommendationRuntimeDeps {
   readonly listCandidates: (actor: object) => Promise<readonly SkillDescriptor[] | undefined>
   /** Bound runner for the calling actor; absent is `unavailable`. */
   readonly resolveRunner?: (actor: object) => SkillRecommendationRunner | undefined
+  /**
+   * Shadow-verdict recorder (design docs/plans/2026-11-25): one row per
+   * recommendation request, callable from the first line of `recommend()` —
+   * NOT the runner face, so pre-dispatch terminals (before a runner binds)
+   * still record. Default derives from the host runner resolver; the
+   * service's method never rejects.
+   */
+  readonly recordVerdict?: (actor: object, input: ShadowVerdictRecordInput) => Promise<void> | undefined
   /** Host service face the default resolver reads. */
   readonly host?: SkillRecommendationHostFace
   /** The fiber's cache, built at mount; disposed on unload. */
@@ -127,6 +136,15 @@ export function createRecommendationRuntime(deps: RecommendationRuntimeDeps): Re
   const resolveRunner = deps.resolveRunner
     ?? (deps.host === undefined ? () => undefined : hostRunnerResolver(deps.host))
 
+  /**
+   * Shadow-verdict recorder (design docs/plans/2026-11-25): one row per
+   * recommendation request. The default derives from the host runner
+   * resolver — the service's `recordShadowVerdict` never rejects — and a
+   * missing service/actor simply records nothing. Callers void the promise.
+   */
+  const recordVerdict = deps.recordVerdict ?? ((actor: object, input: ShadowVerdictRecordInput) =>
+    resolveRunner(actor)?.recordShadowVerdict?.(input))
+
   /** Report a genuine fault once per distinct message; never on the hot path. */
   const reported = new Set<string>()
   const reportFailure = (message: string): void => {
@@ -163,8 +181,56 @@ export function createRecommendationRuntime(deps: RecommendationRuntimeDeps): Re
     if (route === undefined || !sameIdentity(route, snapshot.route)) throw new StaleJudgmentSignal()
   }
 
-  return {
-    async recommend(input: RecommendationCallInput): Promise<SkillRecommendationResult> {
+  /**
+   * Record one terminal verdict row (the shadow-verdict ledger). Answered
+   * rows (`shadow`/`recommended`) are recorded inside the judgment at the
+   * assembly point — before the shadow branch zeroes the names — so this
+   * wrapper records only the non-answered terminals. The `settings` carve-out:
+   * an unreadable settings section (mode unknown) and `off` record nothing.
+   */
+  const recordTerminalVerdict = (
+    input: RecommendationCallInput,
+    result: SkillRecommendationResult,
+    startedAt: number,
+  ): void => {
+    // The recorder never throws into the feature path (the ledger design's
+    // hard rule) — a host whose service accessors throw when unprovided must
+    // not turn a shadow decision into a tool error.
+    try {
+      recordTerminalVerdictUnguarded(input, result, startedAt)
+    } catch {
+      // Swallowed by design; the usage ledger still carries availability.
+    }
+  }
+
+  const recordTerminalVerdictUnguarded = (
+    input: RecommendationCallInput,
+    result: SkillRecommendationResult,
+    startedAt: number,
+  ): void => {
+    if (result.status === 'shadow' || result.status === 'recommended' || result.status === 'off') return
+    const settings = deps.readSettings()
+    if (settings === undefined || settings.mode === 'off') return
+    if (input.actor === undefined) return
+    void Promise.resolve()
+      .then(() => recordVerdict(input.actor!, {
+      feature: 'skill-recommendation',
+      decisionIds: result.decisionIds,
+      mode: settings.mode === 'shadow' ? 'shadow' : 'active',
+      payload: {
+        status: result.status,
+        ...(result.status === 'unavailable' && result.reason !== undefined ? { failureClass: result.reason } : {}),
+          requestLatencyMs: Math.max(0, Date.now() - startedAt),
+          requestTimeoutMs: settings.timeoutMs,
+        },
+      }))
+      .catch(() => undefined)
+  }
+
+  const recommendInner = async (
+    input: RecommendationCallInput,
+    startedAt: number,
+  ): Promise<SkillRecommendationResult> => {
       try {
         // Step 1: settings, then the mode gate — `off` costs zero host reads.
         const settings = deps.readSettings()
@@ -252,6 +318,28 @@ export function createRecommendationRuntime(deps: RecommendationRuntimeDeps): Re
         assertFresh(snapshot, runner)
 
         const decisionIds = [...value.decisionIds]
+        // Shadow-verdict ledger: record the answered row HERE, before the
+        // shadow branch zeroes the names — `value.recommendations` still
+        // holds the judged set (a public wrapper would only ever see `[]`).
+        if (input.actor !== undefined) {
+          // Never-throw: a recorder fault must not turn an answered judgment
+          // into `unavailable('error')` via the surrounding catch.
+          void Promise.resolve()
+            .then(() => recordVerdict(input.actor!, {
+              feature: 'skill-recommendation',
+              decisionIds,
+              mode: settings.mode === 'shadow' ? 'shadow' : 'active',
+              payload: {
+                status: settings.mode === 'shadow' ? 'shadow' : 'recommended',
+                eligible: value.eligible,
+                judged: value.judged,
+                recommended: value.recommendations.map(entry => entry.name),
+                requestLatencyMs: Math.max(0, Date.now() - startedAt),
+                requestTimeoutMs: settings.timeoutMs,
+              },
+            }))
+            .catch(() => undefined)
+        }
         // Step 7: shadow keeps the numbers for the audit trail only; the model
         // sees the original catalog. `active` publishes the selected set. Both
         // carry the judged/eligible counts (capacity design §4-C4).
@@ -279,6 +367,14 @@ export function createRecommendationRuntime(deps: RecommendationRuntimeDeps): Re
         reportFailure(`skill-recommendation: judgment failed — ${error instanceof Error ? error.message : String(error)}`)
         return unavailable('error')
       }
+    }
+
+  return {
+    async recommend(input: RecommendationCallInput): Promise<SkillRecommendationResult> {
+      const startedAt = Date.now()
+      const result = await recommendInner(input, startedAt)
+      recordTerminalVerdict(input, result, startedAt)
+      return result
     },
 
     dispose(): void {

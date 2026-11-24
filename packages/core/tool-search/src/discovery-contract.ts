@@ -84,6 +84,17 @@ export interface DiscoveryRunner {
   identifyRoute(alias: string, scope: DiscoveryScope): DiscoveryRouteIdentity | undefined
   scope(originSeq?: number): DiscoveryScope
   run(request: DiscoveryDecisionRequest): Promise<DiscoveryDecisionRun>
+  /**
+   * Best-effort shadow-verdict append (the shadow-verdict ledger design).
+   * Optional and structural: the real decision-usage service satisfies it;
+   * test doubles keep compiling. Callers void the promise.
+   */
+  recordShadowVerdict?(input: {
+    feature: string
+    decisionIds: readonly string[]
+    mode: 'shadow' | 'active'
+    payload: Record<string, unknown>
+  }): Promise<void>
 }
 
 /**

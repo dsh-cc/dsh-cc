@@ -96,6 +96,28 @@ export type {
   QuotaRejection,
 } from './quota.ts'
 
+export {
+  SHADOW_VERDICTS_ARRAY_MAX_ITEMS,
+  SHADOW_VERDICTS_FILE_NAME,
+  SHADOW_VERDICTS_MAX_BYTES,
+  SHADOW_VERDICTS_PAYLOAD_MAX_BYTES,
+  SHADOW_VERDICTS_ROTATED_NAME,
+  SHADOW_VERDICTS_SCHEMA_VERSION,
+  SHADOW_VERDICTS_STRING_MAX_CHARS,
+  SHADOW_VERDICT_SCHEMAS,
+  appendShadowVerdict,
+  parseShadowVerdictLine,
+  shadowVerdictQueryHash,
+  validateShadowVerdictInput,
+  validateShadowVerdictPayload,
+} from './shadow-verdicts.ts'
+export type {
+  ShadowVerdictFeature,
+  ShadowVerdictInput,
+  ShadowVerdictRejection,
+  ShadowVerdictRow,
+} from './shadow-verdicts.ts'
+
 export { createSystemOneDecisionsService, readProviderRecord } from './service.ts'
 export type {
   DecisionProviderRecord,

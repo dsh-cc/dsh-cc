@@ -24,6 +24,8 @@
  */
 
 import { DECISION_LANE_ALIAS } from '@dsh-cc/systemone'
+import { recordDiscoveryVerdict, shadowTally } from './discovery-verdict-record.ts'
+import type { DiscoveryShadowCounters } from './discovery-verdict-record.ts'
 import {
   TOOL_DISCOVERY_POLICY_VERSION,
   TOOL_DISCOVERY_QUESTION_VERSION,
@@ -102,21 +104,11 @@ export type DiscoveryEvaluation =
 export interface DiscoveryJudgment {
   readonly kind: 'selected'
   readonly scored: readonly DiscoveryScoredItem[]
-}
-
-/**
- * In-memory shadow counters (§ "Release gates and rollback": shadow accumulates
- * hit-set differences and counts — never queries, candidate names or answers).
- */
-export interface DiscoveryShadowCounters {
-  /** Complete judgments tallied. */
-  readonly judgments: number
-  /** Judgments whose suggested set differed from the lexical hit set. */
-  readonly differing: number
-  /** Names suggested but not among the lexical hits. */
-  readonly suggestedOnly: number
-  /** Lexical hits the judgment did not suggest. */
-  readonly lexicalOnly: number
+  /**
+   * The wire-decision uuids this judgment consumed, one per batch — the
+   * shadow-verdict ledger's usage join. Cache-hit waiters share these.
+   */
+  readonly decisionIds: readonly string[]
 }
 
 /**
@@ -317,6 +309,7 @@ export function createDiscoveryRuntime<S>(deps: DiscoveryRuntimeDeps<S>): Discov
     // for the whole judgment, not a per-request budget (§ "Settings").
     const deadline = now() + settings.timeoutMs
     const scored: DiscoveryScoredItem[] = []
+    const decisionIds: string[] = []
     for (const batch of plan.batches) {
       if (signal.aborted) throw new DiscoveryCancelledSignal()
       assertFresh(snapshot, runner)
@@ -345,6 +338,7 @@ export function createDiscoveryRuntime<S>(deps: DiscoveryRuntimeDeps<S>): Discov
         if (run.reason === 'cancelled') throw new DiscoveryCancelledSignal()
         throw new DiscoveryFallbackSignal('unavailable')
       }
+      if (run.decisionId !== undefined) decisionIds.push(run.decisionId)
       for (const candidate of batch) {
         const scoreIndex = relevanceOf(run.answers, candidate.id)
         const noul = directFitOf(run.answers, candidate.id)
@@ -355,19 +349,7 @@ export function createDiscoveryRuntime<S>(deps: DiscoveryRuntimeDeps<S>): Discov
         scored.push({ id: candidate.id, name: candidate.name, scoreIndex, noul, lexicalScore: candidate.lexicalScore })
       }
     }
-    return { kind: 'selected', scored }
-  }
-
-  /** Shadow: count the suggested-vs-lexical difference; persist nothing. */
-  const tally = (suggested: readonly string[], lexical: readonly string[]): void => {
-    counters.judgments += 1
-    const suggestedSet = new Set(suggested)
-    const lexicalSet = new Set(lexical)
-    const suggestedOnly = suggested.filter(name => !lexicalSet.has(name)).length
-    const lexicalOnly = lexical.filter(name => !suggestedSet.has(name)).length
-    if (suggestedOnly + lexicalOnly > 0) counters.differing += 1
-    counters.suggestedOnly += suggestedOnly
-    counters.lexicalOnly += lexicalOnly
+    return { kind: 'selected', scored, decisionIds }
   }
 
   /**
@@ -445,8 +427,20 @@ export function createDiscoveryRuntime<S>(deps: DiscoveryRuntimeDeps<S>): Discov
     // Each waiter caps the shared judgment with its OWN `max_results`
     // (`min(max_results, max-activations)`, step 8).
     const names = selectNames(outcome.value.scored, snapshot.settings, input.maxResults)
+    // Shadow-verdict ledger (design docs/plans/2026-11-25): one row per
+    // evaluation, hoisted to this common post-selectNames point so BOTH mode
+    // branches record (the gate lines filter to shadow; active rows feed the
+    // flip policy's post-flip monitoring).
+    recordDiscoveryVerdict(runner, outcome.value.decisionIds, {
+      query: input.query,
+      suggested: names,
+      lexical: input.lexicalNames,
+      candidatesJudged: outcome.value.scored.length,
+      originSeq: snapshot.scope.originSeq,
+      mode: snapshot.settings.mode === 'shadow' ? 'shadow' : 'active',
+    })
     if (snapshot.settings.mode === 'shadow') {
-      tally(names, input.lexicalNames)
+      shadowTally(counters, names, input.lexicalNames)
       return { kind: 'lexical', reason: 'shadow' }
     }
     return { kind: 'selected', names }

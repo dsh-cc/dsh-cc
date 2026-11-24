@@ -19,6 +19,9 @@
  * @module @dsh-cc/skill-recommender/types
  */
 
+import type { ShadowVerdictRecordInput } from '@dsh-cc/systemone'
+export type { ShadowVerdictRecordInput }
+
 /** The actor a judgment is bound to: structurally an `Agent`, opaque here. */
 export type SkillRecommendationActor = object
 
@@ -123,6 +126,11 @@ export interface SkillRecommendationRunner {
   identifyRoute(alias: string, scope: SkillRecommendationScope): SkillRecommendationRouteIdentity | undefined
   scope(originSeq?: number): SkillRecommendationScope
   run(request: SkillDecisionRequest): Promise<SkillDecisionRun>
+  /**
+   * Best-effort shadow-verdict append (the shadow-verdict ledger design).
+   * Optional and structural; callers void the promise.
+   */
+  recordShadowVerdict?(input: ShadowVerdictRecordInput): Promise<void>
 }
 
 /**
