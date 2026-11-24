@@ -9,12 +9,15 @@ changed). Adoption snippet: `<skill>/references/agents-snippet.md`.
 
 ## Final run
 
-- runId: `20261124T001006Z-359b4f54-31c7-4d58-834e-15f75287eb40`
+- runId: `20261124T002428Z-9bd9a4ff-cb0d-4a84-977c-5e04127838cb` (r1 review
+  revision: `DreamAborted` added as a specified disposal cancellation —
+  distinct from the bound-exhausted timeout; `Ext2Queues` widened so the
+  D5 inversion is modeled; the false termination claim removed from
+  design.md. First run: `20261124T001006Z-359b4f54`.)
 - toolchain: TLC 1.7.4 (bundled JAR, SHA-256 pinned), Java 25.0.2, runner
   `@dsh-cc/plugin-dsh-cc-agents` 0.9.6, darwin.
-- convention (core): **verified** — 72 states generated, 47 distinct,
-  0 left on queue; all 5 invariants hold (`TypeOK`, `SingleOwner`,
-  `FifoNoOvertake`, `TimeoutOnlyAtBound`, `NoLostDream`).
+- convention (core): **verified** — all 5 invariants hold (`TypeOK`,
+  `SingleOwner`, `FifoNoOvertake`, `TimeoutOnlyAtBound`, `NoLostDream`).
 - Probes (expansion, expected counterexample; each breaks exactly its own
   invariant):
   - `strict-dream-balks` → `NoLostDream` violated (the production defect:
@@ -27,9 +30,13 @@ changed). Adoption snippet: `<skill>/references/agents-snippet.md`.
   expected legal form for a probe package (core verified + probes with
   counterexamples).
 - Reachability diagnostics (scratch, not committed — the repo convention):
-  temporary anti-invariants `dream # "granted"` and `dream # "timed-out"`
-  both produce violations, so `granted` and `timed-out` are reachable in
-  the convention constants; the model is not vacuously verified.
+  temporary anti-invariants `dream # "granted"`, `dream # "timed-out"`
+  and `dream # "aborted"` all produce violations, so `granted`,
+  `timed-out` and `aborted` are reachable in the convention constants;
+  the model is not vacuously verified. **No termination claim**: under
+  stuttering a queued dream may remain queued forever; the runtime
+  assumptions (drain hands the slot to the oldest live waiter, the timer
+  fires, the teardown aborts) live in the code, not the model.
 
 ## Counterexample classification
 

@@ -30,7 +30,7 @@ vars == <<leaseOwner, dream, budget, ext2>>
 
 TypeOK ==
   /\ leaseOwner \in {"none", "extraction", "dream"}
-  /\ dream \in {"idle", "gated", "queued", "granted", "done", "timed-out", "lost"}
+  /\ dream \in {"idle", "gated", "queued", "granted", "done", "timed-out", "aborted", "lost"}
   /\ budget \in 0 .. WaitBound
   /\ ext2 \in {"none", "queued", "granted", "released"}
 
@@ -87,6 +87,14 @@ DreamTimesOut ==
   /\ dream' = "timed-out"
   /\ UNCHANGED <<leaseOwner, budget, ext2>>
 
+(* Disposal cancellation (specified behavior, not a probe): the fiber      *)
+(* teardown aborts the queued wait at ANY remaining budget. Distinct from   *)
+(* the timer's bound-exhausted timeout; no lease-timeout semantics.        *)
+DreamAborted ==
+  /\ dream = "queued"
+  /\ dream' = "aborted"
+  /\ UNCHANGED <<leaseOwner, budget, ext2>>
+
 (* Dream's fork completes and releases the lease *)
 DreamDone ==
   /\ dream = "granted"
@@ -120,11 +128,13 @@ ExtReleases ==
   /\ leaseOwner' = "none"
   /\ UNCHANGED <<dream, budget, ext2>>
 
-(* A NEWER extraction attempt queues while dream waits (arrived after dream) *)
+(* A NEWER extraction attempt queues behind ANY slot holder (arrived after  *)
+(* dream): covers both the extraction-held case and the D5 inversion where   *)
+(* dream owns the slot and the extraction attempt queues behind it.         *)
 Ext2Queues ==
   /\ ext2 = "none"
-  /\ dream = "queued"
-  /\ leaseOwner = "extraction"
+  /\ dream \in {"queued", "granted"}
+  /\ leaseOwner # "none"
   /\ ext2' = "queued"
   /\ UNCHANGED <<leaseOwner, dream, budget>>
 
@@ -147,14 +157,14 @@ Ext2Releases ==
 (* convention (extraction-watermark `Idle`, memory-write-lifecycle `Idle`): *)
 (* an explicit no-op keeps settled states out of the deadlock check.       *)
 Terminal ==
-  /\ dream \in {"done", "timed-out", "lost"}
+  /\ dream \in {"done", "timed-out", "aborted", "lost"}
   /\ leaseOwner = "none"
   /\ ext2 # "queued"
   /\ UNCHANGED vars
 
 Next ==
   \/ DreamGatesPass \/ DreamTakesFree \/ DreamQueues \/ DreamGivesUp
-  \/ Tick \/ DreamTimesOut \/ DreamDone
+  \/ Tick \/ DreamTimesOut \/ DreamAborted \/ DreamDone
   \/ ExtReleasesHandoff \/ ExtReleasesSkips \/ ExtReleases
   \/ Ext2Queues \/ Ext2Granted \/ Ext2Releases
   \/ Terminal

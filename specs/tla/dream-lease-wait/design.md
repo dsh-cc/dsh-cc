@@ -64,15 +64,21 @@ local lease, never queues behind a foreign process.
 
 All 20 existing TLA+ models in this repo are safety-only
 (`Spec == Init /\ [][Next]_vars`); introducing the first liveness spec is a
-convention change this fix does not need. The wait-termination guarantee is
-captured **structurally**: from `dream = "queued"` the only outgoing
-transitions are the FIFO handoff (`granted`) and the bound-exhausted
-timeout (`timed-out`); there is no `lost` transition out of `queued`. The
-pre-fix defect is modeled by the `DreamBalks` probe — the `lost` state
-becomes reachable exactly the way production lost rounds — and the
-convention run proves `granted` is reachable (non-vacuity diagnostic
-below), so the fixed protocol cannot degenerate into the balk shape
-without breaking `NoLostDream`.
+convention change this fix does not need. **No termination claim is made
+here**: under stuttering semantics a queued dream may remain queued
+forever, and the reachability diagnostics below establish only possibility
+of grant and timeout, not eventual settlement. The runtime assumptions
+this fix relies on are stated in the code, not the model: the lease's
+`drain()` hands a released slot to the oldest live waiter; the wait timer
+fires within `dreamLeaseWaitMs`; the fiber teardown aborts the queued
+wait. What the model DOES pin is the safety shape: from `queued` the
+only outgoing transitions are the FIFO handoff (`granted`), the
+bound-exhausted timeout (`timed-out`), and the disposal cancellation
+(`aborted`); there is no `lost` transition out of `queued`. The pre-fix
+defect is modeled by the `DreamBalks` probe — the `lost` state becomes
+reachable exactly the way production lost rounds — and the convention run
+proves `granted` is reachable, so the fixed protocol cannot degenerate
+into the balk shape without breaking `NoLostDream`.
 
 ## Requirements
 
@@ -82,9 +88,11 @@ without breaking `NoLostDream`.
 - **REQ-2 (FIFO rescue)** While dream is queued, the running extraction's
   release hands the slot to dream before any extraction attempt that
   queued after dream (the `ext2` actor).
-- **REQ-3 (bounded wait)** Dream leaves the queue only via the handoff or
-  the timeout, and the timeout fires only when the wait budget is
-  exhausted (the abort-before-bound race is a probe, not a behavior).
+- **REQ-3 (bounded wait)** Dream leaves the queue via the handoff, the
+  bound-exhausted timeout, or the disposal cancellation (a specified
+  behavior, distinct from the timer); the timeout fires only when the
+  wait budget is exhausted (the timer-fires-early race is a probe, not a
+  behavior).
 - **REQ-4 (defect dead)** Under the fixed protocol a gated dream with the
   slot contended can only become `queued` — the pre-fix `lost` state is
   unreachable.
@@ -94,9 +102,9 @@ without breaking `NoLostDream`.
 | Variable | Meaning |
 |---|---|
 | `leaseOwner` | `none` / `extraction` / `dream` |
-| `dream` | `idle` / `gated` / `queued` / `granted` / `done` / `timed-out` / `lost` |
+| `dream` | `idle` / `gated` / `queued` / `granted` / `done` / `timed-out` / `aborted` / `lost` |
 | `budget` | dream's remaining wait budget while queued (`0..WaitBound`) |
-| `ext2` | a newer extraction attempt: `none` / `queued` / `granted` / `released` |
+| `ext2` | a newer extraction attempt: `none` / `queued` / `granted` / `released`; may queue behind ANY slot holder, so the D5 inversion (extraction queuing behind a dream-owned slot) is modeled |
 
 `Init` opens mid-extraction (`leaseOwner = "extraction"`) because that is
 the defect scenario; the uncontended path is still exercised through
@@ -109,7 +117,7 @@ the defect scenario; the uncontended path is still exercised through
 | `TypeOK` | — | — |
 | `SingleOwner` | REQ-1 | a `done`/`timed-out` dream still recorded as owner |
 | `FifoNoOvertake` | REQ-2 | a newer extraction granted while dream still queued (the `FifoBreak` probe removes both the atomic handoff and the FIFO guard — the exact non-FIFO drain shape) |
-| `TimeoutOnlyAtBound` | REQ-3 | the timer aborting before the budget is exhausted (`TimerFiresEarly` probe) |
+| `TimeoutOnlyAtBound` | REQ-3 | the timer aborting before the budget is exhausted (`TimerFiresEarly` probe; `aborted` is exempt — disposal may cancel at any remaining budget) |
 | `NoLostDream` | REQ-4 | the pre-fix balk (`DreamBalks` probe: gated + contended → `lost` forever) |
 
 Non-vacuity: the convention run's `faults`-free `granted` reachability is
@@ -118,6 +126,9 @@ asserted by inspection of the state graph (`dream = "granted"` and
 TLC's coverage output confirms the handoff and timeout actions fire).
 
 ## Fault switches
+
+`DreamAborted` is a **specified behavior** (the disposal cancellation),
+not a fault switch; it terminates at any remaining budget.
 
 | Switch | Emulates |
 |---|---|
