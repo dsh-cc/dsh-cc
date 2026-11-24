@@ -11,9 +11,12 @@ EXTENDS Naturals
 (* so the running extraction's release hands the slot to dream before any *)
 (* newer extraction attempt.                                              *)
 (*                                                                        *)
-(* Safety-only by repo convention. The wait-termination guarantee is     *)
-(* structural: from "queued" the only outgoing transitions are the FIFO   *)
-(* handoff ("granted") and the bound-exhausted timeout ("timed-out").     *)
+(* Safety-only by repo convention; NO termination claim (stuttering      *)
+(* always permits an forever-queued dream). From "queued" the outgoing    *)
+(* transitions are the FIFO handoff ("granted"), the bound-exhausted     *)
+(* timer timeout ("timed-out") and the disposal cancellation              *)
+(* ("aborted", DreamAborted). Runtime scheduling assumptions (drain,      *)
+(* timer, teardown) live in the code, not the model.                      *)
 (***************************************************************************)
 
 CONSTANTS WaitBound,        \* dream's wait budget at queue time

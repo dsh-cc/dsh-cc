@@ -9,7 +9,7 @@ changed). Adoption snippet: `<skill>/references/agents-snippet.md`.
 
 ## Final run
 
-- runId: `20261124T002428Z-9bd9a4ff-cb0d-4a84-977c-5e04127838cb` (r1 review
+- runId: `20261124T003337Z-96cd5a52-4e5b-496c-b04d-8c996a6214c0` (r2 review
   revision: `DreamAborted` added as a specified disposal cancellation —
   distinct from the bound-exhausted timeout; `Ext2Queues` widened so the
   D5 inversion is modeled; the false termination claim removed from
@@ -56,7 +56,8 @@ All development errors were **modeling defects**, never design defects:
 | Model element | Code |
 |---|---|
 | `DreamTakesFree` | `lease.tryAcquire(dir)` fast path in `runDream` (unchanged) |
-| `DreamQueues` + `Tick` + `DreamTimesOut` | the new `acquireDreamLease` bounded wait: `lease.acquire(dir, controller.signal)` + `setTimeout(() => controller.abort(), dreamLeaseWaitMs)` |
+| `DreamQueues` + `Tick` + `DreamTimesOut` | the new `acquireDreamLease` bounded wait: `lease.acquire(dir, controller.signal)` + `setTimeout(() => controller.abort('lease-timeout'), dreamLeaseWaitMs)` |
+| `DreamAborted` | the fiber-teardown cancellation: `controller.abort('dispose')` on the live wait handle + the per-attempt `cancelled` flag check (pre-acquire and post-grant) |
 | `ExtReleasesHandoff` | the lease's existing `drain()` — release hands the freed slot to the oldest live waiter atomically (`mutation-lease.ts`, unchanged, pinned by `tests/mutation-lease.spec.ts`) |
 | `Ext2Granted` FIFO guard | the lease's `tryAcquire`/`acquire` queue discipline (unchanged) |
 | `DreamGivesUp` (probe) | the pre-fix `tryAcquire`-balk code path being deleted |
@@ -65,8 +66,11 @@ All development errors were **modeling defects**, never design defects:
 ## Non-goals / out of scope
 
 - No liveness (leads-to / WF) spec: all 20 existing repo models are
-  safety-only; the wait-termination guarantee is structural (from `queued`
-  the only outgoing transitions are the handoff and the bound-exhausted
-  timeout). Recorded in design.md §"Why safety-only".
+  safety-only; NO termination claim is made — under stuttering a queued
+  dream may remain queued forever. From `queued` the outgoing transitions
+  are the handoff, the bound-exhausted timeout and the disposal
+  cancellation. The runtime scheduling assumptions (drain hands the slot
+  to the oldest live waiter; the timer fires; the teardown aborts) live
+  in the code. Recorded in design.md §"Why safety-only".
 - The lease implementation, the disk lock, and the coordinator state
   machine are unchanged (pinned by their existing models/specs).
